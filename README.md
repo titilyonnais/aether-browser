@@ -29,9 +29,38 @@ npm run dev        # lance ÆTHER en développement (HMR)
 | `npm run typecheck` | Vérification TypeScript stricte (main + renderer)  |
 | `npm run gen:icon`  | (Re)génère l'icône d'app (`build/icon.png` + `.ico`) |
 | `npm run dist`      | Installateur Windows NSIS (`release/`)             |
+| `npm run release`   | Build + publie une release GitHub (mises à jour auto) |
 | `npm run rebuild`   | Recompile les modules natifs pour Electron         |
 
 Le versionnage suit SemVer ; chaque évolution est consignée dans [CHANGELOG.md](CHANGELOG.md).
+
+### Mises à jour automatiques
+
+ÆTHER vérifie silencieusement les mises à jour au lancement (et sur demande dans
+Réglages › À propos), télécharge en arrière-plan, puis propose de redémarrer pour
+installer — via [`electron-updater`](https://www.electron.build/auto-update) sur les
+[GitHub Releases](https://github.com/titilyonnais/aether-browser/releases) de ce
+dépôt (public : l'app distribuée ne contient aucun jeton, seule la publication en
+nécessite un).
+
+**Publication automatique** : un workflow GitHub Actions
+([`.github/workflows/release.yml`](.github/workflows/release.yml)) build et publie
+tout seul une release dès que `version` change dans `package.json` sur `main` — il
+suffit de committer/pousser normalement (bump version + entrée `CHANGELOG.md`), rien
+d'autre à faire. Gratuit (Actions illimité sur dépôt public) et sans jeton à gérer
+(`GITHUB_TOKEN`, fourni automatiquement par GitHub Actions, scope limité à ce dépôt).
+
+Publication manuelle possible aussi, depuis un poste de développement :
+1. Créer un [jeton d'accès personnel GitHub](https://github.com/settings/tokens) avec le
+   scope `public_repo` (ou un jeton fin avec `Contents: Read and write` sur ce dépôt).
+2. `$env:GH_TOKEN = "<le jeton>"` (PowerShell, pour la session courante uniquement).
+3. `npm run release` — build, crée la release GitHub et y publie l'installeur + le
+   manifeste de mise à jour.
+
+Les postes déjà installés détecteront la nouvelle version au prochain lancement (ou
+immédiatement via « Rechercher les mises à jour »). L'installeur utilise toujours le
+même emplacement (`oneClick`) — indispensable pour qu'une mise à jour se pose par-dessus
+l'installation existante au lieu d'en créer une seconde à côté.
 
 ## Chromium, pas Chrome
 
