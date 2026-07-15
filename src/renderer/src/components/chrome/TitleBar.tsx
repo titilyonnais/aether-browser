@@ -17,7 +17,7 @@ import {
   X
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { DownloadState } from '@shared/types'
+import type { DownloadState, UpdateStatus } from '@shared/types'
 import { Favicon } from '@/components/ui/Favicon'
 import { IconButton } from '@/components/ui/IconButton'
 import { Kbd } from '@/components/ui/Kbd'
@@ -160,6 +160,8 @@ export function TitleBar() {
             <TranslatePopoverButton pageId={activePage.id} />
           )}
 
+        <UpdateReadyButton />
+
         <ExtensionsButton />
 
         <DownloadsButton />
@@ -200,6 +202,87 @@ export function TitleBar() {
         <IconButton icon={X} label={t('shell.titlebar.close')} tone="danger" onClick={() => window.aether.window.close()} />
       </div>
     </header>
+  )
+}
+
+/** Indicateur non intrusif « mise à jour prête » — n'apparaît QUE si une mise
+ * à jour a fini de se télécharger (voir main/updater.ts). S'ouvre une seule
+ * fois automatiquement au moment où le téléchargement se termine (le seul
+ * instant volontairement proactif), puis reste une simple icône cliquable à
+ * la demande — jamais de réouverture automatique après ce premier signal. */
+function UpdateReadyButton() {
+  const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' })
+  const [open, setOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const autoShown = useRef(false)
+
+  const close = (): void => {
+    setOpen(false)
+    window.aether.popover.hide()
+  }
+
+  const show = (): void => {
+    const el = buttonRef.current
+    if (!el || status.state !== 'downloaded') return
+    const r = el.getBoundingClientRect()
+    window.aether.popover.show({
+      kind: 'update-ready',
+      version: status.version,
+      anchor: { x: r.x, y: r.y, width: r.width, height: r.height },
+      placement: 'below-right'
+    })
+    setOpen(true)
+  }
+
+  useEffect(() => {
+    void window.aether.updates.getStatus().then(setStatus)
+    return window.aether.updates.onStatusChanged(setStatus)
+  }, [])
+
+  useEffect(() => {
+    if (status.state === 'downloaded' && !autoShown.current) {
+      autoShown.current = true
+      // Laisse le bouton apparaître dans le DOM avant de mesurer son ancrage.
+      requestAnimationFrame(show)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status])
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent): void => {
+      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) close()
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('pointerdown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  useEffect(() => window.aether.popover.onClosed(() => setOpen(false)), [])
+
+  if (status.state !== 'downloaded') return null
+
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      title="Mise à jour prête"
+      onClick={() => (open ? close() : show())}
+      className={cn(
+        'no-drag relative grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors duration-150',
+        open ? 'bg-white/[0.06] text-glacier' : 'text-emerald-300 hover:bg-white/[0.05]'
+      )}
+    >
+      <Download size={15} strokeWidth={1.7} />
+      <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-dot" />
+    </button>
   )
 }
 

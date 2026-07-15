@@ -5,7 +5,7 @@
  * des drapeaux `has*Key`.
  */
 import { safeStorage } from 'electron'
-import type { ApiProviderKind, AppSettings, FocusState, NewTabWidgets, SettingsPatch } from '@shared/types'
+import type { ApiProviderKind, AppSettings, FocusState, NewTabWidgets, SettingsPatch, WindowState } from '@shared/types'
 import { kvRepo } from './db/repositories'
 
 const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKey'> = {
@@ -53,6 +53,7 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   minimizeOnClose: false,
   downloadDir: '',
   askDownloadLocation: true,
+  autoCheckForUpdates: true,
   onboarded: false
 }
 
@@ -160,6 +161,7 @@ export function getSettings(): AppSettings {
     minimizeOnClose: getString('minimizeOnClose'),
     downloadDir: getString('downloadDir'),
     askDownloadLocation: getString('askDownloadLocation'),
+    autoCheckForUpdates: getString('autoCheckForUpdates'),
     onboarded: getString('onboarded'),
     hasAnthropicKey: hasSecret('anthropic'),
     hasOpenaiKey: hasSecret('openai'),
@@ -257,6 +259,7 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
   if (patch.minimizeOnClose !== undefined) putValue('minimizeOnClose', patch.minimizeOnClose)
   if (patch.downloadDir !== undefined) putValue('downloadDir', patch.downloadDir)
   if (patch.askDownloadLocation !== undefined) putValue('askDownloadLocation', patch.askDownloadLocation)
+  if (patch.autoCheckForUpdates !== undefined) putValue('autoCheckForUpdates', patch.autoCheckForUpdates)
   if (patch.onboarded !== undefined) putValue('onboarded', patch.onboarded)
   if (patch.anthropicKey !== undefined) storeSecret('anthropic', patch.anthropicKey)
   if (patch.openaiKey !== undefined) storeSecret('openai', patch.openaiKey)
@@ -311,4 +314,20 @@ export function getFocusState(spaceId: string): FocusState | null {
 
 export function setFocusState(spaceId: string, state: FocusState): void {
   kvRepo.set(`state.focus.${spaceId}`, JSON.stringify(state))
+}
+
+/** Taille/position/agrandissement/plein écran de la fenêtre principale —
+ * restauré au prochain lancement (main/mainWindow.ts). */
+export function getWindowState(): WindowState | null {
+  const raw = kvRepo.get('state.window')
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as WindowState
+  } catch {
+    return null
+  }
+}
+
+export function setWindowState(state: WindowState): void {
+  kvRepo.set('state.window', JSON.stringify(state))
 }

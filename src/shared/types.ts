@@ -37,6 +37,14 @@ export interface Bounds {
   height: number
 }
 
+/** État de la fenêtre principale, restauré au prochain lancement. */
+export interface WindowState {
+  isMaximized: boolean
+  isFullScreen: boolean
+  /** Bornes « normales » (ni agrandie ni plein écran) — voir `getNormalBounds()`. */
+  bounds: Bounds
+}
+
 /** Position/taille d'une carte sur la toile spatiale (coordonnées monde). */
 export interface CanvasRect {
   x: number
@@ -383,6 +391,10 @@ export interface AppSettings {
   downloadDir: string
   /** Demander l'emplacement à chaque téléchargement. */
   askDownloadLocation: boolean
+  // — Mises à jour —
+  /** Vérifier (et télécharger) automatiquement au lancement — sinon, seule la
+   * vérification manuelle (Réglages › À propos) fonctionne. */
+  autoCheckForUpdates: boolean
   onboarded: boolean
 }
 
@@ -437,6 +449,7 @@ export interface SettingsPatch {
   minimizeOnClose?: boolean
   downloadDir?: string
   askDownloadLocation?: boolean
+  autoCheckForUpdates?: boolean
   onboarded?: boolean
 }
 
@@ -615,6 +628,7 @@ export type PopoverContent =
   | { kind: 'context-menu'; title?: string; rows: ContextMenuRow[] }
   | { kind: 'webstore-confirm'; extensionId: string; name: string; iconUrl: string | null }
   | { kind: 'extensions-menu' }
+  | { kind: 'update-ready'; version: string }
   | null
 
 /** Demande d'ouverture envoyée par la fenêtre principale. */
@@ -642,6 +656,12 @@ export type PopoverShowRequest =
     }
   | {
       kind: 'extensions-menu'
+      anchor: LocalRect
+      placement: PopoverPlacement
+    }
+  | {
+      kind: 'update-ready'
+      version: string
       anchor: LocalRect
       placement: PopoverPlacement
     }

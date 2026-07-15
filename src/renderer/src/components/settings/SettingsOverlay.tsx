@@ -1899,6 +1899,8 @@ function ExtensionsSection() {
  * déclenchement explicite de l'installation (jamais automatique). */
 function UpdatesBlock() {
   const t = useT()
+  const settings = useSettingsStore((s) => s.settings)
+  const patch = useSettingsStore((s) => s.patch)
   const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' })
 
   useEffect(() => {
@@ -1955,6 +1957,16 @@ function UpdatesBlock() {
           <div
             className="h-full rounded-full bg-glacier/80 transition-[width] duration-300"
             style={{ width: `${status.percent}%` }}
+          />
+        </div>
+      )}
+      {settings && (
+        <div className="mt-4 border-t border-white/[0.06] pt-3.5">
+          <Toggle
+            label={t('settings.about.autoCheckForUpdates')}
+            hint={t('settings.about.autoCheckForUpdatesHint')}
+            checked={settings.autoCheckForUpdates}
+            onChange={(v) => void patch({ autoCheckForUpdates: v })}
           />
         </div>
       )}

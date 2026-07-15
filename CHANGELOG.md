@@ -4,6 +4,19 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.40.0] — 2026-07-16
+
+### Ajouté
+
+- **Réglages › À propos : « Vérifier et télécharger automatiquement »** — vérification/téléchargement silencieux au lancement, désormais désactivables (la vérification manuelle continue de fonctionner dans tous les cas).
+- **Bulle non intrusive « mise à jour prête »** — une icône apparaît dans la barre de titre dès qu'une mise à jour a fini de se télécharger, et s'ouvre une seule fois automatiquement pour signaler qu'elle est prête (« Redémarrer » ou « Plus tard ») ; ensuite, simple icône cliquable à la demande.
+- **La fenêtre se rouvre dans le même état qu'à la fermeture** — plein écran, agrandie ou taille/position normales, restaurées au lancement suivant.
+
+### Corrigé
+
+- **Menu principal coupé à droite et en bas.** Cause trouvée : l'animation d'arrivée des bulles (ajoutée en 0.39.0) utilisait une transformation `scale()` — mesurer la taille réelle du contenu PENDANT cette animation capturait une taille rétrécie, sous-dimensionnant la fenêtre popup. Animation retirée entièrement (apparition et fermeture instantanées, sans fondu).
+- **« Restaurer les onglets de la dernière session » rouvrait quand même un nouvel onglet en plus de la page restaurée.** Le nouvel onglet ne s'ouvre plus désormais que si la restauration ne trouve RIEN à afficher pour l'espace actif (tous les onglets fermés avant de quitter, ou premier lancement) — jamais en plus d'une restauration réussie.
+
 ## [0.39.0] — 2026-07-16
 
 ### Ajouté

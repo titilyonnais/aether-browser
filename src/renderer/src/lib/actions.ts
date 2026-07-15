@@ -172,10 +172,15 @@ export async function initBridge(): Promise<void> {
     useUiStore.getState().openOverlay('onboarding')
   } else if (initial.settings.restoreTabsOnLaunch) {
     // Restaure la page qui était au premier plan par espace à la fermeture
-    // précédente — prioritaire sur `openNewTabOnLaunch` (les deux ouvriraient
-    // sinon un nouvel onglet qui écraserait aussitôt la page restaurée dans
-    // le même emplacement Focus).
+    // précédente — prioritaire sur `openNewTabOnLaunch`. Si l'espace actif n'a
+    // RIEN à restaurer (tous les onglets fermés avant de quitter, ou premier
+    // lancement), on retombe sur un nouvel onglet plutôt que de laisser un
+    // Focus vide — mais SEULEMENT dans ce cas précis, jamais en plus d'une
+    // restauration réussie.
     pages.hydrateFocus(initial.focusBySpace)
+    if (usePagesStore.getState().focusOf(initial.activeSpaceId).slots.length === 0) {
+      void openUrl('aether://newtab', { target: 'focus' })
+    }
   } else if (initial.settings.openNewTabOnLaunch) {
     // Atterrir sur la page de nouvel onglet à chaque démarrage (façon
     // Chrome/Edge/Brave) — une VRAIE page en plus de celles restaurées de la

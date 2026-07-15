@@ -9,6 +9,7 @@ import type { PopoverContent } from '@shared/types'
 import { AppMenuPopoverCard } from '@/components/chrome/AppMenuPopoverCard'
 import { ContextMenuPopoverCard } from '@/components/chrome/ContextMenuPopoverCard'
 import { ExtensionsMenuPopoverCard } from '@/components/chrome/ExtensionsMenuPopoverCard'
+import { UpdateReadyPopoverCard } from '@/components/chrome/UpdateReadyPopoverCard'
 import { WebstoreConfirmCard } from '@/components/chrome/WebstoreConfirmCard'
 import { FavoritesFolderPopoverCard } from '@/components/favorites/FavoritesFolderPopoverCard'
 import { SiteInfoCard } from '@/components/focus/SiteInfoCard'
@@ -85,7 +86,7 @@ export default function PopoverRoot() {
   if (!content) return null
 
   return (
-    <div key={contentNonce} ref={rootRef} className="animate-popover-enter inline-block">
+    <div key={contentNonce} ref={rootRef} className="inline-block">
       {content.kind === 'site-info' && <SiteInfoCard pageId={content.pageId} locale={locale} />}
       {content.kind === 'tab-preview' && (
         <TabPreviewCard pageId={content.pageId} showPreview={showPreview} locale={locale} />
@@ -105,6 +106,7 @@ export default function PopoverRoot() {
         <WebstoreConfirmCard extensionId={content.extensionId} name={content.name} iconUrl={content.iconUrl} />
       )}
       {content.kind === 'extensions-menu' && <ExtensionsMenuPopoverCard />}
+      {content.kind === 'update-ready' && <UpdateReadyPopoverCard version={content.version} />}
     </div>
   )
 }

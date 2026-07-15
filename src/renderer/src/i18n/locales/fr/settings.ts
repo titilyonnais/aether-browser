@@ -321,5 +321,8 @@ export const settings: Record<string, string> = {
   'settings.about.updatesDownloaded': 'Version {{version}} prête à installer.',
   'settings.about.updatesRestartInstall': 'Redémarrer et installer',
   'settings.about.updatesError': 'Échec de la vérification — {{message}}',
-  'settings.about.updatesDevMode': "Vérification indisponible hors d'un paquet installé (build de développement)."
+  'settings.about.updatesDevMode': "Vérification indisponible hors d'un paquet installé (build de développement).",
+  'settings.about.autoCheckForUpdates': 'Vérifier et télécharger automatiquement',
+  'settings.about.autoCheckForUpdatesHint':
+    "Au lancement d'ÆTHER, en arrière-plan — sinon, seule la vérification manuelle ci-dessus fonctionne."
 }

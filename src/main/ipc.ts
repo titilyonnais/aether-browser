@@ -119,7 +119,8 @@ const POPOVER_WIDTH: Record<PopoverShowRequest['kind'], number> = {
   translate: 320,
   'favorites-folder': 320,
   'app-menu': 320,
-  'extensions-menu': 288
+  'extensions-menu': 288,
+  'update-ready': 288
 }
 /** Hauteur initiale (avant l'ajustement réel via `popover:resize`) — évite un popup vide au premier affichage. */
 const POPOVER_DEFAULT_HEIGHT: Record<PopoverShowRequest['kind'], number> = {
@@ -128,7 +129,8 @@ const POPOVER_DEFAULT_HEIGHT: Record<PopoverShowRequest['kind'], number> = {
   translate: 130,
   'favorites-folder': 140,
   'app-menu': 560,
-  'extensions-menu': 220
+  'extensions-menu': 220,
+  'update-ready': 150
 }
 /** Espace visible entre l'ancre (onglet, bouton) et le popup — la bulle
  * paraissait collée à l'onglet avec 8px. */
@@ -1323,7 +1325,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
           ? { kind: 'app-menu' }
           : req.kind === 'extensions-menu'
             ? { kind: 'extensions-menu' }
-            : { kind: req.kind, pageId: req.pageId }
+            : req.kind === 'update-ready'
+              ? { kind: 'update-ready', version: req.version }
+              : { kind: req.kind, pageId: req.pageId }
     openPopover(win, computePopoverBounds(win, req), content)
   })
 

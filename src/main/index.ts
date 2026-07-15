@@ -67,9 +67,10 @@ if (!gotLock) {
     void router.refreshStatus()
 
     // Vérification silencieuse au lancement, comme Chrome — un délai laisse
-    // la fenêtre finir de s'afficher avant ce travail de fond.
+    // la fenêtre finir de s'afficher avant ce travail de fond. Réglable
+    // (Réglages › À propos) : la vérification MANUELLE, elle, marche toujours.
     initUpdater(mainWindow)
-    setTimeout(() => checkForUpdates(), 4000)
+    if (getSettings().autoCheckForUpdates) setTimeout(() => checkForUpdates(), 4000)
 
     // Réglage « minimiser au lieu de fermer » — n'intercepte QUE le bouton X/
     // Alt+F4 (pas un vrai « Quitter ÆTHER », qui marque `isQuitting()` avant

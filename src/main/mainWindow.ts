@@ -2,9 +2,10 @@
  * Fenêtre principale — frameless, fond très sombre, coins arrondis Windows 11.
  * Le renderer dessine sa propre barre de titre (zones -webkit-app-region).
  */
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, screen, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { getWindowState, setWindowState } from './settings'
 
 /** Icône de fenêtre (surtout utile en dev ; en prod l'exe porte déjà l'icône). */
 function windowIcon(): string | undefined {
@@ -12,10 +13,27 @@ function windowIcon(): string | undefined {
   return existsSync(candidate) ? candidate : undefined
 }
 
+/** Le coin haut-gauche mémorisé doit retomber sur un écran encore connecté
+ * (moniteur externe débranché depuis…) — sinon Electron peut ouvrir la
+ * fenêtre hors champ, invisible. `null` fait retomber sur le centrage par
+ * défaut d'Electron plutôt que d'imposer une position invalide. */
+function validBounds(bounds: { x: number; y: number; width: number; height: number }): typeof bounds | null {
+  const onScreen = screen.getAllDisplays().some((d) => {
+    const a = d.workArea
+    return bounds.x >= a.x - 50 && bounds.y >= a.y - 50 && bounds.x < a.x + a.width && bounds.y < a.y + a.height
+  })
+  return onScreen ? bounds : null
+}
+
 export function createMainWindow(): BrowserWindow {
+  const savedState = getWindowState()
+  const savedBounds = savedState ? validBounds(savedState.bounds) : null
+
   const win = new BrowserWindow({
-    width: 1480,
-    height: 920,
+    width: savedBounds?.width ?? 1480,
+    height: savedBounds?.height ?? 920,
+    x: savedBounds?.x,
+    y: savedBounds?.y,
     minWidth: 1024,
     minHeight: 640,
     frame: false,
@@ -33,7 +51,22 @@ export function createMainWindow(): BrowserWindow {
     }
   })
 
-  win.once('ready-to-show', () => win.show())
+  // Réapplique l'agrandissement/plein écran d'AVANT le show() — sinon un
+  // passage bref par la taille non-agrandie serait visible au lancement.
+  win.once('ready-to-show', () => {
+    if (savedState?.isMaximized) win.maximize()
+    if (savedState?.isFullScreen) win.setFullScreen(true)
+    win.show()
+  })
+
+  win.on('close', () => {
+    if (win.isDestroyed()) return
+    setWindowState({
+      isMaximized: win.isMaximized(),
+      isFullScreen: win.isFullScreen(),
+      bounds: win.getNormalBounds()
+    })
+  })
 
   // Le shell UI n'ouvre jamais de fenêtres ; tout lien externe part vers l'OS.
   win.webContents.setWindowOpenHandler(({ url }) => {
