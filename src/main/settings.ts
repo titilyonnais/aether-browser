@@ -28,8 +28,7 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   uiScale: 1,
   showConstellationOnLaunch: true,
   showMuseOnLaunch: true,
-  openNewTabOnLaunch: true,
-  restoreTabsOnLaunch: false,
+  startupTabs: 'newtab',
   homepage: '',
   newTabUrl: '',
   newTabShortcuts: [],
@@ -136,8 +135,7 @@ export function getSettings(): AppSettings {
     uiScale: getString('uiScale'),
     showConstellationOnLaunch: getString('showConstellationOnLaunch'),
     showMuseOnLaunch: getString('showMuseOnLaunch'),
-    openNewTabOnLaunch: getString('openNewTabOnLaunch'),
-    restoreTabsOnLaunch: getString('restoreTabsOnLaunch'),
+    startupTabs: getString('startupTabs'),
     homepage: getString('homepage'),
     newTabUrl: getString('newTabUrl'),
     newTabShortcuts: getString('newTabShortcuts'),
@@ -197,8 +195,7 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
     putValue('showConstellationOnLaunch', patch.showConstellationOnLaunch)
   }
   if (patch.showMuseOnLaunch !== undefined) putValue('showMuseOnLaunch', patch.showMuseOnLaunch)
-  if (patch.openNewTabOnLaunch !== undefined) putValue('openNewTabOnLaunch', patch.openNewTabOnLaunch)
-  if (patch.restoreTabsOnLaunch !== undefined) putValue('restoreTabsOnLaunch', patch.restoreTabsOnLaunch)
+  if (patch.startupTabs !== undefined) putValue('startupTabs', patch.startupTabs)
   if (patch.homepage !== undefined) putValue('homepage', patch.homepage.trim())
   if (patch.newTabUrl !== undefined) putValue('newTabUrl', patch.newTabUrl.trim())
   if (patch.newTabShortcuts !== undefined) {
@@ -301,7 +298,7 @@ export function setActiveSpaceId(profileId: string, id: string): void {
 }
 
 /** État Focus (page(s) au premier plan) mémorisé par espace — toujours écrit,
- * consulté au démarrage seulement si `restoreTabsOnLaunch` est activé. */
+ * consulté au démarrage seulement si `startupTabs === 'restore'`. */
 export function getFocusState(spaceId: string): FocusState | null {
   const raw = kvRepo.get(`state.focus.${spaceId}`)
   if (!raw) return null

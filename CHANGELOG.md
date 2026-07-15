@@ -4,6 +4,15 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.41.0] — 2026-07-16
+
+### Corrigé
+
+- **« Base de données non initialisée » au moment de quitter ÆTHER.** La fermeture de la base se faisait sur `before-quit`, un évènement qui se déclenche AVANT que les fenêtres ne se ferment vraiment — les handlers de fermeture de fenêtre (minimiser au lieu de quitter, sauvegarde de l'état de la fenêtre) tentaient ensuite d'accéder à une base déjà fermée. Déplacé sur `will-quit`, qui se déclenche APRÈS.
+- **Bulles natives (menus, infos de site…) qui mettaient ~0,7 s à apparaître.** Le double `requestAnimationFrame` ajouté en 0.39.0 pour éliminer un scintillement se révèle throttlé par Chromium tant que la fenêtre popup reste masquée — le vrai signal n'arrivait jamais à temps et c'est le filet de sécurité (500 ms) qui finissait par afficher la bulle. Mesure redevenue synchrone : apparition immédiate.
+- **« Ne pas conserver les onglets à la fermeture » n'empêchait pas l'ouverture d'un autre nouvel onglet.** Les deux réglages indépendants (« ouvrir au démarrage » / « restaurer la dernière session ») pouvaient se cumuler de façon confuse. Fusionnés en un choix unique et exclusif dans Réglages › Navigation.
+- **Réglages : barre de recherche peu pratique et texte tronqué.** Rendue toujours visible (plus besoin de cliquer une icône d'abord, comme Chrome/Edge) et son texte d'indication raccourci pour tenir dans la colonne. Elle retrouve aussi désormais les réglages précis (ex. « proxy », « minimiser », « correcteur ») et pas seulement le nom de la section qui les contient.
+
 ## [0.40.0] — 2026-07-16
 
 ### Ajouté

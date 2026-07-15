@@ -53,7 +53,6 @@ import { ExtensionIcon } from '@/components/ui/ExtensionIcon'
 import { Kbd } from '@/components/ui/Kbd'
 import { MiniSwitch } from '@/components/ui/MiniSwitch'
 import { ProfileAvatar } from '@/components/ui/ProfileAvatar'
-import { SearchBar, SearchToggle } from '@/components/ui/SearchField'
 import { useT } from '@/i18n/useT'
 import {
   clearProfileAvatar,
@@ -117,7 +116,6 @@ function SettingsPanel() {
   const initial = (SECTIONS as readonly string[]).includes(requested ?? '') ? (requested as Section) : 'ia'
   const [section, setSection] = useState<Section>(initial)
   const [navQuery, setNavQuery] = useState('')
-  const [navSearchOpen, setNavSearchOpen] = useState(false)
   const close = (): void => useUiStore.getState().closeOverlay()
 
   // Bug corrigé : quand un bouton ré-ouvre les réglages sur une autre section
@@ -130,35 +128,92 @@ function SettingsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requested])
 
+  // Chaque `keywords` couvre aussi les réglages INDIVIDUELS de la section (pas
+  // que son nom de catégorie) — sinon chercher un réglage précis ("minimiser",
+  // "proxy", "correcteur"…) ne remontait rien tant que le mot n'apparaissait
+  // pas déjà dans le libellé de la section elle-même.
   const nav: { id: Section; label: string; icon: typeof Wand2; keywords: string }[] = [
-    { id: 'ia', label: t('settings.nav.ia'), icon: Wand2, keywords: 'muse intelligence assistant clé api' },
-    { id: 'profils', label: t('settings.nav.profils'), icon: UserRound, keywords: 'profils avatar navigation privée' },
+    {
+      id: 'ia',
+      label: t('settings.nav.ia'),
+      icon: Wand2,
+      keywords: 'muse intelligence assistant clé api ollama claude openai grok anthropic xai modèle embeddings adresse provider esprit local'
+    },
+    {
+      id: 'profils',
+      label: t('settings.nav.profils'),
+      icon: UserRound,
+      keywords: 'profils avatar navigation privée comptes synchronisation supprimer ajouter profil'
+    },
     {
       id: 'apparence',
       label: t('settings.nav.apparence'),
       icon: Palette,
-      keywords: 'thème sombre clair couleur accent zoom taille police interface'
+      keywords:
+        "thème sombre clair suivre le système couleur accent glacier lavande émeraude ambre rose corail ciel sauge zoom taille police interface barre de favoris barre d'intention bande de pages aperçu au survol des onglets panneaux au démarrage constellation muse rendu pages web"
     },
     {
       id: 'navigation',
       label: t('settings.nav.navigation'),
       icon: Compass,
-      keywords: "page d'accueil téléchargements dossier barre de favoris"
+      keywords:
+        "page d'accueil nouvel onglet démarrage restaurer onglets dernière session téléchargements dossier demander où enregistrer barre de favoris"
     },
-    { id: 'recherche', label: t('settings.nav.recherche'), icon: Search, keywords: 'moteur de recherche google raccourcis' },
+    {
+      id: 'recherche',
+      label: t('settings.nav.recherche'),
+      icon: Search,
+      keywords: 'moteur de recherche google ajouter personnalisé raccourcis'
+    },
     {
       id: 'confidentialite',
       label: t('settings.nav.confidentialite'),
       icon: Shield,
-      keywords: 'mot de passe cookies permissions caméra micro localisation notifications'
+      keywords:
+        'autorisations permissions caméra micro localisation notifications do not track https mots de passe effacer données sécurité pistage'
     },
-    { id: 'performance', label: t('settings.nav.performance'), icon: Gauge, keywords: 'accélération matérielle mémoire' },
-    { id: 'langues', label: t('settings.nav.langues'), icon: Languages, keywords: 'correcteur orthographique traduction' },
-    { id: 'systeme', label: t('settings.nav.systeme'), icon: MonitorCog, keywords: 'proxy démarrage fenêtre' },
-    { id: 'donnees', label: t('settings.nav.donnees'), icon: Database, keywords: 'effacer supprimer historique cache' },
-    { id: 'extensions', label: t('settings.nav.extensions'), icon: Puzzle, keywords: 'modules complémentaires' },
-    { id: 'reinitialiser', label: t('settings.nav.reinitialiser'), icon: RotateCcw, keywords: 'défaut restaurer' },
-    { id: 'apropos', label: t('settings.nav.apropos'), icon: Info, keywords: 'version aide mises à jour' }
+    {
+      id: 'performance',
+      label: t('settings.nav.performance'),
+      icon: Gauge,
+      keywords: 'économiseur de mémoire pages moteur accélération matérielle'
+    },
+    {
+      id: 'langues',
+      label: t('settings.nav.langues'),
+      icon: Languages,
+      keywords: "langue de l'interface correcteur orthographique spellcheck traduction"
+    },
+    {
+      id: 'systeme',
+      label: t('settings.nav.systeme'),
+      icon: MonitorCog,
+      keywords: 'fermeture fenêtre minimiser quitter navigateur par défaut proxy système direct personnalisé'
+    },
+    {
+      id: 'donnees',
+      label: t('settings.nav.donnees'),
+      icon: Database,
+      keywords: 'mémoire espaces pages notes embeddings effacer supprimer historique cookies cache téléchargements confidentialité'
+    },
+    {
+      id: 'extensions',
+      label: t('settings.nav.extensions'),
+      icon: Puzzle,
+      keywords: 'chrome web store extensions chargées charger non empaquetée modules complémentaires'
+    },
+    {
+      id: 'reinitialiser',
+      label: t('settings.nav.reinitialiser'),
+      icon: RotateCcw,
+      keywords: 'réinitialiser réglages défaut restaurer'
+    },
+    {
+      id: 'apropos',
+      label: t('settings.nav.apropos'),
+      icon: Info,
+      keywords: 'version raccourcis urls internes chrome mises à jour vérifier télécharger installer redémarrer'
+    }
   ]
   const navQueryNorm = navQuery.trim().toLowerCase()
   const visibleNav = navQueryNorm
@@ -187,16 +242,26 @@ function SettingsPanel() {
       >
         <div className="flex min-h-0 flex-1">
           {/* Navigation */}
-          <nav className="flex w-46 shrink-0 flex-col gap-1 overflow-y-auto border-r border-white/[0.06] p-3" style={{ width: 190 }}>
-            <div className="flex items-center justify-between gap-1 px-3 pb-2 pt-1.5">
+          <nav className="flex w-46 shrink-0 flex-col gap-1 overflow-y-auto border-r border-white/[0.06] p-3" style={{ width: 212 }}>
+            <div className="flex flex-col gap-2 px-3 pb-2 pt-1.5">
               <p className="font-display text-[15px] italic text-ink">{t('settings.title')}</p>
-              <SearchToggle
-                open={navSearchOpen}
-                onToggle={() => setNavSearchOpen((v) => !v)}
-                title={t('settings.nav.searchPlaceholder')}
-              />
+              {/* Toujours visible (façon Chrome/Edge), pas un bouton à cliquer d'abord —
+                  sur une colonne aussi étroite, un bascule + rangée séparée gaspillait de
+                  la place et le placeholder plus long débordait, coupé net (pas d'ellipse
+                  CSS sur un <input>). */}
+              <div className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2.5 py-1.5 transition-colors focus-within:bg-white/[0.07]">
+                <Search size={12} strokeWidth={1.8} className="shrink-0 text-ink-faint" />
+                <input
+                  value={navQuery}
+                  onChange={(e) => setNavQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setNavQuery('')
+                  }}
+                  placeholder={t('settings.nav.searchPlaceholder')}
+                  className="min-w-0 flex-1 bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink-faint"
+                />
+              </div>
             </div>
-            <SearchBar open={navSearchOpen} value={navQuery} onChange={setNavQuery} placeholder={t('settings.nav.searchPlaceholder')} />
             {visibleNav.length === 0 ? (
               <p className="px-3 py-2 text-[11px] text-ink-faint">{t('settings.nav.noResults')}</p>
             ) : (
@@ -994,18 +1059,15 @@ function NavigationSection() {
           placeholder={t('settings.navigation.newTabUrlPlaceholder')}
           mono
         />
-        <div className="mt-3 space-y-2.5">
-          <Toggle
-            label={t('settings.navigation.openNewTabOnLaunch')}
-            hint={t('settings.navigation.openNewTabOnLaunchHint')}
-            checked={settings.openNewTabOnLaunch}
-            onChange={(v) => void patch({ openNewTabOnLaunch: v })}
-          />
-          <Toggle
-            label={t('settings.navigation.restoreTabsOnLaunch')}
-            hint={t('settings.navigation.restoreTabsOnLaunchHint')}
-            checked={settings.restoreTabsOnLaunch}
-            onChange={(v) => void patch({ restoreTabsOnLaunch: v })}
+        <div className="mt-3">
+          <p className="mb-1.5 text-[11.5px] text-ink-dim">{t('settings.navigation.startupTabsLabel')}</p>
+          <SelectInput
+            value={settings.startupTabs}
+            onChange={(v) => void patch({ startupTabs: v as AppSettings['startupTabs'] })}
+            options={[
+              { value: 'newtab', label: t('settings.navigation.startupTabsNewtab') },
+              { value: 'restore', label: t('settings.navigation.startupTabsRestore') }
+            ]}
           />
         </div>
       </Block>

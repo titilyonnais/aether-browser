@@ -19,7 +19,7 @@ interface PagesState {
   affinities: AffinityLink[]
 
   hydrate(pages: PageMeta[]): void
-  /** Restaure l'état Focus persisté — n'appelé que si `restoreTabsOnLaunch` est activé. */
+  /** Restaure l'état Focus persisté — n'appelé que si `startupTabs === 'restore'`. */
   hydrateFocus(focusBySpace: Record<SpaceId, FocusState>): void
   upsert(meta: PageMeta): void
   removeLocal(id: PageId): void

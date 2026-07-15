@@ -95,7 +95,7 @@ export interface PageMeta {
 
 /** État Focus (vue scindée) d'un espace — quelles pages sont au premier plan.
  * Persisté par espace (voir main/settings.ts) pour permettre de le restaurer
- * au démarrage si `restoreTabsOnLaunch` est activé. */
+ * au démarrage si `startupTabs === 'restore'`. */
 export interface FocusState {
   /** Pages affichées (1 ou 2 en vue scindée). */
   slots: PageId[]
@@ -336,10 +336,10 @@ export interface AppSettings {
   /** Panneau Muse visible au démarrage de l'app. */
   showMuseOnLaunch: boolean
   // — Navigation —
-  /** Ouvre automatiquement la page de nouvel onglet au démarrage de l'app. */
-  openNewTabOnLaunch: boolean
-  /** Restaure la page qui était au premier plan (par espace) à la fermeture précédente. */
-  restoreTabsOnLaunch: boolean
+  /** Choix EXCLUSIF au démarrage — 'newtab' : toujours une page de nouvel onglet
+   * fraîche ; 'restore' : la page qui était au premier plan par espace à la
+   * fermeture précédente (repli sur 'newtab' si un espace n'a rien à restaurer). */
+  startupTabs: 'newtab' | 'restore'
   /** Page d'accueil ouverte par l'action « accueil » / nouvel espace vide. */
   homepage: string
   /** URL ouverte par le bouton « + » (nouvel onglet) — vide = page de nouvel
@@ -423,8 +423,7 @@ export interface SettingsPatch {
   uiScale?: number
   showConstellationOnLaunch?: boolean
   showMuseOnLaunch?: boolean
-  openNewTabOnLaunch?: boolean
-  restoreTabsOnLaunch?: boolean
+  startupTabs?: AppSettings['startupTabs']
   homepage?: string
   newTabUrl?: string
   newTabShortcuts?: NewTabShortcut[]
@@ -800,7 +799,7 @@ export interface Workspace {
   favorites: Favorite[]
   favoriteFolders: FavoriteFolder[]
   activeSpaceId: SpaceId
-  /** État Focus persisté par espace — consulté seulement si `restoreTabsOnLaunch`. */
+  /** État Focus persisté par espace — consulté seulement si `startupTabs === 'restore'`. */
   focusBySpace: Record<SpaceId, FocusState>
 }
 

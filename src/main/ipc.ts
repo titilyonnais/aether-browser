@@ -591,7 +591,7 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   ipcMain.on(CH.spaceSetActive, (_e, id: SpaceId) => setActiveSpaceId(activeProfile(), id))
 
   // Persisté à chaque changement (setFocus, quel que soit l'appelant) pour
-  // pouvoir le restaurer au prochain démarrage si `restoreTabsOnLaunch` est activé.
+  // pouvoir le restaurer au prochain démarrage si `startupTabs === 'restore'`.
   ipcMain.on(CH.pagesSetFocusState, (_e, spaceId: SpaceId, state: FocusState) => {
     setFocusState(spaceId, state)
   })

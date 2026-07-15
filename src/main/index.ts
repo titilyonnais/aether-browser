@@ -89,7 +89,13 @@ if (!gotLock) {
   })
 
   app.on('window-all-closed', () => app.quit())
-  app.on('before-quit', () => {
+  // `will-quit` (PAS `before-quit`) : ce dernier se déclenche AVANT la fermeture
+  // des fenêtres, donc avant leurs handlers `close` (minimizeOnClose ci-dessus,
+  // sauvegarde de l'état fenêtre dans mainWindow.ts) — qui ont encore besoin de
+  // la base de données. La fermer ici plutôt qu'en `before-quit` évitait un
+  // crash « Base de données non initialisée » quand ces handlers s'exécutaient
+  // après coup.
+  app.on('will-quit', () => {
     // Filet de sécurité si l'appli quitte pendant qu'un profil de navigation
     // privée est encore actif (sans passage par un changement de profil,
     // seul chemin normalement couvert dans `switchToProfile`, main/ipc.ts).

@@ -15,7 +15,7 @@ export const settings: Record<string, string> = {
   'settings.nav.extensions': 'Extensions',
   'settings.nav.reinitialiser': 'Réinitialiser',
   'settings.nav.apropos': 'À propos',
-  'settings.nav.searchPlaceholder': 'Rechercher un réglage…',
+  'settings.nav.searchPlaceholder': 'Rechercher…',
   'settings.nav.noResults': 'Aucune section ne correspond.',
   'settings.relaunchBanner.text': "Un réglage moteur a changé — redémarrez pour l'appliquer.",
   'settings.relaunchBanner.button': 'Relancer ÆTHER',
@@ -144,11 +144,9 @@ export const settings: Record<string, string> = {
   'settings.navigation.newTabUrlHint':
     'Ouverte via le bouton « + » — laissez vide pour la page de nouvel onglet intégrée (raccourcis + recherche).',
   'settings.navigation.newTabUrlPlaceholder': 'https://exemple.com',
-  'settings.navigation.openNewTabOnLaunch': "Ouvrir au démarrage de l'application",
-  'settings.navigation.openNewTabOnLaunchHint': 'Atterrir sur cette page à chaque lancement.',
-  'settings.navigation.restoreTabsOnLaunch': 'Restaurer les onglets de la dernière session',
-  'settings.navigation.restoreTabsOnLaunchHint':
-    "Rouvrir la page qui était affichée dans chaque espace à la fermeture précédente — prioritaire sur l'option ci-dessus.",
+  'settings.navigation.startupTabsLabel': 'Au démarrage de l’application',
+  'settings.navigation.startupTabsNewtab': 'Ouvrir cette page (toujours neuve)',
+  'settings.navigation.startupTabsRestore': 'Restaurer les onglets de la dernière session',
   'settings.navigation.downloadsTitle': 'Téléchargements',
   'settings.navigation.askDownloadLocation': 'Demander où enregistrer',
   'settings.navigation.askDownloadLocationHint': 'Sinon, enregistrement direct dans le dossier choisi',

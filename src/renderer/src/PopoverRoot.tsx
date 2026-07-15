@@ -60,22 +60,17 @@ export default function PopoverRoot() {
   useEffect(() => {
     const el = rootRef.current
     if (!el) return
-    // Deux rAF avant de mesurer/signaler : laisse le temps à CE frame d'être
-    // réellement peint. Sans ça, la fenêtre pouvait devenir visible (`showInactive()`,
-    // côté main) une fraction de frame avant que le compositeur n'ait fini de
-    // pousser le tout premier vrai contenu — un flash de fond/frame périmée à
-    // l'arrivée (le « scintillement » signalé), la mesure de taille seule
-    // n'étant pas une garantie que le rendu est réellement affiché.
+    // Mesure synchrone, sans rAF : cette fenêtre popup reste `show:false` tant
+    // que le main n'a pas reçu la taille (cf. popoverWindow.ts) — pour un
+    // renderer non composité/masqué, Chromium peut retarder rAF de plusieurs
+    // centaines de ms (jusqu'au repli `fallbackShowTimer`), ce qui produisait
+    // la latence perçue à l'ouverture. `getBoundingClientRect()` reflète déjà
+    // le layout à jour sans attendre un frame peint.
     const report = (): void => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (!el.isConnected) return
-          const rect = el.getBoundingClientRect()
-          if (rect.width > 0 && rect.height > 0) {
-            window.aether.popover.reportSize({ width: Math.ceil(rect.width), height: Math.ceil(rect.height) })
-          }
-        })
-      })
+      const rect = el.getBoundingClientRect()
+      if (rect.width > 0 && rect.height > 0) {
+        window.aether.popover.reportSize({ width: Math.ceil(rect.width), height: Math.ceil(rect.height) })
+      }
     }
     const ro = new ResizeObserver(report)
     ro.observe(el)

@@ -355,7 +355,7 @@ export interface AetherApi {
     showContextMenu(id: PageId, anchor: LocalRect): void
     /** Rouvre le dernier onglet fermé (jusqu'à 8 en historique). */
     reopenClosed(): Promise<PageMeta | null>
-    /** Persiste l'état Focus d'un espace — restauré au démarrage si `restoreTabsOnLaunch`. */
+    /** Persiste l'état Focus d'un espace — restauré au démarrage si startupTabs === 'restore'. */
     setFocusState(spaceId: SpaceId, state: FocusState): void
     onUpdated(cb: (page: PageMeta) => void): Unsubscribe
     onOpened(cb: (page: PageMeta) => void): Unsubscribe
