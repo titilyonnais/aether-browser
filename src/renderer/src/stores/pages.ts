@@ -3,15 +3,7 @@
  * (split view : 0 à 2 emplacements, orientation, ratio).
  */
 import { create } from 'zustand'
-import type { AffinityLink, CanvasRect, PageId, PageMeta, SpaceId } from '@shared/types'
-
-export interface FocusState {
-  /** Pages affichées (1 ou 2 en vue scindée). */
-  slots: PageId[]
-  orientation: 'h' | 'v'
-  ratio: number
-  activeSlot: number
-}
+import type { AffinityLink, CanvasRect, FocusState, PageId, PageMeta, SpaceId } from '@shared/types'
 
 /** Référence stable : évite les re-rendus fantômes dans les sélecteurs Zustand. */
 const DEFAULT_FOCUS: FocusState = Object.freeze({
@@ -27,6 +19,8 @@ interface PagesState {
   affinities: AffinityLink[]
 
   hydrate(pages: PageMeta[]): void
+  /** Restaure l'état Focus persisté — n'appelé que si `restoreTabsOnLaunch` est activé. */
+  hydrateFocus(focusBySpace: Record<SpaceId, FocusState>): void
   upsert(meta: PageMeta): void
   removeLocal(id: PageId): void
   bumpPreview(id: PageId, version: number): void
@@ -48,6 +42,20 @@ export const usePagesStore = create<PagesState>()((set, get) => ({
     const pages: Record<PageId, PageMeta> = {}
     for (const p of list) pages[p.id] = p
     set({ pages })
+  },
+
+  hydrateFocus: (focusBySpace) => {
+    // Une page persistée dans un emplacement Focus a pu être supprimée entretemps
+    // (autre appareil, édition manuelle…) — on ne restaure que ce qui existe encore.
+    const pages = get().pages
+    const cleaned: Record<SpaceId, FocusState> = {}
+    for (const [spaceId, focus] of Object.entries(focusBySpace)) {
+      const slots = focus.slots.filter((id) => pages[id])
+      if (slots.length > 0) {
+        cleaned[spaceId] = { ...focus, slots, activeSlot: Math.min(focus.activeSlot, slots.length - 1) }
+      }
+    }
+    set({ focusBySpace: { ...get().focusBySpace, ...cleaned } })
   },
 
   upsert: (meta) => set({ pages: { ...get().pages, [meta.id]: meta } }),

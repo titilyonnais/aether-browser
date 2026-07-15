@@ -126,6 +126,11 @@ export const settings: Record<string, string> = {
   'settings.appearance.showPageStrip': 'Afficher la bande de pages',
   'settings.appearance.tabHoverPreview': 'Aperçu au survol des onglets',
   'settings.appearance.tabHoverPreviewHint': 'Miniature de la page en plus du titre et de la mémoire utilisée',
+  'settings.appearance.panelsOnLaunchTitle': 'Panneaux au démarrage',
+  'settings.appearance.panelsOnLaunchHint':
+    'Visibilité initiale — Ctrl+B (Constellation) et Ctrl+J (Muse) continuent de les basculer normalement ensuite.',
+  'settings.appearance.showConstellationOnLaunch': 'Afficher Constellation (espaces)',
+  'settings.appearance.showMuseOnLaunch': 'Afficher Muse',
   'settings.appearance.defaultZoomTitle': 'Zoom des pages par défaut',
   'settings.appearance.defaultZoomHint': 'Appliqué à chaque page web (comme le zoom par défaut de Chrome).',
   'settings.appearance.renderingTitle': 'Rendu des pages web',
@@ -140,8 +145,10 @@ export const settings: Record<string, string> = {
     'Ouverte via le bouton « + » — laissez vide pour la page de nouvel onglet intégrée (raccourcis + recherche).',
   'settings.navigation.newTabUrlPlaceholder': 'https://exemple.com',
   'settings.navigation.openNewTabOnLaunch': "Ouvrir au démarrage de l'application",
-  'settings.navigation.openNewTabOnLaunchHint':
-    'Atterrir sur cette page à chaque lancement, en plus des pages restaurées de la session précédente.',
+  'settings.navigation.openNewTabOnLaunchHint': 'Atterrir sur cette page à chaque lancement.',
+  'settings.navigation.restoreTabsOnLaunch': 'Restaurer les onglets de la dernière session',
+  'settings.navigation.restoreTabsOnLaunchHint':
+    "Rouvrir la page qui était affichée dans chaque espace à la fermeture précédente — prioritaire sur l'option ci-dessus.",
   'settings.navigation.downloadsTitle': 'Téléchargements',
   'settings.navigation.askDownloadLocation': 'Demander où enregistrer',
   'settings.navigation.askDownloadLocationHint': 'Sinon, enregistrement direct dans le dossier choisi',
@@ -194,6 +201,9 @@ export const settings: Record<string, string> = {
     "ÆTHER suit la langue de votre système ({{lang}}). L'interface est en français.",
 
   // Section Système
+  'settings.system.closeBehaviorTitle': 'Fermeture de la fenêtre',
+  'settings.system.closeBehaviorHint': 'Ce que fait le bouton fermer de la fenêtre.',
+  'settings.system.minimizeOnClose': 'Minimiser au lieu de quitter',
   'settings.system.defaultBrowserTitle': 'Navigateur par défaut',
   'settings.system.defaultBrowserHint': "Windows gère l'application par défaut ; ÆTHER ouvre le bon réglage.",
   'settings.system.openDefaultApps': 'Ouvrir les applications par défaut de Windows',

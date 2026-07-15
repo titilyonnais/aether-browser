@@ -21,6 +21,7 @@ import type {
   Favorite,
   FavoriteFolder,
   FavoritesOverflowEntry,
+  FocusState,
   InitialState,
   IntentResult,
   LocalRect,
@@ -131,6 +132,7 @@ export const CH = {
   pageTranslate: 'page:translate',
   pageUntranslate: 'page:untranslate',
   pageDetectLanguage: 'page:detect-language',
+  pagesSetFocusState: 'pages:set-focus-state',
   // Favoris (entité indépendante des pages — voir Favorite dans shared/types)
   favoritesList: 'favorites:list',
   favoritesAdd: 'favorites:add',
@@ -353,6 +355,8 @@ export interface AetherApi {
     showContextMenu(id: PageId, anchor: LocalRect): void
     /** Rouvre le dernier onglet fermé (jusqu'à 8 en historique). */
     reopenClosed(): Promise<PageMeta | null>
+    /** Persiste l'état Focus d'un espace — restauré au démarrage si `restoreTabsOnLaunch`. */
+    setFocusState(spaceId: SpaceId, state: FocusState): void
     onUpdated(cb: (page: PageMeta) => void): Unsubscribe
     onOpened(cb: (page: PageMeta) => void): Unsubscribe
     onRemoved(cb: (id: PageId) => void): Unsubscribe

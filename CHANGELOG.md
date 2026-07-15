@@ -4,6 +4,18 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.39.0] — 2026-07-16
+
+### Ajouté
+
+- **Réglages › Navigation : « Restaurer les onglets de la dernière session »** — rouvre la page qui était au premier plan dans chaque espace à la fermeture précédente (prioritaire sur « Ouvrir au démarrage »). L'état Focus (page(s) affichée(s), vue scindée) est désormais mémorisé par espace en continu, pas juste au moment de fermer.
+- **Réglages › Apparence : visibilité de Constellation et Muse au démarrage** — deux interrupteurs indépendants ; Ctrl+B/Ctrl+J continuent de les basculer normalement pendant la session.
+- **Réglages › Système : « Minimiser au lieu de quitter »** — le bouton fermer de la fenêtre minimise dans la barre des tâches au lieu de fermer ÆTHER ; « Quitter ÆTHER » (menu) continue de vraiment quitter.
+
+### Corrigé
+
+- **Scintillement à l'arrivée des bulles natives** (infos de site, aperçus d'onglet, menus…) : la fenêtre popup pouvait devenir visible une fraction de frame avant que son tout premier contenu ne soit réellement peint (fenêtre transparente séparée de la fenêtre principale). Un double `requestAnimationFrame` avant de signaler « prêt à afficher » élimine ce décalage ; un léger fondu+zoom d'arrivée habille aussi mieux la vraie animation.
+
 ## [0.38.4] — 2026-07-16
 
 ### Corrigé

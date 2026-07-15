@@ -85,6 +85,17 @@ export interface PageMeta {
   loadError: string | null
 }
 
+/** État Focus (vue scindée) d'un espace — quelles pages sont au premier plan.
+ * Persisté par espace (voir main/settings.ts) pour permettre de le restaurer
+ * au démarrage si `restoreTabsOnLaunch` est activé. */
+export interface FocusState {
+  /** Pages affichées (1 ou 2 en vue scindée). */
+  slots: PageId[]
+  orientation: 'h' | 'v'
+  ratio: number
+  activeSlot: number
+}
+
 /** Dossier de rangement des favoris (façon chrome://bookmarks). */
 export interface FavoriteFolder {
   id: string
@@ -312,9 +323,15 @@ export interface AppSettings {
   /** Échelle des textes/éléments de l'interface ÆTHER elle-même (1 = 100 %) —
    * distinct de `defaultZoom`, qui ne s'applique qu'au contenu des pages web. */
   uiScale: number
+  /** Panneau Constellation (espaces) visible au démarrage de l'app. */
+  showConstellationOnLaunch: boolean
+  /** Panneau Muse visible au démarrage de l'app. */
+  showMuseOnLaunch: boolean
   // — Navigation —
   /** Ouvre automatiquement la page de nouvel onglet au démarrage de l'app. */
   openNewTabOnLaunch: boolean
+  /** Restaure la page qui était au premier plan (par espace) à la fermeture précédente. */
+  restoreTabsOnLaunch: boolean
   /** Page d'accueil ouverte par l'action « accueil » / nouvel espace vide. */
   homepage: string
   /** URL ouverte par le bouton « + » (nouvel onglet) — vide = page de nouvel
@@ -359,6 +376,8 @@ export interface AppSettings {
   proxyMode: ProxyMode
   /** Règles proxy si proxyMode === 'custom' (ex. « http=host:port »). */
   proxyRules: string
+  /** Le bouton fermer de la fenêtre minimise au lieu de quitter (« Quitter ÆTHER » reste le vrai quitter). */
+  minimizeOnClose: boolean
   // — Téléchargements —
   /** Dossier de téléchargement ('' = Téléchargements par défaut de l'OS). */
   downloadDir: string
@@ -390,7 +409,10 @@ export interface SettingsPatch {
   showPageStrip?: boolean
   showTabHoverPreview?: boolean
   uiScale?: number
+  showConstellationOnLaunch?: boolean
+  showMuseOnLaunch?: boolean
   openNewTabOnLaunch?: boolean
+  restoreTabsOnLaunch?: boolean
   homepage?: string
   newTabUrl?: string
   newTabShortcuts?: NewTabShortcut[]
@@ -412,6 +434,7 @@ export interface SettingsPatch {
   neverTranslateDomains?: string[]
   proxyMode?: ProxyMode
   proxyRules?: string
+  minimizeOnClose?: boolean
   downloadDir?: string
   askDownloadLocation?: boolean
   onboarded?: boolean
@@ -757,6 +780,8 @@ export interface Workspace {
   favorites: Favorite[]
   favoriteFolders: FavoriteFolder[]
   activeSpaceId: SpaceId
+  /** État Focus persisté par espace — consulté seulement si `restoreTabsOnLaunch`. */
+  focusBySpace: Record<SpaceId, FocusState>
 }
 
 /** Versions affichées dans Paramètres › À propos (façon chrome://version). */

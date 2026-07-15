@@ -37,6 +37,7 @@
   --animate-pulse-dot: pulse-dot 2.4s ease-in-out infinite;
   --animate-shimmer: shimmer 1.6s ease infinite;
   --animate-twinkle: twinkle 5s ease-in-out infinite;
+  --animate-popover-enter: popover-enter 160ms var(--ease-fluid) both;
 }
 
 @keyframes breathe {
@@ -77,6 +78,21 @@
   }
   50% {
     opacity: 0.55;
+  }
+}
+
+/* Arrivée des bulles natives (popoverWindow.ts) — un fondu+léger zoom masque
+   le petit décalage de timing inévitable entre "fenêtre rendue visible" et
+   "premier vrai frame peint" (fenêtre transparente séparée, cf. PopoverRoot.tsx),
+   plutôt qu'un « pop » instantané qui rendait ce décalage plus visible. */
+@keyframes popover-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 

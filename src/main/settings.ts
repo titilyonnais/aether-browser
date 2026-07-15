@@ -5,7 +5,7 @@
  * des drapeaux `has*Key`.
  */
 import { safeStorage } from 'electron'
-import type { ApiProviderKind, AppSettings, NewTabWidgets, SettingsPatch } from '@shared/types'
+import type { ApiProviderKind, AppSettings, FocusState, NewTabWidgets, SettingsPatch } from '@shared/types'
 import { kvRepo } from './db/repositories'
 
 const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKey'> = {
@@ -26,7 +26,10 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   showPageStrip: false,
   showTabHoverPreview: true,
   uiScale: 1,
+  showConstellationOnLaunch: true,
+  showMuseOnLaunch: true,
   openNewTabOnLaunch: true,
+  restoreTabsOnLaunch: false,
   homepage: '',
   newTabUrl: '',
   newTabShortcuts: [],
@@ -47,6 +50,7 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   neverTranslateDomains: [],
   proxyMode: 'system',
   proxyRules: '',
+  minimizeOnClose: false,
   downloadDir: '',
   askDownloadLocation: true,
   onboarded: false
@@ -129,7 +133,10 @@ export function getSettings(): AppSettings {
     showPageStrip: getString('showPageStrip'),
     showTabHoverPreview: getString('showTabHoverPreview'),
     uiScale: getString('uiScale'),
+    showConstellationOnLaunch: getString('showConstellationOnLaunch'),
+    showMuseOnLaunch: getString('showMuseOnLaunch'),
     openNewTabOnLaunch: getString('openNewTabOnLaunch'),
+    restoreTabsOnLaunch: getString('restoreTabsOnLaunch'),
     homepage: getString('homepage'),
     newTabUrl: getString('newTabUrl'),
     newTabShortcuts: getString('newTabShortcuts'),
@@ -150,6 +157,7 @@ export function getSettings(): AppSettings {
     neverTranslateDomains: getString('neverTranslateDomains'),
     proxyMode: getString('proxyMode'),
     proxyRules: getString('proxyRules'),
+    minimizeOnClose: getString('minimizeOnClose'),
     downloadDir: getString('downloadDir'),
     askDownloadLocation: getString('askDownloadLocation'),
     onboarded: getString('onboarded'),
@@ -183,7 +191,12 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
   if (patch.uiScale !== undefined) {
     putValue('uiScale', Math.min(1.3, Math.max(0.85, patch.uiScale)))
   }
+  if (patch.showConstellationOnLaunch !== undefined) {
+    putValue('showConstellationOnLaunch', patch.showConstellationOnLaunch)
+  }
+  if (patch.showMuseOnLaunch !== undefined) putValue('showMuseOnLaunch', patch.showMuseOnLaunch)
   if (patch.openNewTabOnLaunch !== undefined) putValue('openNewTabOnLaunch', patch.openNewTabOnLaunch)
+  if (patch.restoreTabsOnLaunch !== undefined) putValue('restoreTabsOnLaunch', patch.restoreTabsOnLaunch)
   if (patch.homepage !== undefined) putValue('homepage', patch.homepage.trim())
   if (patch.newTabUrl !== undefined) putValue('newTabUrl', patch.newTabUrl.trim())
   if (patch.newTabShortcuts !== undefined) {
@@ -241,6 +254,7 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
   }
   if (patch.proxyMode !== undefined) putValue('proxyMode', patch.proxyMode)
   if (patch.proxyRules !== undefined) putValue('proxyRules', patch.proxyRules.trim())
+  if (patch.minimizeOnClose !== undefined) putValue('minimizeOnClose', patch.minimizeOnClose)
   if (patch.downloadDir !== undefined) putValue('downloadDir', patch.downloadDir)
   if (patch.askDownloadLocation !== undefined) putValue('askDownloadLocation', patch.askDownloadLocation)
   if (patch.onboarded !== undefined) putValue('onboarded', patch.onboarded)
@@ -281,4 +295,20 @@ export function getActiveSpaceId(profileId: string): string | null {
 
 export function setActiveSpaceId(profileId: string, id: string): void {
   kvRepo.set(`state.activeSpaceId.${profileId}`, id)
+}
+
+/** État Focus (page(s) au premier plan) mémorisé par espace — toujours écrit,
+ * consulté au démarrage seulement si `restoreTabsOnLaunch` est activé. */
+export function getFocusState(spaceId: string): FocusState | null {
+  const raw = kvRepo.get(`state.focus.${spaceId}`)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as FocusState
+  } catch {
+    return null
+  }
+}
+
+export function setFocusState(spaceId: string, state: FocusState): void {
+  kvRepo.set(`state.focus.${spaceId}`, JSON.stringify(state))
 }

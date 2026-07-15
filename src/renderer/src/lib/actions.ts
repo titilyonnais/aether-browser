@@ -136,17 +136,53 @@ export async function initBridge(): Promise<void> {
   useFavoriteFoldersStore.getState().hydrate(initial.favoriteFolders)
   muse.hydrateNotes(initial.notes)
   settings.hydrate(initial.settings, initial.aiStatus, initial.versions)
+  // Visibilité des panneaux au lancement — réglages plutôt que le `true`/`true`
+  // fixe d'origine du store (celui-ci reste la valeur par défaut de session,
+  // Ctrl+B/Ctrl+J continuent de basculer normalement ensuite).
+  useUiStore.setState({
+    constellationOpen: initial.settings.showConstellationOnLaunch,
+    museOpen: initial.settings.showMuseOnLaunch
+  })
   ui.setMaximized(await window.aether.window.isMaximized())
   ui.setReady(true)
 
+  // Persiste l'état Focus à chaque changement (clic sur un onglet, vue scindée,
+  // fermeture…), quel que soit l'appelant (composants ET actions) — un seul
+  // point centralisé plutôt que d'instrumenter chaque site d'appel de `setFocus`.
+  // Enregistré AVANT la restauration ci-dessous pour que même le tout premier
+  // changement de focus du lancement (nouvel onglet ou restauration) soit
+  // capturé. Anti-rebond PAR ESPACE (pas un anti-rebond partagé) : le
+  // redimensionnement de la vue scindée (drag) déclenche des changements de
+  // `ratio` en rafale, et un anti-rebond unique perdrait la mise à jour d'un
+  // espace si un autre change juste après, dans la même fenêtre.
+  const focusPersistTimers = new Map<SpaceId, ReturnType<typeof setTimeout>>()
+  usePagesStore.subscribe((state, prev) => {
+    if (state.focusBySpace === prev.focusBySpace) return
+    for (const [spaceId, focus] of Object.entries(state.focusBySpace)) {
+      if (prev.focusBySpace[spaceId] === focus) continue
+      clearTimeout(focusPersistTimers.get(spaceId))
+      focusPersistTimers.set(
+        spaceId,
+        setTimeout(() => window.aether.pages.setFocusState(spaceId, focus), 300)
+      )
+    }
+  })
+
   if (!initial.settings.onboarded) {
     useUiStore.getState().openOverlay('onboarding')
+  } else if (initial.settings.restoreTabsOnLaunch) {
+    // Restaure la page qui était au premier plan par espace à la fermeture
+    // précédente — prioritaire sur `openNewTabOnLaunch` (les deux ouvriraient
+    // sinon un nouvel onglet qui écraserait aussitôt la page restaurée dans
+    // le même emplacement Focus).
+    pages.hydrateFocus(initial.focusBySpace)
   } else if (initial.settings.openNewTabOnLaunch) {
     // Atterrir sur la page de nouvel onglet à chaque démarrage (façon
     // Chrome/Edge/Brave) — une VRAIE page en plus de celles restaurées de la
     // session précédente, pas une simple bascule sur une page existante.
     void openUrl('aether://newtab', { target: 'focus' })
   }
+
   scheduleAffinityRefresh()
   void refreshDownloads()
 }

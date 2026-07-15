@@ -19,6 +19,7 @@ import type {
   Favorite,
   FavoriteFolder,
   FavoritesOverflowEntry,
+  FocusState,
   InitialState,
   LocalRect,
   ShortcutCommand,
@@ -80,15 +81,18 @@ import {
   runContextMenuAction,
   showContextMenuPopover
 } from './popoverWindow'
+import { markQuitting } from './quitState'
 import { chooseDirectory, clearBrowsingData } from './sessionActions'
 import {
   applySettingsPatch,
   getActiveProfileId,
   getActiveSpaceId,
+  getFocusState,
   getSettings,
   resetSettings,
   setActiveProfileId,
-  setActiveSpaceId
+  setActiveSpaceId,
+  setFocusState
 } from './settings'
 import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
 import type { ViewManager } from './viewManager'
@@ -188,7 +192,12 @@ function buildWorkspace(views: ViewManager, profileId: ProfileId): Workspace {
     activeSpaceId = spaces[0]?.id ?? ''
     if (activeSpaceId) setActiveSpaceId(profileId, activeSpaceId)
   }
-  return { spaces, pages, notes, favorites, favoriteFolders, activeSpaceId }
+  const focusBySpace: Record<SpaceId, FocusState> = {}
+  for (const space of spaces) {
+    const focus = getFocusState(space.id)
+    if (focus) focusBySpace[space.id] = focus
+  }
+  return { spaces, pages, notes, favorites, favoriteFolders, activeSpaceId, focusBySpace }
 }
 
 /** Bascule vers un profil : ferme les vues, change de partition, recharge ses extensions. */
@@ -578,6 +587,12 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   })
 
   ipcMain.on(CH.spaceSetActive, (_e, id: SpaceId) => setActiveSpaceId(activeProfile(), id))
+
+  // Persisté à chaque changement (setFocus, quel que soit l'appelant) pour
+  // pouvoir le restaurer au prochain démarrage si `restoreTabsOnLaunch` est activé.
+  ipcMain.on(CH.pagesSetFocusState, (_e, spaceId: SpaceId, state: FocusState) => {
+    setFocusState(spaceId, state)
+  })
 
   ipcMain.on(CH.spaceUpdateCanvas, (_e, id: SpaceId, view: CanvasView) => {
     spacesRepo.updateCanvas(id, view)
@@ -1193,7 +1208,14 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     if (/^(https?:|ms-settings:)/i.test(url)) void shell.openExternal(url)
   })
 
-  ipcMain.on(CH.appQuit, () => app.quit())
+  ipcMain.on(CH.appQuit, () => {
+    // Marque un VRAI quitter avant `app.quit()` — sans ça, le gestionnaire
+    // `close` de la fenêtre (main/index.ts) interprèterait ce quitter comme un
+    // simple clic sur le bouton X et se contenterait de minimiser si le
+    // réglage `minimizeOnClose` est activé, rendant ce menu inopérant.
+    markQuitting()
+    app.quit()
+  })
 
   ipcMain.on(CH.appSetTitle, (_e, title: string) => {
     win.setTitle(String(title ?? '').trim().slice(0, 80) || 'ÆTHER')

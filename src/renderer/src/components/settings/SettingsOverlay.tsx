@@ -919,6 +919,24 @@ function AppearanceSection() {
         />
       </Block>
 
+      <Block
+        title={t('settings.appearance.panelsOnLaunchTitle')}
+        hint={t('settings.appearance.panelsOnLaunchHint')}
+      >
+        <div className="space-y-2.5">
+          <Toggle
+            label={t('settings.appearance.showConstellationOnLaunch')}
+            checked={settings.showConstellationOnLaunch}
+            onChange={(v) => void patch({ showConstellationOnLaunch: v })}
+          />
+          <Toggle
+            label={t('settings.appearance.showMuseOnLaunch')}
+            checked={settings.showMuseOnLaunch}
+            onChange={(v) => void patch({ showMuseOnLaunch: v })}
+          />
+        </div>
+      </Block>
+
       <Block title={t('settings.appearance.defaultZoomTitle')} hint={t('settings.appearance.defaultZoomHint')}>
         <div className="flex items-center gap-3">
           <input
@@ -976,12 +994,18 @@ function NavigationSection() {
           placeholder={t('settings.navigation.newTabUrlPlaceholder')}
           mono
         />
-        <div className="mt-3">
+        <div className="mt-3 space-y-2.5">
           <Toggle
             label={t('settings.navigation.openNewTabOnLaunch')}
             hint={t('settings.navigation.openNewTabOnLaunchHint')}
             checked={settings.openNewTabOnLaunch}
             onChange={(v) => void patch({ openNewTabOnLaunch: v })}
+          />
+          <Toggle
+            label={t('settings.navigation.restoreTabsOnLaunch')}
+            hint={t('settings.navigation.restoreTabsOnLaunchHint')}
+            checked={settings.restoreTabsOnLaunch}
+            onChange={(v) => void patch({ restoreTabsOnLaunch: v })}
           />
         </div>
       </Block>
@@ -1218,6 +1242,14 @@ function SystemSection() {
 
   return (
     <div className="space-y-7">
+      <Block title={t('settings.system.closeBehaviorTitle')} hint={t('settings.system.closeBehaviorHint')}>
+        <Toggle
+          label={t('settings.system.minimizeOnClose')}
+          checked={settings.minimizeOnClose}
+          onChange={(v) => void patch({ minimizeOnClose: v })}
+        />
+      </Block>
+
       <Block title={t('settings.system.defaultBrowserTitle')} hint={t('settings.system.defaultBrowserHint')}>
         <button
           type="button"

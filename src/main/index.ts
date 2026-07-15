@@ -11,6 +11,8 @@ import { applyFlagsBeforeReady } from './flags'
 import { createViewDelegate, ensureBootstrap, registerIpc } from './ipc'
 import { createMainWindow } from './mainWindow'
 import { installAetherProtocol, registerAetherScheme } from './protocol'
+import { isQuitting } from './quitState'
+import { getSettings } from './settings'
 import { checkForUpdates, initUpdater } from './updater'
 import { ViewManager } from './viewManager'
 
@@ -68,6 +70,16 @@ if (!gotLock) {
     // la fenêtre finir de s'afficher avant ce travail de fond.
     initUpdater(mainWindow)
     setTimeout(() => checkForUpdates(), 4000)
+
+    // Réglage « minimiser au lieu de fermer » — n'intercepte QUE le bouton X/
+    // Alt+F4 (pas un vrai « Quitter ÆTHER », qui marque `isQuitting()` avant
+    // d'appeler `app.quit()`, cf. CH.appQuit dans ipc.ts).
+    mainWindow.on('close', (event) => {
+      if (!isQuitting() && getSettings().minimizeOnClose) {
+        event.preventDefault()
+        mainWindow?.minimize()
+      }
+    })
 
     mainWindow.on('closed', () => {
       views?.closeAll()

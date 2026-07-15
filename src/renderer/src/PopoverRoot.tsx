@@ -59,11 +59,22 @@ export default function PopoverRoot() {
   useEffect(() => {
     const el = rootRef.current
     if (!el) return
+    // Deux rAF avant de mesurer/signaler : laisse le temps à CE frame d'être
+    // réellement peint. Sans ça, la fenêtre pouvait devenir visible (`showInactive()`,
+    // côté main) une fraction de frame avant que le compositeur n'ait fini de
+    // pousser le tout premier vrai contenu — un flash de fond/frame périmée à
+    // l'arrivée (le « scintillement » signalé), la mesure de taille seule
+    // n'étant pas une garantie que le rendu est réellement affiché.
     const report = (): void => {
-      const rect = el.getBoundingClientRect()
-      if (rect.width > 0 && rect.height > 0) {
-        window.aether.popover.reportSize({ width: Math.ceil(rect.width), height: Math.ceil(rect.height) })
-      }
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!el.isConnected) return
+          const rect = el.getBoundingClientRect()
+          if (rect.width > 0 && rect.height > 0) {
+            window.aether.popover.reportSize({ width: Math.ceil(rect.width), height: Math.ceil(rect.height) })
+          }
+        })
+      })
     }
     const ro = new ResizeObserver(report)
     ro.observe(el)
@@ -74,34 +85,26 @@ export default function PopoverRoot() {
   if (!content) return null
 
   return (
-    <div ref={rootRef} className="inline-block">
-      {content.kind === 'site-info' && <SiteInfoCard key={contentNonce} pageId={content.pageId} locale={locale} />}
+    <div key={contentNonce} ref={rootRef} className="animate-popover-enter inline-block">
+      {content.kind === 'site-info' && <SiteInfoCard pageId={content.pageId} locale={locale} />}
       {content.kind === 'tab-preview' && (
-        <TabPreviewCard key={contentNonce} pageId={content.pageId} showPreview={showPreview} locale={locale} />
+        <TabPreviewCard pageId={content.pageId} showPreview={showPreview} locale={locale} />
       )}
-      {content.kind === 'translate' && <TranslatePopoverCard key={contentNonce} pageId={content.pageId} locale={locale} />}
+      {content.kind === 'translate' && <TranslatePopoverCard pageId={content.pageId} locale={locale} />}
       {content.kind === 'favorites-folder' && (
         <FavoritesFolderPopoverCard
-          key={contentNonce}
           folderId={content.folderId}
           initialFolder={content.folder}
           initialItems={content.items}
           locale={locale}
         />
       )}
-      {content.kind === 'app-menu' && <AppMenuPopoverCard key={contentNonce} />}
-      {content.kind === 'context-menu' && (
-        <ContextMenuPopoverCard key={contentNonce} title={content.title} rows={content.rows} />
-      )}
+      {content.kind === 'app-menu' && <AppMenuPopoverCard />}
+      {content.kind === 'context-menu' && <ContextMenuPopoverCard title={content.title} rows={content.rows} />}
       {content.kind === 'webstore-confirm' && (
-        <WebstoreConfirmCard
-          key={contentNonce}
-          extensionId={content.extensionId}
-          name={content.name}
-          iconUrl={content.iconUrl}
-        />
+        <WebstoreConfirmCard extensionId={content.extensionId} name={content.name} iconUrl={content.iconUrl} />
       )}
-      {content.kind === 'extensions-menu' && <ExtensionsMenuPopoverCard key={contentNonce} />}
+      {content.kind === 'extensions-menu' && <ExtensionsMenuPopoverCard />}
     </div>
   )
 }
