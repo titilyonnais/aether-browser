@@ -49,3 +49,13 @@ jobs:
       - run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # electron-builder crée la release en BROUILLON (releaseType: draft,
+      # electron-builder.yml) — GitHub refuse de la créer directement PUBLIÉE
+      # pour un tag qui n'existe pas encore. Le tag existe maintenant (créé
+      # avec le brouillon) : on peut la publier réellement dans une étape à
+      # part, sans quoi elle resterait invisible à electron-updater.
+      - name: Publier la release (le tag existe désormais)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "v${{ needs.check-version.outputs.version }}" --draft=false --repo titilyonnais/aether-browser

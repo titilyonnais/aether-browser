@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.38.3] — 2026-07-16
+
+### Corrigé
+
+- **La publication automatique (0.38.2) échouait en réalité** : GitHub refuse de créer directement une release PUBLIÉE pour un tag qui n'existe pas encore (HTTP 422 « Published releases must have a valid tag ») — hors le tag n'est créé qu'AVEC le brouillon. `electron-builder` recrée donc le brouillon (comme avant 0.38.2), et une étape séparée du workflow CI le publie juste après, une fois le tag réellement créé.
+
 ## [0.38.2] — 2026-07-15
 
 ### Corrigé

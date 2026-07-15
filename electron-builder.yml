@@ -13,12 +13,14 @@ publish:
   provider: github
   owner: titilyonnais
   repo: aether-browser
-  # Par défaut electron-builder crée une release en BROUILLON (invisible aux
-  # requêtes anonymes de l'API — donc invisible à electron-updater côté postes
-  # installés, symptôme observé : « no published versions » malgré une
-  # publication CI en apparence réussie). Publication immédiate nécessaire
-  # puisque rien d'humain ne vient valider un brouillon dans ce flux automatisé.
-  releaseType: release
+  # Reste en BROUILLON ici volontairement (défaut d'electron-builder) : GitHub
+  # refuse de créer directement une release PUBLIÉE pour un tag qui n'existe
+  # pas encore (HTTP 422 « Published releases must have a valid tag »),
+  # puisque le tag n'est créé qu'AVEC le brouillon. Le workflow CI publie ce
+  # brouillon dans une étape séparée juste après (voir .github/workflows/release.yml),
+  # une fois le tag réellement créé — sans quoi les releases restent invisibles
+  # aux requêtes anonymes (donc à electron-updater), symptôme déjà observé.
+  releaseType: draft
 files:
   - out/**/*
   - "!**/*.map"
