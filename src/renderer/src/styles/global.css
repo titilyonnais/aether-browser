@@ -1,0 +1,455 @@
+@import 'tailwindcss';
+
+/* ─── Système de design ÆTHER ─────────────────────────────────────────────
+   Luxe calme : fonds quasi noirs, hairlines, verre subtil, accents glacier
+   et lavande très doux. Tout respire.                                      */
+
+@theme {
+  --font-sans: 'Inter Variable', 'Segoe UI Variable', system-ui, sans-serif;
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', monospace;
+
+  --color-void: #060608;
+  --color-abyss: #0a0a10;
+  --color-mist: #101018;
+  --color-veil: #16161f;
+
+  --color-ink: #e9e9f2;
+  --color-ink-dim: #9a9ab0;
+  /* #565670 à l'origine — trop proche de --color-void (≈3:1, sous le seuil
+     AA 4.5:1 même pour du texte secondaire) : éclairci pour rester lisible. */
+  --color-ink-faint: #7c7c98;
+  /* Texte sur accent (boutons pleins) : toujours sombre, les accents restent
+     pastel dans les deux thèmes — donc jamais réécrit par [data-theme]. */
+  --color-ink-onaccent: #0a0e14;
+
+  --color-glacier: #a9c9ec;
+  --color-lavande: #b3a4e6;
+
+  /* Piste « off » des interrupteurs (Toggle) — un blanc translucide (comme
+     les autres surfaces) serait quasi invisible sur fond clair : token dédié,
+     jamais un simple bg-white/N, pour rester visible dans les deux thèmes. */
+  --color-toggle-track: rgb(255 255 255 / 0.22);
+
+  --ease-fluid: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-breathe: breathe 9s ease-in-out infinite;
+  --animate-pulse-dot: pulse-dot 2.4s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.6s ease infinite;
+  --animate-twinkle: twinkle 5s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Halo pulsé de l'étoile active dans la constellation (SVG). */
+@keyframes node-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+.node-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: node-ring 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+/* ─── Thème clair ─────────────────────────────────────────────────────────
+   Même hiérarchie de tons, inversée : surfaces claires et calmes plutôt que
+   des équivalents blancs criards. Les accents restent pastel — c'est pour
+   ça que le texte sur accent utilise --color-ink-onaccent, jamais réécrit
+   ici. Activé via [data-theme="light"] posé sur <html> (App.tsx), y compris
+   en mode « système » via prefers-color-scheme.                            */
+:root[data-theme='light'] {
+  /* Deux allers-retours ratés avant celui-ci : #f2f3f7 (trop gris, signalé)
+     PUIS #ffffff pur (trop blanc, fatigant pour les yeux ET tout se
+     confondait faute de contraste entre surfaces, re-signalé). Cette
+     version reprend la hiérarchie du thème sombre (void plus terne que la
+     surface élevée « abyss », qui elle est la plus claire) mais avec un ton
+     chaud très doux façon papier plutôt qu'un blanc froid clinique — ni gris
+     visible, ni blancheur agressive. */
+  --color-void: #f8f8f6;
+  --color-abyss: #ffffff;
+  --color-mist: #f1f1ef;
+  --color-veil: #e7e7e4;
+
+  --color-ink: #14151a;
+  --color-ink-dim: #494c56;
+  /* #8b8e99 à l'origine — ≈2.7:1 sur --color-void, loin sous le seuil AA
+     4.5:1 : assombri nettement pour rester lisible sur fond clair. */
+  --color-ink-faint: #63666f;
+
+  /* 0.16 à l'origine — beaucoup trop subtil sur un fond maintenant blanc pur,
+     le rendait quasi invisible (signalé avec capture à l'appui). */
+  --color-toggle-track: rgb(10 14 20 / 0.38);
+}
+
+/* Force le sombre sur un sous-arbre (l'introduction reste un ciel nocturne
+   même si l'app est en thème clair — c'est une mise en scène, pas du chrome). */
+[data-theme='dark'] {
+  --color-void: #060608;
+  --color-abyss: #0a0a10;
+  --color-mist: #101018;
+  --color-veil: #16161f;
+  --color-ink: #e9e9f2;
+  --color-ink-dim: #9a9ab0;
+  --color-ink-faint: #7c7c98;
+  --color-toggle-track: rgb(255 255 255 / 0.22);
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme='system'] {
+    --color-void: #f8f8f6;
+    --color-abyss: #ffffff;
+    --color-mist: #f1f1ef;
+    --color-veil: #e7e7e4;
+
+    --color-ink: #14151a;
+    --color-ink-dim: #494c56;
+    --color-ink-faint: #63666f;
+    --color-toggle-track: rgb(10 14 20 / 0.38);
+  }
+}
+
+/* ─── Base ────────────────────────────────────────────────────────────── */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  letter-spacing: -0.008em;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+::selection {
+  background: rgb(169 201 236 / 0.22);
+}
+
+/* Contour clavier générique (boutons, liens…) — les CHAMPS DE TEXTE en sont
+   volontairement exclus : Chromium les considère "focus-visible" au moindre
+   clic SOURIS (pas seulement au clavier, contrairement aux boutons), donc
+   cette règle y ajoutait un liseré même sur un simple clic. Les champs de
+   texte ont leur propre traitement au focus (bordure/lueur colorée posée
+   localement par chaque composant), plus soigné qu'un contour générique. */
+:focus-visible:not(input, textarea) {
+  outline: 1px solid rgb(169 201 236 / 0.45);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.07);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(255 255 255 / 0.14);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Défilement sans barre visible (molette/glisser restent actifs) — pour les
+   rangées compactes (bande de pages…) où un fin scrollbar Chromium peut
+   clignoter pendant une animation de largeur (fermeture d'onglet). */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* ─── Utilitaires ─────────────────────────────────────────────────────── */
+
+/* Zones de préhension de la fenêtre frameless. */
+@utility drag {
+  -webkit-app-region: drag;
+}
+@utility no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Verre raffiné : à peine perceptible, bordure ultra-fine. */
+@utility glass {
+  background: rgb(255 255 255 / 0.03);
+  border: 1px solid rgb(255 255 255 / 0.07);
+  backdrop-filter: blur(24px) saturate(1.25);
+}
+
+/* Verre dense pour les surfaces flottantes (overlays, palettes). */
+@utility glass-strong {
+  background: rgb(14 14 22 / 0.86);
+  border: 1px solid rgb(255 255 255 / 0.09);
+  backdrop-filter: blur(36px) saturate(1.3);
+  box-shadow:
+    0 32px 80px -24px rgb(0 0 0 / 0.8),
+    0 0 0 1px rgb(0 0 0 / 0.4);
+}
+
+/* Surface opaque pour les fenêtres popup natives flottantes (infos de site,
+   aperçu d'onglet, profils…) : ce sont des `BrowserWindow` transparentes
+   SÉPARÉES de la fenêtre principale, pas des overlays DOM — le
+   `backdrop-filter` de `.glass-strong` n'a rien de fiable à flouter derrière
+   une fenêtre transparente distincte et rend le contenu difficile à lire
+   par-dessus une page vivante. Fond quasi opaque, sans flou. */
+@utility popover-surface {
+  background: rgb(16 16 24 / 0.98);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  box-shadow:
+    0 32px 80px -24px rgb(0 0 0 / 0.85),
+    0 0 0 1px rgb(0 0 0 / 0.45);
+}
+
+@utility hairline {
+  border-color: rgb(255 255 255 / 0.07);
+}
+
+/* Fondu au lieu d'une ellipsis « … » pour un nom trop long (onglet, favori) —
+   coupe déjà assez de texte, l'ellipsis en retire encore plus. Le dégradé
+   porte sur les 16 derniers pixels ; sans effet si le texte tient déjà
+   entièrement (rien à cet endroit-là ne s'y trouve alors « fondu »). */
+@utility fade-truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  mask-image: linear-gradient(to right, black calc(100% - 16px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 16px), transparent 100%);
+}
+
+/* Variantes claires des surfaces « verre » et des liserés — mêmes règles
+   d'activation que le thème clair ci-dessus (attribut direct ou système). */
+:root[data-theme='light'] .glass,
+:root[data-theme='light'] .hairline {
+  border-color: rgb(10 14 20 / 0.09);
+}
+:root[data-theme='light'] .glass {
+  background: rgb(10 14 20 / 0.035);
+}
+:root[data-theme='light'] .glass-strong {
+  background: rgb(255 255 255 / 0.88);
+  border-color: rgb(10 14 20 / 0.08);
+  box-shadow:
+    0 32px 80px -24px rgb(20 21 26 / 0.22),
+    0 0 0 1px rgb(20 21 26 / 0.04);
+}
+:root[data-theme='light'] .popover-surface {
+  background: rgb(255 255 255 / 0.98);
+  border-color: rgb(10 14 20 / 0.1);
+  box-shadow:
+    0 32px 80px -24px rgb(20 21 26 / 0.25),
+    0 0 0 1px rgb(20 21 26 / 0.05);
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme='system'] .glass,
+  :root[data-theme='system'] .hairline {
+    border-color: rgb(10 14 20 / 0.09);
+  }
+  :root[data-theme='system'] .glass {
+    background: rgb(10 14 20 / 0.035);
+  }
+  :root[data-theme='system'] .glass-strong {
+    background: rgb(255 255 255 / 0.88);
+    border-color: rgb(10 14 20 / 0.08);
+    box-shadow:
+      0 32px 80px -24px rgb(20 21 26 / 0.22),
+      0 0 0 1px rgb(20 21 26 / 0.04);
+  }
+  :root[data-theme='system'] .popover-surface {
+    background: rgb(255 255 255 / 0.98);
+    border-color: rgb(10 14 20 / 0.1);
+    box-shadow:
+      0 32px 80px -24px rgb(20 21 26 / 0.25),
+      0 0 0 1px rgb(20 21 26 / 0.05);
+  }
+}
+
+/* Les surfaces/bordures subtiles au SURVOL (feedback d'interaction) sont
+   codées en dur en blanc translucide dans les classes Tailwind, un peu
+   partout dans les composants — correct en sombre, quasiment invisible sur
+   fond clair (blanc sur blanc ≈ aucun effet visible au survol). Plutôt que de
+   retoucher des dizaines de fichiers, on redirige ici chaque classe `hover:`
+   exacte vers un noir doux, avec une opacité légèrement rehaussée pour rester
+   perceptible. Sélecteur d'attribut `[class~="…"]` : cible la classe exacte
+   sans avoir à échapper les caractères spéciaux (`.`, `/`, `[`, `]`) d'un
+   sélecteur de classe brut.
+   IMPORTANT : ne PAS appliquer ce traitement aux classes de FOND au repos
+   (`bg-white/[0.0N]` sans `hover:`) — une première version le faisait, et
+   cumulée sur des dizaines de panneaux/cartes/boutons qui les utilisent
+   comme fond par défaut (pas seulement au survol), elle donnait un voile
+   gris uniforme sur toute l'appli au lieu d'un thème clair propre. Au repos,
+   un fond quasi-blanc invisible est voulu (les surfaces se distinguent par
+   la bordure, pas par un remplissage) — MAIS les BORDURES au repos, elles,
+   doivent rester visibles dans les deux thèmes (sans quoi les contours de
+   panneaux/cartes disparaissent complètement sur fond clair, signalé comme
+   « on voit mal les éléments ») : celles-ci sont donc bien redirigées
+   ci-dessous, contrairement aux fonds. */
+:root[data-theme='light'] [class~='border-white/[0.06]'] {
+  border-color: rgb(10 14 20 / 0.09);
+}
+:root[data-theme='light'] [class~='border-white/[0.07]'] {
+  border-color: rgb(10 14 20 / 0.1);
+}
+:root[data-theme='light'] [class~='border-white/[0.08]'] {
+  border-color: rgb(10 14 20 / 0.11);
+}
+:root[data-theme='light'] [class~='border-white/[0.09]'] {
+  border-color: rgb(10 14 20 / 0.12);
+}
+:root[data-theme='light'] [class~='border-white/[0.1]'] {
+  border-color: rgb(10 14 20 / 0.13);
+}
+:root[data-theme='light'] [class~='border-white/[0.12]'] {
+  border-color: rgb(10 14 20 / 0.15);
+}
+:root[data-theme='light'] [class~='hover:bg-white/[0.02]']:hover {
+  background-color: rgb(10 14 20 / 0.035);
+}
+:root[data-theme='light'] [class~='hover:bg-white/[0.03]']:hover {
+  background-color: rgb(10 14 20 / 0.045);
+}
+:root[data-theme='light'] [class~='hover:bg-white/[0.04]']:hover {
+  background-color: rgb(10 14 20 / 0.055);
+}
+:root[data-theme='light'] [class~='hover:bg-white/[0.05]']:hover {
+  background-color: rgb(10 14 20 / 0.06);
+}
+:root[data-theme='light'] [class~='hover:bg-white/[0.06]']:hover {
+  background-color: rgb(10 14 20 / 0.07);
+}
+:root[data-theme='light'] [class~='hover:bg-white/[0.12]']:hover {
+  background-color: rgb(10 14 20 / 0.14);
+}
+:root[data-theme='light'] [class~='hover:border-white/[0.13]']:hover {
+  border-color: rgb(10 14 20 / 0.15);
+}
+:root[data-theme='light'] [class~='hover:border-white/[0.14]']:hover {
+  border-color: rgb(10 14 20 / 0.16);
+}
+:root[data-theme='light'] [class~='hover:border-white/[0.15]']:hover {
+  border-color: rgb(10 14 20 / 0.17);
+}
+:root[data-theme='light'] [class~='hover:border-white/[0.17]']:hover {
+  border-color: rgb(10 14 20 / 0.19);
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme='system'] [class~='border-white/[0.06]'] {
+    border-color: rgb(10 14 20 / 0.09);
+  }
+  :root[data-theme='system'] [class~='border-white/[0.07]'] {
+    border-color: rgb(10 14 20 / 0.1);
+  }
+  :root[data-theme='system'] [class~='border-white/[0.08]'] {
+    border-color: rgb(10 14 20 / 0.11);
+  }
+  :root[data-theme='system'] [class~='border-white/[0.09]'] {
+    border-color: rgb(10 14 20 / 0.12);
+  }
+  :root[data-theme='system'] [class~='border-white/[0.1]'] {
+    border-color: rgb(10 14 20 / 0.13);
+  }
+  :root[data-theme='system'] [class~='border-white/[0.12]'] {
+    border-color: rgb(10 14 20 / 0.15);
+  }
+  :root[data-theme='system'] [class~='hover:bg-white/[0.02]']:hover {
+    background-color: rgb(10 14 20 / 0.035);
+  }
+  :root[data-theme='system'] [class~='hover:bg-white/[0.03]']:hover {
+    background-color: rgb(10 14 20 / 0.045);
+  }
+  :root[data-theme='system'] [class~='hover:bg-white/[0.04]']:hover {
+    background-color: rgb(10 14 20 / 0.055);
+  }
+  :root[data-theme='system'] [class~='hover:bg-white/[0.05]']:hover {
+    background-color: rgb(10 14 20 / 0.06);
+  }
+  :root[data-theme='system'] [class~='hover:bg-white/[0.06]']:hover {
+    background-color: rgb(10 14 20 / 0.07);
+  }
+  :root[data-theme='system'] [class~='hover:bg-white/[0.12]']:hover {
+    background-color: rgb(10 14 20 / 0.14);
+  }
+  :root[data-theme='system'] [class~='hover:border-white/[0.13]']:hover {
+    border-color: rgb(10 14 20 / 0.15);
+  }
+  :root[data-theme='system'] [class~='hover:border-white/[0.14]']:hover {
+    border-color: rgb(10 14 20 / 0.16);
+  }
+  :root[data-theme='system'] [class~='hover:border-white/[0.15]']:hover {
+    border-color: rgb(10 14 20 / 0.17);
+  }
+  :root[data-theme='system'] [class~='hover:border-white/[0.17]']:hover {
+    border-color: rgb(10 14 20 / 0.19);
+  }
+}

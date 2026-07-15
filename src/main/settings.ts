@@ -1,0 +1,284 @@
+/**
+ * Gestion des réglages applicatifs.
+ * Les clés API sont chiffrées au repos via safeStorage (DPAPI sous Windows)
+ * et ne quittent jamais le processus principal — le renderer ne reçoit que
+ * des drapeaux `has*Key`.
+ */
+import { safeStorage } from 'electron'
+import type { ApiProviderKind, AppSettings, NewTabWidgets, SettingsPatch } from '@shared/types'
+import { kvRepo } from './db/repositories'
+
+const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKey'> = {
+  aiProvider: 'auto',
+  ollamaBaseUrl: 'http://127.0.0.1:11434',
+  ollamaModel: '',
+  ollamaEmbedModel: '',
+  anthropicModel: 'claude-sonnet-5',
+  openaiModel: 'gpt-4o-mini',
+  xaiModel: 'grok-3',
+  searchEngine: 'duckduckgo',
+  theme: 'dark',
+  accent: 'glacier',
+  accentCustom: '',
+  showFavoritesBar: false,
+  groupFavoritesBySpace: true,
+  wideAddressBar: false,
+  showPageStrip: false,
+  showTabHoverPreview: true,
+  uiScale: 1,
+  openNewTabOnLaunch: true,
+  homepage: '',
+  newTabUrl: '',
+  newTabShortcuts: [],
+  newTabHiddenRecentIds: [],
+  newTabGridSize: 10,
+  newTabWidgets: { clock: true, weather: false, news: false },
+  newTabWeatherLocation: null,
+  newTabNewsStyle: 'text',
+  defaultZoom: 1,
+  allowMedia: false,
+  allowGeolocation: false,
+  allowNotifications: false,
+  doNotTrack: false,
+  httpsOnly: false,
+  maxLivePages: 6,
+  spellcheck: true,
+  spellcheckLanguages: [],
+  neverTranslateDomains: [],
+  proxyMode: 'system',
+  proxyRules: '',
+  downloadDir: '',
+  askDownloadLocation: true,
+  onboarded: false
+}
+
+const SECRET_KEYS: Record<ApiProviderKind, string> = {
+  anthropic: 'secret.anthropic',
+  openai: 'secret.openai',
+  xai: 'secret.xai'
+}
+
+// ─── Secrets ─────────────────────────────────────────────────────────────────
+
+function storeSecret(provider: ApiProviderKind, value: string | null): void {
+  const key = SECRET_KEYS[provider]
+  if (value === null || value.trim() === '') {
+    kvRepo.remove(key)
+    return
+  }
+  if (safeStorage.isEncryptionAvailable()) {
+    kvRepo.set(key, 'enc:' + safeStorage.encryptString(value.trim()).toString('base64'))
+  } else {
+    // Repli très rare (DPAPI indisponible) — stockage brut signalé par préfixe.
+    kvRepo.set(key, 'raw:' + Buffer.from(value.trim(), 'utf8').toString('base64'))
+  }
+}
+
+export function readSecret(provider: ApiProviderKind): string | null {
+  const stored = kvRepo.get(SECRET_KEYS[provider])
+  if (!stored) return null
+  try {
+    if (stored.startsWith('enc:')) {
+      return safeStorage.decryptString(Buffer.from(stored.slice(4), 'base64'))
+    }
+    if (stored.startsWith('raw:')) {
+      return Buffer.from(stored.slice(4), 'base64').toString('utf8')
+    }
+  } catch {
+    // Clé illisible (profil changé…) → considérée absente.
+  }
+  return null
+}
+
+export function hasSecret(provider: ApiProviderKind): boolean {
+  return kvRepo.get(SECRET_KEYS[provider]) !== null
+}
+
+// ─── Réglages ────────────────────────────────────────────────────────────────
+
+function getString<K extends keyof typeof DEFAULTS>(key: K): (typeof DEFAULTS)[K] {
+  const raw = kvRepo.get('settings.' + key)
+  if (raw === null) return DEFAULTS[key]
+  try {
+    return JSON.parse(raw) as (typeof DEFAULTS)[K]
+  } catch {
+    return DEFAULTS[key]
+  }
+}
+
+function putValue(key: keyof typeof DEFAULTS, value: unknown): void {
+  kvRepo.set('settings.' + key, JSON.stringify(value))
+}
+
+export function getSettings(): AppSettings {
+  return {
+    aiProvider: getString('aiProvider'),
+    ollamaBaseUrl: getString('ollamaBaseUrl'),
+    ollamaModel: getString('ollamaModel'),
+    ollamaEmbedModel: getString('ollamaEmbedModel'),
+    anthropicModel: getString('anthropicModel'),
+    openaiModel: getString('openaiModel'),
+    xaiModel: getString('xaiModel'),
+    searchEngine: getString('searchEngine'),
+    theme: getString('theme'),
+    accent: getString('accent'),
+    accentCustom: getString('accentCustom'),
+    showFavoritesBar: getString('showFavoritesBar'),
+    groupFavoritesBySpace: getString('groupFavoritesBySpace'),
+    wideAddressBar: getString('wideAddressBar'),
+    showPageStrip: getString('showPageStrip'),
+    showTabHoverPreview: getString('showTabHoverPreview'),
+    uiScale: getString('uiScale'),
+    openNewTabOnLaunch: getString('openNewTabOnLaunch'),
+    homepage: getString('homepage'),
+    newTabUrl: getString('newTabUrl'),
+    newTabShortcuts: getString('newTabShortcuts'),
+    newTabHiddenRecentIds: getString('newTabHiddenRecentIds'),
+    newTabGridSize: getString('newTabGridSize'),
+    newTabWidgets: getString('newTabWidgets'),
+    newTabWeatherLocation: getString('newTabWeatherLocation'),
+    newTabNewsStyle: getString('newTabNewsStyle'),
+    defaultZoom: getString('defaultZoom'),
+    allowMedia: getString('allowMedia'),
+    allowGeolocation: getString('allowGeolocation'),
+    allowNotifications: getString('allowNotifications'),
+    doNotTrack: getString('doNotTrack'),
+    httpsOnly: getString('httpsOnly'),
+    maxLivePages: getString('maxLivePages'),
+    spellcheck: getString('spellcheck'),
+    spellcheckLanguages: getString('spellcheckLanguages'),
+    neverTranslateDomains: getString('neverTranslateDomains'),
+    proxyMode: getString('proxyMode'),
+    proxyRules: getString('proxyRules'),
+    downloadDir: getString('downloadDir'),
+    askDownloadLocation: getString('askDownloadLocation'),
+    onboarded: getString('onboarded'),
+    hasAnthropicKey: hasSecret('anthropic'),
+    hasOpenaiKey: hasSecret('openai'),
+    hasXaiKey: hasSecret('xai')
+  }
+}
+
+export function applySettingsPatch(patch: SettingsPatch): AppSettings {
+  if (patch.aiProvider !== undefined) putValue('aiProvider', patch.aiProvider)
+  if (patch.ollamaBaseUrl !== undefined) putValue('ollamaBaseUrl', patch.ollamaBaseUrl.trim())
+  if (patch.ollamaModel !== undefined) putValue('ollamaModel', patch.ollamaModel)
+  if (patch.ollamaEmbedModel !== undefined) putValue('ollamaEmbedModel', patch.ollamaEmbedModel)
+  if (patch.anthropicModel !== undefined) putValue('anthropicModel', patch.anthropicModel.trim())
+  if (patch.openaiModel !== undefined) putValue('openaiModel', patch.openaiModel.trim())
+  if (patch.xaiModel !== undefined) putValue('xaiModel', patch.xaiModel.trim())
+  if (patch.searchEngine !== undefined) putValue('searchEngine', patch.searchEngine)
+  if (patch.theme !== undefined) putValue('theme', patch.theme)
+  if (patch.accent !== undefined) putValue('accent', patch.accent)
+  if (patch.accentCustom !== undefined) putValue('accentCustom', patch.accentCustom)
+  if (patch.showFavoritesBar !== undefined) putValue('showFavoritesBar', patch.showFavoritesBar)
+  if (patch.groupFavoritesBySpace !== undefined) {
+    putValue('groupFavoritesBySpace', patch.groupFavoritesBySpace)
+  }
+  if (patch.wideAddressBar !== undefined) putValue('wideAddressBar', patch.wideAddressBar)
+  if (patch.showPageStrip !== undefined) putValue('showPageStrip', patch.showPageStrip)
+  if (patch.showTabHoverPreview !== undefined) {
+    putValue('showTabHoverPreview', patch.showTabHoverPreview)
+  }
+  if (patch.uiScale !== undefined) {
+    putValue('uiScale', Math.min(1.3, Math.max(0.85, patch.uiScale)))
+  }
+  if (patch.openNewTabOnLaunch !== undefined) putValue('openNewTabOnLaunch', patch.openNewTabOnLaunch)
+  if (patch.homepage !== undefined) putValue('homepage', patch.homepage.trim())
+  if (patch.newTabUrl !== undefined) putValue('newTabUrl', patch.newTabUrl.trim())
+  if (patch.newTabShortcuts !== undefined) {
+    putValue(
+      'newTabShortcuts',
+      patch.newTabShortcuts
+        .filter((s) => s.url.trim() !== '')
+        .map((s) => ({ id: s.id, title: s.title.trim().slice(0, 60), url: s.url.trim() }))
+        .slice(0, 16)
+    )
+  }
+  if (patch.newTabHiddenRecentIds !== undefined) {
+    putValue(
+      'newTabHiddenRecentIds',
+      Array.from(new Set(patch.newTabHiddenRecentIds.filter((id) => id.trim() !== ''))).slice(-500)
+    )
+  }
+  if (patch.newTabGridSize !== undefined) {
+    putValue('newTabGridSize', Math.min(20, Math.max(4, Math.round(patch.newTabGridSize))))
+  }
+  if (patch.newTabWidgets !== undefined) {
+    const current: NewTabWidgets = getString('newTabWidgets')
+    putValue('newTabWidgets', { ...current, ...patch.newTabWidgets })
+  }
+  if (patch.newTabWeatherLocation !== undefined) {
+    const loc = patch.newTabWeatherLocation
+    putValue(
+      'newTabWeatherLocation',
+      loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lon)
+        ? { name: loc.name.trim().slice(0, 80), admin1: loc.admin1.trim().slice(0, 80), country: loc.country.trim().slice(0, 80), lat: loc.lat, lon: loc.lon }
+        : null
+    )
+  }
+  if (patch.newTabNewsStyle !== undefined) putValue('newTabNewsStyle', patch.newTabNewsStyle)
+  if (patch.defaultZoom !== undefined) {
+    putValue('defaultZoom', Math.min(3, Math.max(0.5, patch.defaultZoom)))
+  }
+  if (patch.allowMedia !== undefined) putValue('allowMedia', patch.allowMedia)
+  if (patch.allowGeolocation !== undefined) putValue('allowGeolocation', patch.allowGeolocation)
+  if (patch.allowNotifications !== undefined) putValue('allowNotifications', patch.allowNotifications)
+  if (patch.doNotTrack !== undefined) putValue('doNotTrack', patch.doNotTrack)
+  if (patch.httpsOnly !== undefined) putValue('httpsOnly', patch.httpsOnly)
+  if (patch.maxLivePages !== undefined) {
+    putValue('maxLivePages', Math.min(12, Math.max(2, Math.round(patch.maxLivePages))))
+  }
+  if (patch.spellcheck !== undefined) putValue('spellcheck', patch.spellcheck)
+  if (patch.spellcheckLanguages !== undefined) {
+    putValue('spellcheckLanguages', patch.spellcheckLanguages.filter((l) => l.trim() !== '').slice(0, 20))
+  }
+  if (patch.neverTranslateDomains !== undefined) {
+    putValue(
+      'neverTranslateDomains',
+      Array.from(new Set(patch.neverTranslateDomains.filter((d) => d.trim() !== ''))).slice(0, 200)
+    )
+  }
+  if (patch.proxyMode !== undefined) putValue('proxyMode', patch.proxyMode)
+  if (patch.proxyRules !== undefined) putValue('proxyRules', patch.proxyRules.trim())
+  if (patch.downloadDir !== undefined) putValue('downloadDir', patch.downloadDir)
+  if (patch.askDownloadLocation !== undefined) putValue('askDownloadLocation', patch.askDownloadLocation)
+  if (patch.onboarded !== undefined) putValue('onboarded', patch.onboarded)
+  if (patch.anthropicKey !== undefined) storeSecret('anthropic', patch.anthropicKey)
+  if (patch.openaiKey !== undefined) storeSecret('openai', patch.openaiKey)
+  if (patch.xaiKey !== undefined) storeSecret('xai', patch.xaiKey)
+  return getSettings()
+}
+
+/**
+ * Réinitialise toutes les préférences à leurs valeurs par défaut.
+ * Ne touche NI aux clés API chiffrées, NI aux profils/espaces/pages (mémoire).
+ * `onboarded` est préservé pour ne pas relancer l'introduction par surprise.
+ */
+export function resetSettings(): AppSettings {
+  const wasOnboarded = getString('onboarded')
+  for (const key of Object.keys(DEFAULTS) as (keyof typeof DEFAULTS)[]) {
+    putValue(key, DEFAULTS[key])
+  }
+  putValue('onboarded', wasOnboarded)
+  return getSettings()
+}
+
+// ─── Divers état applicatif ──────────────────────────────────────────────────
+
+export function getActiveProfileId(): string | null {
+  return kvRepo.get('state.activeProfileId')
+}
+
+export function setActiveProfileId(id: string): void {
+  kvRepo.set('state.activeProfileId', id)
+}
+
+/** L'espace actif est mémorisé par profil. */
+export function getActiveSpaceId(profileId: string): string | null {
+  return kvRepo.get(`state.activeSpaceId.${profileId}`)
+}
+
+export function setActiveSpaceId(profileId: string, id: string): void {
+  kvRepo.set(`state.activeSpaceId.${profileId}`, id)
+}

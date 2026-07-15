@@ -1,0 +1,99 @@
+/** Traductions FR — section "overlays". */
+export const overlays: Record<string, string> = {
+  // Téléchargements
+  'overlays.downloads.title': 'Téléchargements',
+  'overlays.downloads.linkCopied': 'Lien copié',
+  'overlays.downloads.clearAllTitle': "Effacer l'historique",
+  'overlays.downloads.emptyState': 'Aucun téléchargement pour ce profil.',
+  'overlays.downloads.noResults': 'Aucun téléchargement ne correspond.',
+  'overlays.downloads.searchPlaceholder': 'Rechercher un fichier…',
+  'overlays.downloads.filterAll': 'Tous',
+  'overlays.downloads.filterImages': 'Images',
+  'overlays.downloads.filterVideos': 'Vidéos',
+  'overlays.downloads.filterAudio': 'Audio',
+  'overlays.downloads.filterDocuments': 'Documents',
+  'overlays.downloads.filterArchives': 'Archives',
+  'overlays.downloads.deleted': 'Supprimé',
+  'overlays.downloads.timeRemaining': '{{duration}} restant',
+  'overlays.downloads.cancelled': 'Annulé',
+  'overlays.downloads.interrupted': 'Interrompu',
+  'overlays.downloads.copyLinkTitle': 'Copier le lien de téléchargement',
+  'overlays.downloads.showInFolder': 'Afficher dans le dossier',
+  'overlays.downloads.cancelAction': 'Annuler',
+  'overlays.downloads.removeFromHistory': "Supprimer de l'historique",
+
+  // Favoris
+  'overlays.favorites.title': 'Favoris',
+  'overlays.favorites.linkCopied': 'Lien copié',
+  'overlays.favorites.emptyHint': 'Épinglez une page (étoile dans son en-tête) pour la retrouver ici.',
+  'overlays.favorites.noResults': 'Aucun favori ne correspond.',
+  'overlays.favorites.searchPlaceholder': 'Rechercher un favori…',
+  'overlays.favorites.filterAllFolders': 'Tous les dossiers',
+  'overlays.favorites.deletedSpace': 'Espace supprimé',
+  'overlays.favorites.copyLinkTitle': 'Copier le lien',
+  'overlays.favorites.removeFavorite': 'Retirer des favoris',
+  'overlays.favorites.newFolder': 'Nouveau dossier',
+  'overlays.favorites.newFolderPlaceholder': 'Nom du dossier…',
+  'overlays.favorites.deleteFolder': 'Supprimer le dossier',
+  'overlays.favorites.emptyFolder': 'Ce dossier est vide.',
+  'overlays.favorites.noFolder': 'Sans dossier',
+  'overlays.favorites.moveToFolder': 'Déplacer vers un dossier',
+
+  // Historique
+  'overlays.history.title': 'Historique',
+  'overlays.history.clearAllTitle': 'Tout effacer',
+  'overlays.history.emptyState': 'Aucune visite enregistrée pour ce profil.',
+  'overlays.history.noResults': 'Aucune visite ne correspond.',
+  'overlays.history.searchPlaceholder': "Rechercher dans l'historique…",
+  'overlays.history.filterAll': 'Tout',
+  'overlays.history.filterToday': "Aujourd'hui",
+  'overlays.history.filterYesterday': 'Hier',
+  'overlays.history.filterWeek': '7 derniers jours',
+
+  // Recherche d'onglets
+  'overlays.tabSearch.placeholder': 'Rechercher un onglet ouvert…',
+  'overlays.tabSearch.emptyState': 'Aucun onglet ne correspond.',
+
+  // Gestionnaire de tâches
+  'overlays.taskManager.title': 'Gestionnaire de tâches',
+  'overlays.taskManager.emptyState': 'Aucune page ouverte.',
+  'overlays.taskManager.pageColumn': 'Page',
+  'overlays.taskManager.memoryColumn': 'Mémoire',
+  'overlays.taskManager.closeTabTitle': "Fermer l'onglet",
+
+  // QR code
+  'overlays.qrCode.altText': 'QR code',
+  'overlays.qrCode.saveImage': "Enregistrer l'image",
+
+  // Nommer la fenêtre
+  'overlays.renameWindow.title': 'Nommer la fenêtre',
+  'overlays.renameWindow.cancel': 'Annuler',
+  'overlays.renameWindow.confirm': 'Renommer',
+
+  // Barre d'Intention
+  'overlays.intention.commandSummarize': 'Résumer cette page',
+  'overlays.intention.commandCompare': 'Comparer deux choses',
+  'overlays.intention.commandTranslate': 'Traduire cette page',
+  'overlays.intention.commandExplain': 'Expliquer cette page',
+  'overlays.intention.commandHint': 'Commande rapide — demande à Muse',
+  'overlays.intention.placeholder': 'Une adresse, une recherche, une intention…',
+  'overlays.intention.keyEscape': 'Échap',
+  'overlays.intention.kindOpen': 'Ouverte',
+  'overlays.intention.kindFavorite': 'Favori',
+  'overlays.intention.kindHistory': 'Historique',
+  'overlays.intention.kindCommand': 'Commande',
+  'overlays.intention.aiBadge': 'IA',
+  'overlays.intention.hintOpen': 'ouvrir',
+  'overlays.intention.hintCard': 'carte sur la toile',
+  'overlays.intention.hintForceSearch': 'forcer la recherche',
+  'overlays.intention.hintSuggestions': 'suggestions',
+  'overlays.intention.navigateTo': 'Naviguer vers {{domain}}',
+  'overlays.intention.searchFor': 'Rechercher « {{query}} »',
+  'overlays.intention.compareTwo': 'Comparer « {{left}} » et « {{right}} »',
+  'overlays.intention.exploreWithMuse': 'Explorer « {{query}} » avec Muse',
+  'overlays.intention.delegateToMuse': 'Confier cette intention à Muse',
+  'overlays.intention.searchDetail': 'Recherche web dans une nouvelle carte',
+  'overlays.intention.compareDetail': 'Vue scindée : deux recherches côte à côte, synthèse par Muse',
+  'overlays.intention.exploreDetail': 'Recherche web + réflexion de Muse en parallèle',
+  'overlays.intention.defaultDetail': 'Muse répond dans le panneau de droite, avec le contexte de la page active'
+}

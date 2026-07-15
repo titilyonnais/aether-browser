@@ -1,0 +1,35 @@
+# Configuration electron-builder — packaging Windows 11 (NSIS)
+appId: com.aether.browser
+productName: Aether
+directories:
+  output: release
+  buildResources: build
+# Mises à jour (electron-updater) : dépôt PUBLIC — l'app distribuée lit les
+# releases publiques sans le moindre jeton embarqué. Seule la PUBLICATION
+# d'une release (electron-builder --publish always) exige un jeton, sur la
+# machine qui publie uniquement — jamais dans le paquet distribué. Voir
+# CONTRIBUTING/README pour la procédure de publication d'une version.
+publish:
+  provider: github
+  owner: titilyonnais
+  repo: aether-browser
+files:
+  - out/**/*
+  - "!**/*.map"
+asarUnpack:
+  - "**/*.node"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  executableName: Aether
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+  shortcutName: Aether
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
