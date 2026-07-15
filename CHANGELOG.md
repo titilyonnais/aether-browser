@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.38.4] — 2026-07-16
+
+### Corrigé
+
+- **`latest.yml` manquant de la release malgré une CI « réussie » (0.38.3)** : `electron-builder` uploade plusieurs fichiers en parallèle (installeur + blockmap) — quand la release n'existe pas encore, chaque upload tentait de la créer de son côté, une requête gagnant la course pendant que l'autre échouait silencieusement (son fichier n'était jamais envoyé). Le workflow CI crée maintenant la release à l'avance, avant qu'`electron-builder` ne tente le moindre upload — plus de course, plus de fichier manquant.
+
 ## [0.38.3] — 2026-07-16
 
 ### Corrigé

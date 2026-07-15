@@ -46,15 +46,26 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm run typecheck
+      # electron-builder uploade plusieurs fichiers EN PARALLÈLE (l'installeur
+      # + son blockmap) — si la release n'existe pas encore, chaque upload
+      # tente de la créer de son côté : une requête gagne la course, l'autre
+      # échoue silencieusement et son fichier n'est jamais envoyé (observé :
+      # latest.yml manquant malgré une étape "réussie"). La créer nous-mêmes
+      # AVANT élimine la course : electron-builder ne fait plus qu'uploader
+      # vers une release déjà existante.
+      - name: Créer la release à l'avance (évite la course à la création)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ needs.check-version.outputs.version }}"
+          gh release create "$TAG" --draft --title "$TAG" --notes "" --repo titilyonnais/aether-browser || echo "Existe déjà — poursuite normale."
       - run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # electron-builder crée la release en BROUILLON (releaseType: draft,
-      # electron-builder.yml) — GitHub refuse de la créer directement PUBLIÉE
-      # pour un tag qui n'existe pas encore. Le tag existe maintenant (créé
-      # avec le brouillon) : on peut la publier réellement dans une étape à
-      # part, sans quoi elle resterait invisible à electron-updater.
-      - name: Publier la release (le tag existe désormais)
+      # electron-builder publie en BROUILLON (releaseType: draft, electron-builder.yml)
+      # — étape séparée pour la rendre réellement visible.
+      - name: Publier la release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
