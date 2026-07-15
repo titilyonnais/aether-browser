@@ -26,9 +26,12 @@ win:
   executableName: Aether
   icon: build/icon.ico
 nsis:
-  oneClick: false
+  # Emplacement d'installation TOUJOURS le même (pas de choix de dossier) — condition
+  # nécessaire pour qu'une mise à jour se pose par-dessus l'existant au lieu de créer
+  # une installation en double à côté (vécu avec `allowToChangeInstallationDirectory`,
+  # qui laissait un dossier différent à chaque installation manuelle).
+  oneClick: true
   perMachine: false
-  allowToChangeInstallationDirectory: true
   artifactName: ${productName}-Setup-${version}.${ext}
   shortcutName: Aether
   installerIcon: build/icon.ico

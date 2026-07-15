@@ -4,6 +4,24 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.38.1] — 2026-07-15
+
+### Ajouté
+
+- **Publication automatique des releases** : un workflow GitHub Actions (`.github/workflows/release.yml`) build et publie désormais une release dès que `version` change dans `package.json` sur `main` — plus besoin de lancer `npm run release` à la main ni de gérer un jeton (`GITHUB_TOKEN` fourni gratuitement par GitHub Actions, scope limité à ce dépôt).
+
+### Corrigé
+
+- **Plantage à la fermeture** (`TypeError: Object has been destroyed` dans `ViewManager.destroyView`/`closeAll`) : `closeAll()` s'exécute après que la fenêtre principale soit déjà détruite (évènement `closed`), et retirait quand même une vue de son `contentView` — désormais ignoré si la fenêtre n'existe plus.
+- **Installation en double possible entre deux versions** : `allowToChangeInstallationDirectory` permettait de choisir un dossier différent à chaque installation manuelle, empêchant une mise à jour de se poser par-dessus l'existant. L'installeur NSIS utilise maintenant toujours le même emplacement (`oneClick: true`).
+
+
+
+### Ajouté
+
+- **Mises à jour automatiques, façon Chrome/Edge.** ÆTHER vérifie silencieusement au lancement, télécharge en arrière-plan dès qu'une nouvelle version est trouvée, et propose de redémarrer pour l'installer une fois prête — visible dans Réglages › À propos, avec aussi un bouton « Rechercher les mises à jour » pour une vérification manuelle. Basé sur `electron-updater` + GitHub Releases (dépôt public [titilyonnais/aether-browser](https://github.com/titilyonnais/aether-browser)) : gratuit, sans serveur à maintenir, et l'app distribuée ne contient aucun jeton — seule la publication d'une version (`npm run release`, poste de développement uniquement) en nécessite un.
+- **Dépôt Git initialisé et publié** — première publication du code source, nécessaire pour héberger les futures releases.
+
 ## [0.37.2] — 2026-07-15
 
 ### Corrigé

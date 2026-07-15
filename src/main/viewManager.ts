@@ -1116,7 +1116,11 @@ export class ViewManager {
     const view = this.views.get(id)
     if (view) {
       if (this.attached.has(id)) {
-        this.win.contentView.removeChildView(view)
+        // `closeAll()` est appelée depuis l'évènement `closed` de la fenêtre
+        // (main/index.ts) — à ce moment-là `this.win` est déjà détruite, et
+        // `contentView.removeChildView()` dessus lève « Object has been
+        // destroyed ». Rien à retirer d'une fenêtre qui n'existe déjà plus.
+        if (!this.win.isDestroyed()) this.win.contentView.removeChildView(view)
         this.attached.delete(id)
       }
       if (!view.webContents.isDestroyed()) view.webContents.close()

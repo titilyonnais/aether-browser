@@ -1,0 +1,51 @@
+name: Release
+
+# Publie automatiquement une release GitHub (installeur + manifeste de mise à
+# jour) dès que `version` change dans package.json sur main — pas de jeton à
+# gérer manuellement : `GITHUB_TOKEN` est fourni gratuitement par GitHub
+# Actions pour ce dépôt, avec la permission `contents: write` ci-dessous.
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+      version: ${{ steps.diff.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: diff
+        shell: bash
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          PREVIOUS=$(git show HEAD~1:package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version" 2>/dev/null || echo "")
+          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT" != "$PREVIOUS" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
