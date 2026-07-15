@@ -13,6 +13,12 @@ publish:
   provider: github
   owner: titilyonnais
   repo: aether-browser
+  # Par défaut electron-builder crée une release en BROUILLON (invisible aux
+  # requêtes anonymes de l'API — donc invisible à electron-updater côté postes
+  # installés, symptôme observé : « no published versions » malgré une
+  # publication CI en apparence réussie). Publication immédiate nécessaire
+  # puisque rien d'humain ne vient valider un brouillon dans ce flux automatisé.
+  releaseType: release
 files:
   - out/**/*
   - "!**/*.map"

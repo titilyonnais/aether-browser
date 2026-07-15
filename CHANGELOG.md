@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.38.2] — 2026-07-15
+
+### Corrigé
+
+- **« Échec de la vérification — no published versions on github » malgré une publication CI réussie** : `electron-builder` crée ses releases GitHub en BROUILLON par défaut (invisible aux requêtes anonymes, donc invisible à `electron-updater` côté postes installés) — le workflow de publication automatique tournait bien, mais sa release restait invisible. `releaseType: release` force une publication immédiate.
+
 ## [0.38.1] — 2026-07-15
 
 ### Ajouté

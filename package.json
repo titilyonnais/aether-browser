@@ -1,6 +1,6 @@
 {
   "name": "aether-browser",
-  "version": "0.38.1",
+  "version": "0.38.2",
   "description": "ÆTHER — un espace de pensée et d'action augmenté pour le web",
   "main": "out/main/index.js",
   "author": "ÆTHER",
@@ -51,5 +51,10 @@
     "typescript": "^5.9.3",
     "vite": "^7.3.6",
     "zustand": "^5.0.14"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.28.1": true
   }
 }
