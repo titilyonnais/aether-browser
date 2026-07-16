@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.45.1] — 2026-07-16
+
+### Optimisé
+
+- **Bande de pages et barre de favoris** : le tri/filtrage des listes affichées (onglets de l'espace actif, favoris racine + par dossier) est désormais mémoïsé au lieu d'être recalculé à chaque rendu — ces composants ont plusieurs états locaux qui changent très souvent (survol, glisser-déposer, infobulle), ce qui déclenchait un recalcul inutile de la liste à chaque mouvement de souris.
+
 ## [0.45.0] — 2026-07-16
 
 ### Ajouté

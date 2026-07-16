@@ -9,7 +9,7 @@
  */
 import { AnimatePresence, motion } from 'framer-motion'
 import { Plus, VolumeX, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PageId } from '@shared/types'
 import { Favicon } from '@/components/ui/Favicon'
 import { useT } from '@/i18n/useT'
@@ -52,9 +52,15 @@ export function PageStrip() {
   } | null>(null)
   const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const pages = Object.values(pagesMap)
-    .filter((p) => p.spaceId === spaceId)
-    .sort((a, b) => a.position - b.position)
+  // Mémoïsé : sans ça, ce tri recalcule à chaque survol/glisser (hovered,
+  // tooltipId, dragId... changent bien plus souvent que pagesMap/spaceId).
+  const pages = useMemo(
+    () =>
+      Object.values(pagesMap)
+        .filter((p) => p.spaceId === spaceId)
+        .sort((a, b) => a.position - b.position),
+    [pagesMap, spaceId]
+  )
 
   // Réagence toujours immédiatement (le lissage lui-même vient de `layout`/
   // `AnimatePresence mode="popLayout"` plus bas, pas d'attente ici) — une

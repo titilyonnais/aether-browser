@@ -23,7 +23,7 @@
  * (clic droit, renommer/supprimer) restent des menus natifs Electron.
  */
 import { ChevronDown, Folder, LayoutList, Star } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type ReactElement } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactElement } from 'react'
 import type { Favorite, FavoriteFolder, FavoritesOverflowEntry } from '@shared/types'
 import { Favicon } from '@/components/ui/Favicon'
 import { useT } from '@/i18n/useT'
@@ -246,25 +246,33 @@ export function FavoritesBar() {
   const visibleToSpace = (f: Favorite): boolean =>
     groupBySpace || f.spaceId === null || f.spaceId === activeSpaceId
 
-  const rootFavorites = favorites
-    .filter((f) => !f.folderId && visibleToSpace(f))
-    .sort((a, b) => a.position - b.position)
+  // Mémoïsé : ce filtre/tri ne dépend que de favorites/folders/l'espace/le
+  // réglage de groupage — sans ça il recalcule à chaque glisser (insertion,
+  // dragOverFolderId...) ou mesure de largeur, bien plus fréquents que ça.
+  const { rootFavorites, folderItemsById, entries } = useMemo(() => {
+    const rootFavorites = favorites
+      .filter((f) => !f.folderId && visibleToSpace(f))
+      .sort((a, b) => a.position - b.position)
 
-  const folderItemsById = new Map<string, Favorite[]>()
-  for (const folder of folders) {
-    folderItemsById.set(
-      folder.id,
-      favorites.filter((f) => f.folderId === folder.id && visibleToSpace(f)).sort((a, b) => a.position - b.position)
-    )
-  }
+    const folderItemsById = new Map<string, Favorite[]>()
+    for (const folder of folders) {
+      folderItemsById.set(
+        folder.id,
+        favorites.filter((f) => f.folderId === folder.id && visibleToSpace(f)).sort((a, b) => a.position - b.position)
+      )
+    }
 
-  const entries: Entry[] = [
-    ...folders
-      .map((folder) => ({ folder, items: folderItemsById.get(folder.id) ?? [] }))
-      .filter((g) => groupBySpace || g.items.length > 0)
-      .map((g) => ({ kind: 'folder' as const, id: `folder-${g.folder.id}`, folder: g.folder, items: g.items })),
-    ...rootFavorites.map((f) => ({ kind: 'favorite' as const, id: `fav-${f.id}`, favorite: f }))
-  ]
+    const entries: Entry[] = [
+      ...folders
+        .map((folder) => ({ folder, items: folderItemsById.get(folder.id) ?? [] }))
+        .filter((g) => groupBySpace || g.items.length > 0)
+        .map((g) => ({ kind: 'folder' as const, id: `folder-${g.folder.id}`, folder: g.folder, items: g.items })),
+      ...rootFavorites.map((f) => ({ kind: 'favorite' as const, id: `fav-${f.id}`, favorite: f }))
+    ]
+
+    return { rootFavorites, folderItemsById, entries }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favorites, folders, activeSpaceId, groupBySpace])
 
   // Mesure la largeur naturelle de chaque entrée via une rangée cachée
   // identique (même markup) mais non tronquée par `overflow-hidden`.
