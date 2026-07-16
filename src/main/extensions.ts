@@ -347,6 +347,15 @@ export async function installExtensionFromWebStore(
   partition: string,
   extensionId: string
 ): Promise<WebStoreInstallResult> {
+  // Défense en profondeur : `extensionId` remonte in fine d'une page web (via
+  // `document.title`, cf. le garde-fou `storeShimHosts` dans viewManager.ts) —
+  // ne JAMAIS le faire servir tel quel dans un chemin de fichier avant de
+  // vérifier qu'il a bien la forme d'un vrai identifiant d'extension Chrome
+  // (32 lettres a-p), sans quoi `webStoreExtensionDir` (via `join`) pourrait
+  // résoudre en dehors de `userData/extensions/` (`../..`).
+  if (!/^[a-p]{32}$/.test(extensionId)) {
+    return { ok: false, name: null, alreadyInstalled: false, error: 'Identifiant d’extension invalide' }
+  }
   if (installsInFlight.has(extensionId)) {
     return { ok: false, name: null, alreadyInstalled: false, error: 'Installation déjà en cours' }
   }

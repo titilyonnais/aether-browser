@@ -1215,8 +1215,11 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   ipcMain.on(CH.appRelaunch, () => relaunchApp())
 
   ipcMain.on(CH.appOpenExternal, (_e, url: string) => {
-    // Seuls les schémas sûrs : liens web et pages de réglages Windows.
-    if (/^(https?:|ms-settings:)/i.test(url)) void shell.openExternal(url)
+    // Seuls les schémas sûrs : liens web, pages de réglages Windows, et mailto
+    // (« Signaler un problème », AppMenuPopoverCard.tsx — silencieusement
+    // filtré et donc jamais ouvert avant cet ajout, `mailto:` ne correspondait
+    // à aucun des deux schémas déjà acceptés).
+    if (/^(https?:|ms-settings:|mailto:)/i.test(url)) void shell.openExternal(url)
   })
 
   ipcMain.on(CH.appQuit, () => {

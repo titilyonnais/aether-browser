@@ -385,7 +385,17 @@ export class ViewManager {
     const nav = wc.navigationHistory
 
     wc.on('page-title-updated', (_e, title) => {
-      if (title.startsWith(INSTALL_CONFIRM_PREFIX)) {
+      // Faille corrigée : `document.title` est modifiable par N'IMPORTE QUELLE
+      // page (une seule ligne de JS, aucun privilège requis) — sans cette
+      // garde, un site quelconque (pas forcément le Store) pouvait usurper
+      // notre PROPRE popup native de confirmation d'installation avec un nom/
+      // icône de son choix, pour un identifiant d'extension arbitraire (y
+      // compris une vraie extension légitime choisie pour que le téléchargement
+      // réussisse), trompant l'utilisateur sur ce qu'il installe réellement.
+      // `storeShimHosts` (déjà tenu à jour par `syncStoreShim`) restreint ce
+      // canal aux pages actuellement sur le VRAI Chrome Web Store, exactement
+      // comme l'injection du shim `WEBSTORE_HOOK_SCRIPT` elle-même.
+      if (title.startsWith(INSTALL_CONFIRM_PREFIX) && this.storeShimHosts.has(pageId)) {
         const [extensionId, encName, encIconUrl] = title.slice(INSTALL_CONFIRM_PREFIX.length).split(':')
         const name = decodeURIComponent(encName || '') || 'Extension'
         const iconUrl = decodeURIComponent(encIconUrl || '') || null

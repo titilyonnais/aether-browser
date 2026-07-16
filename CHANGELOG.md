@@ -4,6 +4,16 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.44.1] — 2026-07-16
+
+### Sécurité
+
+- **N'importe quel site web pouvait usurper notre popup native de confirmation d'installation d'extension.** `document.title` (modifiable par une seule ligne de JS, sur n'importe quelle page) déclenchait le canal utilisé pour cette confirmation, sans vérifier que la page se trouvait bien sur le vrai Chrome Web Store — un site malveillant pouvait donc afficher notre propre bulle « Installer ? » avec un nom et une icône de son choix, pour un identifiant d'extension réel de son choix, trompant l'utilisateur sur ce qu'il installe réellement. Restreint à la même vérification que l'injection du shim du Store elle-même. Un identifiant d'extension mal formé est aussi désormais rejeté explicitement avant toute utilisation dans un chemin de fichier (défense en profondeur).
+
+### Corrigé
+
+- **Le bouton « Signaler un problème » (menu principal) n'ouvrait jamais le client mail.** Le canal `openExternal` n'autorisait que les liens web et les pages de réglages Windows — un lien `mailto:` était filtré silencieusement, sans erreur visible.
+
 ## [0.44.0] — 2026-07-16
 
 ### Corrigé
