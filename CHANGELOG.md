@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.45.2] — 2026-07-17
+
+### Optimisé
+
+- **Recherche dans l'historique (champ de recherche/omnibox)** : la requête de recherche (déclenchée à chaque frappe) filtrait jusqu'ici sur TOUT l'historique enregistré, dont la taille ne fait que croître au fil des mois/années d'utilisation — un scan lent aurait bloqué toute l'application à chaque frappe (la base étant synchrone). Bornée désormais aux 3000 visites les plus récentes avant le filtrage, pour un coût constant quelle que soit la taille de l'historique.
+
 ## [0.45.1] — 2026-07-16
 
 ### Optimisé

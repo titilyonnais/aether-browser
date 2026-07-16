@@ -639,14 +639,26 @@ export const visitsRepo = {
   },
 
   search(profileId: ProfileId, query: string, limit = 6): Visit[] {
+    // Le filtre `LIKE '%…%'` ne peut pas passer par un index (jocker en
+    // tête) : sans borne, ce scan retombe sur TOUTE la table, dont la
+    // taille ne fait que croître sur la durée de vie de l'appli — et
+    // better-sqlite3 étant synchrone, un scan lent bloquerait tout le
+    // process principal à chaque frappe dans le champ de recherche (même
+    // classe de risque que `dirSize()` avant sa mise en cache, cf. mémoire
+    // perf). On borne donc D'ABORD aux visites les plus récentes (requête
+    // couverte par `idx_visits_profile`), puis on filtre ce sous-ensemble
+    // — coût constant quelle que soit la taille totale de l'historique.
+    const RECENT_WINDOW = 3000
     const like = `%${query.toLowerCase()}%`
     const rows = getDb()
       .prepare(
-        `SELECT * FROM visits WHERE profile_id = ?
-         AND (lower(url) LIKE ? OR lower(title) LIKE ?)
+        `SELECT * FROM (
+           SELECT * FROM visits WHERE profile_id = ? ORDER BY visited_at DESC LIMIT ?
+         )
+         WHERE (lower(url) LIKE ? OR lower(title) LIKE ?)
          ORDER BY visited_at DESC LIMIT ?`
       )
-      .all(profileId, like, like, limit) as VisitRow[]
+      .all(profileId, RECENT_WINDOW, like, like, limit) as VisitRow[]
     return rows.map(toVisit)
   },
 
