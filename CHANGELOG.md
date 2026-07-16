@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.43.0] — 2026-07-16
+
+### Corrigé
+
+- **La « saccade » des bulles natives persistait malgré le fix de la 0.42.2 — vraie cause enfin identifiée et neutralisée à la source.** `thickFrame: false` (0.42.2) ciblait le mauvais levier : il ne retire que l'ombre/les animations liées au redimensionnement par bordure (`WS_THICKFRAME`), jamais la transition de fondu que Windows applique nativement à l'ouverture d'une fenêtre **transparente**, gérée par le DWM hors de portée de toute option Electron. Neutralisée directement via l'API Windows dédiée (`DwmSetWindowAttribute` + `DWMWA_TRANSITIONS_FORCEDISABLED`, appelée en FFI pure JS — pas de compilation native requise). Une seconde animation qui se superposait (le survol `transition-colors` d'une ligne de menu, quand le clic droit atterrit avec le curseur déjà dessus) est aussi neutralisée pendant les ~120ms suivant chaque ouverture.
+
 ## [0.42.2] — 2026-07-16
 
 ### Corrigé

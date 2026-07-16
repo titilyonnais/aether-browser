@@ -15,6 +15,7 @@ import { BrowserWindow, screen, type BrowserWindow as BW, type Rectangle, type W
 import { join } from 'node:path'
 import { CH } from '@shared/ipc'
 import type { ContextMenuRow, LocalRect, PopoverContent } from '@shared/types'
+import { disableNativeWindowTransitions } from './dwm'
 
 let popup: BW | null = null
 let ready = false
@@ -57,16 +58,6 @@ function createPopup(parent: BW): BW {
     frame: false,
     transparent: true,
     hasShadow: false,
-    // Windows applique par défaut une animation natif (fondu/croissance) à
-    // l'ouverture ET à chaque redimensionnement d'une fenêtre transparente/sans
-    // cadre — le DWM et le renderer Chromium se désynchronisent pendant cette
-    // transition, produisant l'effet « la bulle grandit par à-coups » signalé
-    // depuis le début du projet malgré plusieurs passes de fixes côté JS/CSS
-    // (aucune n'avait ciblé cette animation NATIVE, hors de notre contrôle
-    // React/CSS). `thickFrame: false` retire justement « window shadow and
-    // window animations » (documentation Electron, option Windows only) — sans
-    // effet sur `hasShadow` déjà à `false` ni sur la transparence elle-même.
-    thickFrame: false,
     show: false,
     resizable: false,
     movable: false,
@@ -82,6 +73,7 @@ function createPopup(parent: BW): BW {
       nodeIntegration: false
     }
   })
+  disableNativeWindowTransitions(win)
 
   ready = false
   win.webContents.once('did-finish-load', () => {

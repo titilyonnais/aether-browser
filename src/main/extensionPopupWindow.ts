@@ -12,6 +12,7 @@
  */
 import { BrowserWindow, screen, type BrowserWindow as BW } from 'electron'
 import { join } from 'node:path'
+import { disableNativeWindowTransitions } from './dwm'
 
 let popup: BW | null = null
 /** Filet de sécurité si l'extension ne rapporte jamais sa taille réelle
@@ -96,6 +97,7 @@ export function openExtensionPopup(
     }
   })
   popup = win
+  disableNativeWindowTransitions(win)
 
   const { x, y } = boundsForAnchor(DEFAULT_WIDTH, DEFAULT_HEIGHT)
   win.setBounds({ x, y, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
