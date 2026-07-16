@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.42.2] — 2026-07-16
+
+### Corrigé
+
+- **Bulles natives : « saccade » à l'ouverture, cette fois identifiée par analyse image par image d'un enregistrement fourni.** Toutes les tentatives précédentes (v0.13.0, v0.28.0, v0.39.0, v0.40.0, v0.41.0) portaient sur NOTRE code (animation CSS, timing de mesure) — la cause restait ailleurs : Windows applique par défaut une animation native (fondu/désynchronisation DWM) à l'ouverture et au redimensionnement d'une fenêtre transparente sans cadre, hors de portée de React/CSS. `thickFrame: false` (option Electron dédiée à ce cas) retire cette animation système.
+
 ## [0.42.1] — 2026-07-16
 
 ### Corrigé
