@@ -47,6 +47,7 @@ function HistoryPanel() {
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [dateFilter, setDateFilter] = useState<DateFilter>('all')
+  const [confirmingClear, setConfirmingClear] = useState(false)
   const close = (): void => useUiStore.getState().closeOverlay()
 
   const load = (): void => {
@@ -58,6 +59,12 @@ function HistoryPanel() {
   const clearAll = async (): Promise<void> => {
     await window.aether.history.clear(null)
     setVisits([])
+    setConfirmingClear(false)
+  }
+
+  const removeVisit = async (id: string): Promise<void> => {
+    setVisits((v) => v.filter((visit) => visit.id !== id))
+    await window.aether.history.remove(id)
   }
 
   const openVisit = (url: string): void => {
@@ -90,7 +97,11 @@ function HistoryPanel() {
         exit={{ opacity: 0, y: 12, scale: 0.99 }}
         transition={{ type: 'spring', stiffness: 380, damping: 34 }}
         className="glass-strong fixed left-1/2 top-1/2 z-50 flex h-[min(560px,88vh)] w-[min(620px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl"
-        onKeyDown={(e) => e.key === 'Escape' && close()}
+        onKeyDown={(e) => {
+          if (e.key !== 'Escape') return
+          if (confirmingClear) setConfirmingClear(false)
+          else close()
+        }}
       >
         <header className="flex shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-5 py-4">
           <History size={15} strokeWidth={1.7} className="text-glacier" />
@@ -104,7 +115,7 @@ function HistoryPanel() {
             {visits.length > 0 && (
               <button
                 type="button"
-                onClick={() => void clearAll()}
+                onClick={() => setConfirmingClear(true)}
                 title={t('overlays.history.clearAllTitle')}
                 className="grid h-8 w-8 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-red-400/10 hover:text-red-200"
               >
@@ -120,6 +131,28 @@ function HistoryPanel() {
             </button>
           </div>
         </header>
+
+        {/* Confirmation avant purge totale — irréversible, une frappe malheureuse
+            sur le bouton d'en-tête ne doit plus pouvoir tout effacer d'un coup. */}
+        {confirmingClear && (
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-red-400/20 bg-red-400/[0.06] px-5 py-2.5">
+            <p className="flex-1 text-[12px] text-ink-dim">{t('overlays.history.clearAllConfirm')}</p>
+            <button
+              type="button"
+              onClick={() => setConfirmingClear(false)}
+              className="rounded-lg px-2.5 py-1 text-[11.5px] text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim"
+            >
+              {t('overlays.history.clearAllCancel')}
+            </button>
+            <button
+              type="button"
+              onClick={() => void clearAll()}
+              className="rounded-lg bg-red-400/15 px-2.5 py-1 text-[11.5px] text-red-200 transition-colors hover:bg-red-400/25"
+            >
+              {t('overlays.history.clearAllConfirmButton')}
+            </button>
+          </div>
+        )}
 
         <SearchBar open={searchOpen} value={query} onChange={setQuery} placeholder={t('overlays.history.searchPlaceholder')} />
 
@@ -161,23 +194,35 @@ function HistoryPanel() {
                   </p>
                   <div className="space-y-0.5">
                     {g.items.map((v) => (
-                      <button
+                      <div
                         key={v.id}
-                        type="button"
-                        onClick={() => openVisit(v.url)}
-                        className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+                        className="group flex w-full items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.04]"
                       >
-                        <span className="w-10 shrink-0 font-mono text-[10px] text-ink-faint">
-                          {timeOf(v.visitedAt)}
-                        </span>
-                        <Favicon url={v.url} faviconUrl={v.faviconUrl} size={13} />
-                        <span className="min-w-0 flex-1 fade-truncate text-[12px] text-ink-dim">
-                          {v.title || domainOf(v.url)}
-                        </span>
-                        <span className="max-w-[30%] shrink-0 fade-truncate font-mono text-[10px] text-ink-faint">
-                          {domainOf(v.url)}
-                        </span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => openVisit(v.url)}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        >
+                          <span className="w-10 shrink-0 font-mono text-[10px] text-ink-faint">
+                            {timeOf(v.visitedAt)}
+                          </span>
+                          <Favicon url={v.url} faviconUrl={v.faviconUrl} size={13} />
+                          <span className="min-w-0 flex-1 fade-truncate text-[12px] text-ink-dim">
+                            {v.title || domainOf(v.url)}
+                          </span>
+                          <span className="max-w-[30%] shrink-0 fade-truncate font-mono text-[10px] text-ink-faint">
+                            {domainOf(v.url)}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeVisit(v.id)}
+                          title={t('overlays.history.removeOneTitle')}
+                          className="shrink-0 rounded-md p-1 text-ink-faint opacity-0 transition-colors hover:bg-red-400/10 hover:text-red-200 group-hover:opacity-100"
+                        >
+                          <X size={12} strokeWidth={1.8} />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>

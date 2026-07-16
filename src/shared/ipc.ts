@@ -197,6 +197,7 @@ export const CH = {
   historySearch: 'history:search',
   historyList: 'history:list',
   historyClear: 'history:clear',
+  historyRemove: 'history:remove',
 
   // Réglages
   settingsGet: 'settings:get',
@@ -488,6 +489,7 @@ export interface AetherApi {
     list(limit?: number): Promise<Visit[]>
     /** null = tout effacer, sinon horodatage de début (ms). */
     clear(sinceTs: number | null): Promise<void>
+    remove(id: string): Promise<void>
   }
   settings: {
     get(): Promise<AppSettings>

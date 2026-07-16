@@ -678,6 +678,11 @@ export const visitsRepo = {
         .prepare('DELETE FROM visits WHERE profile_id = ? AND visited_at >= ?')
         .run(profileId, sinceTs)
     }
+  },
+
+  /** Efface une seule visite (`profileId` scope la suppression au profil actif). */
+  remove(profileId: ProfileId, id: string): void {
+    getDb().prepare('DELETE FROM visits WHERE profile_id = ? AND id = ?').run(profileId, id)
   }
 }
 

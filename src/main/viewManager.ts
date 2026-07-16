@@ -235,6 +235,16 @@ export interface ViewManagerDelegate {
 export class ViewManager {
   private views = new Map<PageId, WebContentsView>()
   private runtime = new Map<PageId, PageRuntime>()
+  /** Chargement initial encore en vol pour une vue tout juste créée (voir
+   * `ensureLive`) — `navigate()` attend sa fin avant de lancer le sien.
+   * Sans ça, un nouvel onglet suivi d'une recherche quasi immédiate (le champ
+   * de NewTabPage.tsx n'attend aucun focus manuel) pouvait lancer un DEUXIÈME
+   * `loadURL` alors que le premier (`aether://newtab`) n'avait pas fini de
+   * s'engager dans l'historique de navigation — Chromium annule alors la
+   * navigation en cours au profit de la nouvelle, et `aether://newtab`
+   * n'entrait JAMAIS dans l'historique : le bouton « retour » n'avait ensuite
+   * rien vers quoi revenir. */
+  private pendingInitialLoad = new Map<PageId, Promise<void>>()
   private bounds = new Map<PageId, Bounds>()
   private attached = new Set<PageId>()
   private visibleIds: PageId[] = []
@@ -351,7 +361,11 @@ export class ViewManager {
     // bouton « retour » ne peut jamais revenir à cette page après avoir
     // recherché/navigué ailleurs depuis le nouvel onglet.
     this.syncStoreShim(row.id, view.webContents, row.url)
-    void view.webContents.loadURL(row.url).catch(() => undefined)
+    const initialLoad = view.webContents.loadURL(row.url).catch(() => undefined)
+    this.pendingInitialLoad.set(row.id, initialLoad)
+    void initialLoad.then(() => {
+      if (this.pendingInitialLoad.get(row.id) === initialLoad) this.pendingInitialLoad.delete(row.id)
+    })
     this.evictIfNeeded()
     this.delegate.onMetaChanged(row.id)
     return view
@@ -824,11 +838,19 @@ export class ViewManager {
     }
   }
 
-  navigate(id: PageId, url: string): void {
+  async navigate(id: PageId, url: string): Promise<void> {
     const row = pagesRepo.get(id)
     if (!row) return
     pagesRepo.updateNavigation(id, url)
     const view = this.ensureLive({ ...row, url })
+    // Si CETTE vue vient tout juste d'être créée (ex. nouvel onglet suivi
+    // d'une recherche quasi immédiate), attend que son tout premier
+    // chargement se soit réellement engagé avant de lancer le nôtre — sinon
+    // Chromium annule la navigation en cours au profit de la nouvelle et le
+    // premier chargement n'entre jamais dans l'historique (cf. commentaire
+    // sur `pendingInitialLoad`).
+    await this.pendingInitialLoad.get(id)
+    if (!this.views.has(id) || this.views.get(id) !== view) return
     this.syncStoreShim(id, view.webContents, url)
     void view.webContents.loadURL(url).catch(() => undefined)
     this.patchRuntime(id, { loadError: null })

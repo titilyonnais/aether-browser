@@ -1,11 +1,13 @@
 /**
  * Page de nouvel onglet intégrée (`aether://newtab`) — rendue en composant
- * React normal par PageSlot.tsx, JAMAIS dans une vraie WebContentsView (voir
- * ViewManager.ensureLive, qui saute `loadURL` pour ce schéma). Widgets
- * façon Brave/Chrome : recherche directe, raccourcis éditables, horloge,
- * météo, actualités — tous activables depuis « Personnaliser ».
- * Cliquer un raccourci navigue CET onglet (remplace son contenu), comme un
- * vrai nouvel onglet de navigateur — pas d'ouverture d'une carte en plus.
+ * React par PageSlot.tsx PAR-DESSUS la WebContentsView (masquée, pas absente :
+ * elle charge réellement `aether://newtab` pour de vrai, voir
+ * ViewManager.ensureLive, précisément pour que le bouton « retour » puisse y
+ * revenir après une recherche). Widgets façon Brave/Chrome : recherche
+ * directe, raccourcis éditables, horloge, météo, actualités — tous
+ * activables depuis « Personnaliser ». Cliquer un raccourci navigue CET
+ * onglet (remplace son contenu), comme un vrai nouvel onglet de navigateur —
+ * pas d'ouverture d'une carte en plus.
  */
 import {
   Cloud,

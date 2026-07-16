@@ -42,6 +42,10 @@ export const overlays: Record<string, string> = {
   // Historique
   'overlays.history.title': 'Historique',
   'overlays.history.clearAllTitle': 'Tout effacer',
+  'overlays.history.clearAllConfirm': "Effacer tout l'historique ? Cette action est irréversible.",
+  'overlays.history.clearAllCancel': 'Annuler',
+  'overlays.history.clearAllConfirmButton': 'Tout effacer',
+  'overlays.history.removeOneTitle': 'Supprimer cette visite',
   'overlays.history.emptyState': 'Aucune visite enregistrée pour ce profil.',
   'overlays.history.noResults': 'Aucune visite ne correspond.',
   'overlays.history.searchPlaceholder': "Rechercher dans l'historique…",

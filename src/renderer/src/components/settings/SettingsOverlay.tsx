@@ -7,6 +7,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   Cloud,
   Compass,
@@ -33,7 +34,7 @@ import {
   Wand2,
   X
 } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { FlagState } from '@shared/ipc'
 import { SEARCH_ENGINES } from '@shared/intent'
 import { CHROME_URLS, FLAG_DEFS, SPELLCHECK_LANGUAGES } from '@shared/types'
@@ -242,8 +243,11 @@ function SettingsPanel() {
       >
         <div className="flex min-h-0 flex-1">
           {/* Navigation */}
-          <nav className="flex w-46 shrink-0 flex-col gap-1 overflow-y-auto border-r border-white/[0.06] p-3" style={{ width: 212 }}>
-            <div className="flex flex-col gap-2 px-3 pb-2 pt-1.5">
+          <nav className="flex w-46 shrink-0 flex-col border-r border-white/[0.06]" style={{ width: 212 }}>
+            {/* Titre + recherche : toujours visibles, ne scrollent pas avec la liste
+                (sur les réglages longs, une section tout en bas de liste faisait
+                disparaître le champ de recherche — la seule façon d'en changer). */}
+            <div className="flex shrink-0 flex-col gap-2 p-3 pb-2">
               <p className="font-display text-[15px] italic text-ink">{t('settings.title')}</p>
               {/* Toujours visible (façon Chrome/Edge), pas un bouton à cliquer d'abord —
                   sur une colonne aussi étroite, un bascule + rangée séparée gaspillait de
@@ -262,30 +266,32 @@ function SettingsPanel() {
                 />
               </div>
             </div>
-            {visibleNav.length === 0 ? (
-              <p className="px-3 py-2 text-[11px] text-ink-faint">{t('settings.nav.noResults')}</p>
-            ) : (
-              visibleNav.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setSection(id)}
-                  className={cn(
-                    'flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors',
-                    section === id
-                      ? 'bg-white/[0.06] text-ink'
-                      : 'text-ink-dim hover:bg-white/[0.03] hover:text-ink'
-                  )}
-                >
-                  <Icon size={13} strokeWidth={1.7} />
-                  {label}
-                </button>
-              ))
-            )}
+            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3 pt-0">
+              {visibleNav.length === 0 ? (
+                <p className="px-3 py-2 text-[11px] text-ink-faint">{t('settings.nav.noResults')}</p>
+              ) : (
+                visibleNav.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setSection(id)}
+                    className={cn(
+                      'flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors',
+                      section === id
+                        ? 'bg-white/[0.06] text-ink'
+                        : 'text-ink-dim hover:bg-white/[0.03] hover:text-ink'
+                    )}
+                  >
+                    <Icon size={13} strokeWidth={1.7} />
+                    {label}
+                  </button>
+                ))
+              )}
+            </div>
             <button
               type="button"
               onClick={close}
-              className="mt-auto flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[12.5px] text-ink-faint transition-colors hover:bg-white/[0.03] hover:text-ink-dim"
+              className="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 m-3 mt-0 text-left text-[12.5px] text-ink-faint transition-colors hover:bg-white/[0.03] hover:text-ink-dim"
             >
               <X size={13} strokeWidth={1.7} />
               {t('settings.common.close')}
@@ -2223,6 +2229,11 @@ function TextInput({
   )
 }
 
+/** Menu déroulant custom : la liste native `<option>` d'un `<select>` est
+ * rendue par l'OS (fond noir/surbrillance bleue Windows par défaut, cf.
+ * capture utilisateur) — impossible à styler en CSS dans Chromium, quoi
+ * qu'on tente sur `<option>`. Une vraie liste DOM (bouton + panneau) reste
+ * intégralement au style ÆTHER. */
 function SelectInput({
   value,
   onChange,
@@ -2232,17 +2243,55 @@ function SelectInput({
   onChange: (v: string) => void
   options: { value: string; label: string }[]
 }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const current = options.find((o) => o.value === value)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (e: PointerEvent): void => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [open])
+
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-8 w-full appearance-none rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[12px] text-ink outline-none transition-colors focus:border-glacier/40 [&>option]:bg-abyss [&>option]:text-ink"
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
+        className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[12px] text-ink outline-none transition-colors hover:bg-white/[0.05] focus:border-glacier/40"
+      >
+        <span className="fade-truncate">{current?.label ?? ''}</span>
+        <ChevronDown
+          size={13}
+          strokeWidth={1.8}
+          className={cn('shrink-0 text-ink-faint transition-transform', open && 'rotate-180')}
+        />
+      </button>
+      {open && (
+        <div className="glass-strong absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-60 overflow-y-auto rounded-lg p-1">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => {
+                onChange(o.value)
+                setOpen(false)
+              }}
+              className={cn(
+                'flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors',
+                o.value === value ? 'bg-glacier/15 text-glacier' : 'text-ink-dim hover:bg-white/[0.05] hover:text-ink'
+              )}
+            >
+              <span className="fade-truncate">{o.label}</span>
+              {o.value === value && <Check size={13} strokeWidth={2} className="shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

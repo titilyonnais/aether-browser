@@ -177,7 +177,8 @@ const api: AetherApi = {
   history: {
     search: (query: string, limit?: number) => ipcRenderer.invoke(CH.historySearch, query, limit),
     list: (limit?: number) => ipcRenderer.invoke(CH.historyList, limit),
-    clear: (sinceTs: number | null) => ipcRenderer.invoke(CH.historyClear, sinceTs)
+    clear: (sinceTs: number | null) => ipcRenderer.invoke(CH.historyClear, sinceTs),
+    remove: (id: string) => ipcRenderer.invoke(CH.historyRemove, id)
   },
   settings: {
     get: () => ipcRenderer.invoke(CH.settingsGet),

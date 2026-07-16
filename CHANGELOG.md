@@ -4,6 +4,20 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.45.3] — 2026-07-17
+
+### Ajouté
+
+- **Historique — suppression individuelle** : chaque visite peut désormais être effacée seule (croix au survol), pas seulement tout l'historique d'un coup.
+- **Historique — confirmation avant purge totale** : le bouton « Tout effacer » demande désormais une confirmation explicite (action irréversible) au lieu d'effacer immédiatement.
+
+### Corrigé
+
+- **En-tête des réglages** : le titre et le champ de recherche restaient jusqu'ici DANS la liste défilante des sections — sur un réglage tout en bas, ils disparaissaient avec le reste. Ils sont désormais fixes, seule la liste des sections défile.
+- **Bulles popup (infos de site, aperçu d'onglet…)** : un angle de la fenêtre restait visible en dehors du coin arrondi de la carte — l'ombre portée large de `.popover-surface` n'avait pas la place de s'estomper avant d'atteindre le bord d'une fenêtre dimensionnée exactement à son contenu, et se retrouvait coupée net. Ombre retirée pour ces fenêtres, un simple liseré suffit.
+- **Menu déroulant des réglages** (ouverture d'un lien, plage de suppression des données…) : rendu par l'OS (fond noir, surbrillance bleue Windows), impossible à styler — remplacé par un vrai menu déroulant au style ÆTHER.
+- **Nouvel onglet et bouton « retour »** : une recherche lancée quasi immédiatement après l'ouverture d'un nouvel onglet pouvait annuler le tout premier chargement de `aether://newtab` avant qu'il ne s'inscrive dans l'historique de navigation — le bouton « retour » n'avait ensuite rien vers quoi revenir. La recherche attend désormais que ce premier chargement soit engagé.
+
 ## [0.45.2] — 2026-07-17
 
 ### Optimisé

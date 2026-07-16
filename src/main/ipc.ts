@@ -710,7 +710,7 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   })
 
   ipcMain.on(CH.pageNavigate, (_e, id: PageId, url: string) => {
-    if (isAllowedUrl(url)) views.navigate(id, url)
+    if (isAllowedUrl(url)) void views.navigate(id, url)
   })
   ipcMain.on(CH.pageBack, (_e, id: PageId) => views.goBack(id))
   ipcMain.on(CH.pageForward, (_e, id: PageId) => views.goForward(id))
@@ -1157,6 +1157,7 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   ipcMain.handle(CH.historyClear, (_e, sinceTs: number | null) =>
     visitsRepo.clear(activeProfile(), sinceTs)
   )
+  ipcMain.handle(CH.historyRemove, (_e, id: string) => visitsRepo.remove(activeProfile(), String(id)))
 
   // ─── Réglages ──────────────────────────────────────────────────────────────
 
