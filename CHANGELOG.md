@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.44.2] — 2026-07-16
+
+### Sécurité
+
+- **Durcissement (défense en profondeur) du nom de fichier des téléchargements** — `getFilename()` (dérivé in fine de l'en-tête `Content-Disposition` envoyé par le site distant) est désormais toujours réduit à son nom de base (`basename`) avant d'être combiné au dossier de destination, plutôt que de dépendre uniquement de la sanitation déjà faite par Chromium en amont.
+
 ## [0.44.1] — 2026-07-16
 
 ### Sécurité

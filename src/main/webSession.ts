@@ -8,7 +8,7 @@
  * par partition.
  */
 import { app, session, type BrowserWindow, type DownloadItem, type Session } from 'electron'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { CH } from '@shared/ipc'
 import type { ProfileId, SitePermissionKind } from '@shared/types'
 import { installCertificateObserver } from './certificates'
@@ -150,7 +150,12 @@ export function ensurePartitionHardened(
     const s = getSettings()
     if (!s.askDownloadLocation) {
       const dir = s.downloadDir || app.getPath('downloads')
-      item.setSavePath(join(dir, item.getFilename()))
+      // `basename()` en défense en profondeur : `getFilename()` vient in fine
+      // du site distant (Content-Disposition) — Chromium le nettoie déjà
+      // normalement, mais ne jamais faire dépendre un `join()` vers un chemin
+      // de fichier réel de la seule sanitation d'un composant tiers hors de
+      // notre contrôle.
+      item.setSavePath(join(dir, basename(item.getFilename())))
     }
 
     const id = downloadsRepo.create(profileId, {
