@@ -167,6 +167,17 @@ export async function initBridge(): Promise<void> {
       )
     }
   })
+  // Annule tout anti-rebond encore en attente à la fermeture de la fenêtre —
+  // sinon un changement de focus dans les 300ms précédant la fermeture pouvait
+  // déclencher cet envoi APRÈS que le main ait déjà fermé la base (`will-quit`),
+  // faisant planter tout le process (`ipcMain.on` est fire-and-forget : une
+  // exception synchrone dedans n'est rattrapée nulle part, contrairement à un
+  // `.invoke()`). On perd cette toute dernière sauvegarde, sans conséquence
+  // réelle (l'état était déjà persisté à l'écriture précédente).
+  window.addEventListener('beforeunload', () => {
+    for (const timer of focusPersistTimers.values()) clearTimeout(timer)
+    focusPersistTimers.clear()
+  })
 
   if (!initial.settings.onboarded) {
     useUiStore.getState().openOverlay('onboarding')

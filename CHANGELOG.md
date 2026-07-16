@@ -4,6 +4,14 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.42.1] — 2026-07-16
+
+### Corrigé
+
+- **La bulle d'une extension s'ouvrait à un endroit différent selon la ligne cliquée, et la liste des extensions ne se refermait pas fiablement.** Ancrée désormais toujours au même endroit (sous l'icône puzzle, en haut à droite) ; ouvrir la vraie bulle ferme maintenant bien la liste (un signal manquant laissait l'icône croire qu'elle était encore ouverte).
+- **Liste des extensions : retrait de l'interrupteur activer/désactiver** (reste disponible dans Réglages › Extensions) et la liste n'affiche plus que les extensions activées — elle redevient un simple lancement rapide, pas un second panneau de gestion.
+- **Crash « Base de données non initialisée » à la fermeture, encore possible malgré le fix de la 0.41.0** : un changement de focus dans les 300 ms précédant la fermeture pouvait envoyer sa sauvegarde après que le main ait déjà fermé la base — l'anti-rebond correspondant est désormais annulé à la fermeture de la fenêtre, et un filet de sécurité ignore ce message d'erreur précis s'il survient quand même ailleurs, au lieu de faire planter tout le processus.
+
 ## [0.42.0] — 2026-07-16
 
 ### Ajouté

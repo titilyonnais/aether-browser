@@ -16,6 +16,21 @@ import { getSettings } from './settings'
 import { checkForUpdates, initUpdater } from './updater'
 import { ViewManager } from './viewManager'
 
+// Filet de sécurité pour une classe d'erreur bien identifiée : un canal IPC
+// « one-way » (`ipcMain.on`, fire-and-forget — contrairement à `.handle()`,
+// dont les erreurs sont rattrapées et renvoyées côté renderer sous forme de
+// promesse rejetée) qui touche encore la base juste après sa fermeture
+// (`will-quit` ci-dessous) ferait planter tout le process avec le dialogue
+// d'erreur Electron, alors que l'appli est de toute façon en train de quitter
+// — perdre cette toute dernière écriture est sans conséquence réelle. Le
+// principal déclencheur connu (l'anti-rebond de sauvegarde du Focus,
+// actions.ts) annule déjà ses propres timers à la fermeture ; ce filet ne
+// couvre que ce message d'erreur PRÉCIS, pas les erreurs inattendues.
+process.on('uncaughtException', (err) => {
+  if (err.message === 'Base de données non initialisée') return
+  throw err
+})
+
 // Drapeaux expérimentaux : les switches doivent être posés AVANT tout le reste.
 applyFlagsBeforeReady()
 

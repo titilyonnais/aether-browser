@@ -398,6 +398,14 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     if (!win.isDestroyed()) win.webContents.send(channel, ...args)
   }
 
+  // Point d'ancrage ÉCRAN de l'icône puzzle (barre de titre, coin haut-droit)
+  // — capturé à chaque ouverture de la liste des extensions, réutilisé pour
+  // positionner la VRAIE bulle d'une extension TOUJOURS au même endroit
+  // (voir CH.extensionsOpenPopup plus bas), quelle que soit la ligne cliquée
+  // dans la liste — ce clic vient de l'intérieur d'une AUTRE fenêtre popup,
+  // dont les coordonnées locales ne décrivent rien ici.
+  let extensionsMenuAnchor: { rightX: number; topY: number } | null = null
+
   // Menu contextuel générique (bulle DOM, voir ContextMenuPopoverCard et
   // `showContextMenuPopover`/`runContextMenuAction` dans popoverWindow.ts) —
   // remplace `Menu.buildFromTemplate` pour tous les menus contextuels de
@@ -1291,15 +1299,25 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   })
 
   // Vraie bulle d'une extension (son propre popup.html) — pas notre liste.
-  // Toujours déclenché depuis l'intérieur de la bulle « liste des extensions »
-  // (une AUTRE fenêtre popup, cf. main/popoverWindow.ts) : ses coordonnées
-  // locales ne décrivent rien dans la fenêtre principale, donc on ancre au
-  // curseur, même repli déjà en place pour favoriteShowContextMenu ci-dessous.
+  // Toujours ancrée au même endroit (sous l'icône puzzle, haut-droit) via
+  // `extensionsMenuAnchor` — pas au curseur : le clic vient de l'intérieur de
+  // la bulle « liste des extensions » (une AUTRE fenêtre popup), qui pourrait
+  // avoir défilé/varier en hauteur selon la ligne cliquée.
   ipcMain.on(CH.extensionsOpenPopup, (_e, id: string) => {
     hidePopoverWindow()
+    // `hidePopoverWindow()` masque bien la fenêtre, mais ne prévient jamais le
+    // renderer principal (seul `onPageFocused` le fait normalement) — sans ce
+    // signal, `ExtensionsButton` (TitleBar.tsx) restait persuadé que la liste
+    // était encore ouverte et n'aurait rouvert au clic suivant qu'un `close()`
+    // sur une fenêtre déjà masquée.
+    send(CH.popoverClosed)
     const info = listExtensions(activeProfile(), views.activePartition()).find((ext) => ext.id === id)
     if (!info?.popupUrl) return
-    openExtensionPopup(win, views.activePartition(), info.popupUrl, screen.getCursorScreenPoint())
+    const anchor = extensionsMenuAnchor ?? (() => {
+      const p = screen.getCursorScreenPoint()
+      return { rightX: p.x, topY: p.y }
+    })()
+    openExtensionPopup(win, views.activePartition(), info.popupUrl, anchor)
   })
 
   ipcMain.on(CH.extensionPopupResize, (_e, size: { width: number; height: number }) => {
@@ -1345,6 +1363,13 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
             : req.kind === 'update-ready'
               ? { kind: 'update-ready', version: req.version }
               : { kind: req.kind, pageId: req.pageId }
+    if (req.kind === 'extensions-menu') {
+      const winBounds = win.getBounds()
+      extensionsMenuAnchor = {
+        rightX: winBounds.x + req.anchor.x + req.anchor.width,
+        topY: winBounds.y + req.anchor.y + req.anchor.height + POPOVER_GAP
+      }
+    }
     openPopover(win, computePopoverBounds(win, req), content)
   })
 

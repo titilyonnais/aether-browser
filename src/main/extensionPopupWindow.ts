@@ -17,6 +17,11 @@ let popup: BW | null = null
 /** Filet de sécurité si l'extension ne rapporte jamais sa taille réelle
  * (page vide, script cassé…) — même principe que popoverWindow.ts. */
 let fallbackShowTimer: ReturnType<typeof setTimeout> | null = null
+/** Point d'ancrage courant (coin haut-droit, écran absolu) — mémorisé pour que
+ * `resizeExtensionPopup` reste épinglé au MÊME coin droit en grandissant vers
+ * la gauche/le bas, plutôt que de dériver depuis les bornes déjà déplacées de
+ * la fenêtre (glisserait vers la droite/le bas à chaque redimensionnement). */
+let currentAnchor: { rightX: number; topY: number } | null = null
 
 const DEFAULT_WIDTH = 320
 const DEFAULT_HEIGHT = 400
@@ -40,20 +45,34 @@ function sanitizeToDisplay(x: number, y: number, width: number, height: number):
   }
 }
 
+/** Calcule les bornes épinglées au coin haut-droit mémorisé, pour une taille donnée. */
+function boundsForAnchor(width: number, height: number): { x: number; y: number } {
+  const anchor = currentAnchor ?? { rightX: width, topY: 0 }
+  return sanitizeToDisplay(anchor.rightX - width, anchor.topY, width, height)
+}
+
 function destroyPopup(): void {
   clearFallbackShow()
   if (popup && !popup.isDestroyed()) popup.close()
   popup = null
+  currentAnchor = null
 }
 
 /** Ouvre (en remplaçant toute bulle d'extension déjà ouverte) la bulle réelle
  * de l'extension `popupUrl` (`chrome-extension://<id>/popup.html`), dans la
- * partition où elle est chargée — ancrée au point d'ancrage donné (coordonnées
- * ÉCRAN absolues : l'appelant vient toujours de l'intérieur d'une AUTRE fenêtre
- * popup, dont les coordonnées locales ne veulent rien dire ici, cf. le repli
- * déjà en place pour `favoriteShowContextMenu` dans main/ipc.ts). */
-export function openExtensionPopup(parent: BW, partition: string, popupUrl: string, anchor: { x: number; y: number }): void {
+ * partition où elle est chargée — toujours ancrée au MÊME coin haut-droit
+ * (celui de l'icône puzzle, cf. main/ipc.ts), pas au point de clic : le clic
+ * vient de l'intérieur d'une AUTRE fenêtre popup (notre liste d'extensions),
+ * dont les coordonnées locales ne veulent rien dire ici et varieraient selon
+ * la ligne cliquée si on s'en servait. */
+export function openExtensionPopup(
+  parent: BW,
+  partition: string,
+  popupUrl: string,
+  anchor: { rightX: number; topY: number }
+): void {
   destroyPopup()
+  currentAnchor = anchor
 
   const win = new BrowserWindow({
     parent,
@@ -78,7 +97,7 @@ export function openExtensionPopup(parent: BW, partition: string, popupUrl: stri
   })
   popup = win
 
-  const { x, y } = sanitizeToDisplay(anchor.x, anchor.y, DEFAULT_WIDTH, DEFAULT_HEIGHT)
+  const { x, y } = boundsForAnchor(DEFAULT_WIDTH, DEFAULT_HEIGHT)
   win.setBounds({ x, y, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
 
   win.on('blur', () => {
@@ -117,8 +136,7 @@ export function resizeExtensionPopup(width: number, height: number): void {
   if (!popup || popup.isDestroyed()) return
   const w = Math.min(MAX_WIDTH, Math.max(1, width))
   const h = Math.min(MAX_HEIGHT, Math.max(1, height))
-  const current = popup.getBounds()
-  const { x, y } = sanitizeToDisplay(current.x, current.y, w, h)
+  const { x, y } = boundsForAnchor(w, h)
   popup.setBounds({ x, y, width: w, height: h })
   clearFallbackShow()
   if (!popup.isVisible()) {
