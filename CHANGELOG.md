@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.44.3] — 2026-07-16
+
+### Corrigé
+
+- **Course possible dans la Toile spatiale** : une animation de recadrage encore en vol (« Tout cadrer », centrage sur une carte…) au moment de basculer vers un AUTRE espace pouvait persister la position de caméra de l'ANCIEN espace sur le NOUVEAU une fois l'animation terminée. L'animation est désormais annulée dès qu'un nouveau recadrage démarre, qu'un changement d'espace survient, ou au démontage du composant.
+
 ## [0.44.2] — 2026-07-16
 
 ### Sécurité

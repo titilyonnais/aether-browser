@@ -46,6 +46,14 @@ export function SpatialCanvas() {
   const worldRef = useRef<HTMLDivElement | null>(null)
   const camera = useRef<CanvasView>({ x: 0, y: 0, zoom: 1 })
   const panRef = useRef<{ px: number; py: number; camX: number; camY: number; moved: boolean } | null>(null)
+  /** rAF en cours d'une interpolation `animateTo` — annulé avant d'en démarrer
+   * une autre ET au changement d'espace, sinon une animation encore en vol au
+   * moment où l'utilisateur bascule vers un AUTRE espace continue d'écraser
+   * `camera.current` avec la position de l'ANCIEN espace, et cette position
+   * périmée finit par être persistée sur le NOUVEL espace une fois
+   * l'animation terminée (`persist()` relit `activeSpaceId` au moment où elle
+   * s'exécute, pas au moment où l'animation a démarré). */
+  const animFrame = useRef<number | null>(null)
   const [zoomDisplay, setZoomDisplay] = useState(1)
   const [panning, setPanning] = useState(false)
 
@@ -85,6 +93,10 @@ export function SpatialCanvas() {
   // dessus (on « suit » ce qu'on regardait en Focus) ; sinon → vue d'ensemble.
   useLayoutEffect(() => {
     if (!space) return
+    if (animFrame.current !== null) {
+      cancelAnimationFrame(animFrame.current)
+      animFrame.current = null
+    }
     const activeId = getActivePageId()
     const activePage = activeId ? pages.find((p) => p.id === activeId) : null
     if (activePage) {
@@ -146,6 +158,15 @@ export function SpatialCanvas() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [apply, persist, zoomAt])
 
+  // Annule toute interpolation `animateTo` encore en vol au démontage (bascule
+  // vers le mode Focus, cf. App.tsx) — sinon son rAF continue de s'exécuter
+  // après coup et finit par persister une position de caméra périmée.
+  useEffect(() => {
+    return () => {
+      if (animFrame.current !== null) cancelAnimationFrame(animFrame.current)
+    }
+  }, [])
+
   const isBackground = (target: EventTarget): boolean =>
     target === containerRef.current || target === worldRef.current
 
@@ -200,6 +221,7 @@ export function SpatialCanvas() {
   /** Interpolation douce vers une vue cible. */
   const animateTo = useCallback(
     (target: CanvasView): void => {
+      if (animFrame.current !== null) cancelAnimationFrame(animFrame.current)
       const start = { ...camera.current }
       const t0 = performance.now()
       const duration = 340
@@ -213,13 +235,14 @@ export function SpatialCanvas() {
         }
         apply()
         if (k < 1) {
-          requestAnimationFrame(step)
+          animFrame.current = requestAnimationFrame(step)
         } else {
+          animFrame.current = null
           persist()
           setZoomDisplay(camera.current.zoom)
         }
       }
-      requestAnimationFrame(step)
+      animFrame.current = requestAnimationFrame(step)
     },
     [apply, persist]
   )
