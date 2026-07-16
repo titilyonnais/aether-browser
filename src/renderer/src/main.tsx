@@ -7,6 +7,7 @@ import './styles/global.css'
 
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import PopoverRoot from './PopoverRoot'
 
 // Pas de StrictMode : le double-montage des effets perturberait la
@@ -22,5 +23,9 @@ if (isPopover) {
   document.body.style.background = 'transparent'
   createRoot(container).render(<PopoverRoot />)
 } else {
-  createRoot(container).render(<App />)
+  createRoot(container).render(
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  )
 }

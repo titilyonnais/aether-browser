@@ -106,20 +106,39 @@ function permissionLabels(manifest: ManifestLike): string[] {
   return Array.from(new Set(labels))
 }
 
-/** Taille cumulée d'un dossier (récursive) — approximation suffisante pour un affichage
- * informatif, pas une mesure exacte au bloc disque près. */
-function dirSize(dir: string): number {
+function computeDirSize(dir: string): number {
   let total = 0
   try {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name)
-      if (entry.isDirectory()) total += dirSize(full)
+      if (entry.isDirectory()) total += computeDirSize(full)
       else if (entry.isFile()) total += statSync(full).size
     }
   } catch {
     // Dossier illisible/disparu — taille partielle ou nulle, sans conséquence grave.
   }
   return total
+}
+
+/** Cache la taille calculée par dossier — `listExtensions` (donc `dirSize`)
+ * est appelé à chaque ouverture de la liste des extensions (barre de titre,
+ * réglages), et un parcours récursif `readdirSync`/`statSync` DE TOUS les
+ * fichiers d'une extension un peu volumineuse est assez lent pour geler tout
+ * le process principal (donc toute l'appli, fenêtre comprise) le temps du
+ * parcours — un coût qui n'a aucune raison d'être payé à nouveau à chaque
+ * simple survol de l'icône puzzle. La taille affichée n'est qu'informative
+ * (jamais utilisée pour une décision) : une valeur qui resterait figée après
+ * une modification manuelle du dossier hors d'ÆTHER (mode développeur) est un
+ * compromis largement acceptable face au gel perçu sinon.
+ */
+const dirSizeCache = new Map<string, number>()
+
+function dirSize(dir: string): number {
+  const cached = dirSizeCache.get(dir)
+  if (cached !== undefined) return cached
+  const size = computeDirSize(dir)
+  dirSizeCache.set(dir, size)
+  return size
 }
 
 /** Résout un champ internationalisé (`"name"`/`"description": "__MSG_x__"`, très
@@ -292,6 +311,7 @@ export function removeExtension(profileId: ProfileId, partition: string, id: str
       // Déjà déchargée — sans conséquence.
     }
   }
+  dirSizeCache.delete(row.path)
   extensionsRepo.remove(id)
 }
 

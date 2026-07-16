@@ -70,6 +70,14 @@ export function openDatabase(): Database.Database {
   mkdirSync(dir, { recursive: true })
   db = new Database(join(dir, 'aether.db'))
   db.pragma('journal_mode = WAL')
+  // `synchronous = FULL` (défaut) fait un fsync bloquant à CHAQUE commit —
+  // avec le journal WAL déjà actif, `NORMAL` reste sans risque de corruption
+  // (seule différence : les toutes dernières transactions pourraient se
+  // perdre lors d'une coupure de courant/panne système, jamais une base
+  // corrompue) et c'est le réglage documenté par SQLite lui-même pour WAL —
+  // notable ici vu la fréquence des petites écritures (historique à chaque
+  // navigation, position de caméra, état du focus toutes les 300ms…).
+  db.pragma('synchronous = NORMAL')
   db.pragma('foreign_keys = ON')
   migrate(db)
   return db

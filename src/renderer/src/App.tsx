@@ -5,26 +5,15 @@
  */
 import { AnimatePresence, motion } from 'framer-motion'
 import { Minus, Plus, RotateCcw } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { SpatialCanvas } from '@/components/canvas/SpatialCanvas'
 import { TitleBar } from '@/components/chrome/TitleBar'
 import { ConstellationPanel } from '@/components/constellation/ConstellationPanel'
 import { FavoritesBar } from '@/components/chrome/FavoritesBar'
-import { DownloadsOverlay } from '@/components/downloads/DownloadsOverlay'
-import { FavoritesOverlay } from '@/components/favorites/FavoritesOverlay'
 import { FocusView } from '@/components/focus/FocusView'
 import { PageSlot } from '@/components/focus/PageSlot'
-import { CoachMarks } from '@/components/guide/CoachMarks'
-import { GuideOverlay } from '@/components/guide/GuideOverlay'
-import { HistoryOverlay } from '@/components/history/HistoryOverlay'
 import { IntentionOverlay } from '@/components/intention/IntentionOverlay'
 import { MusePanel } from '@/components/muse/MusePanel'
-import { Onboarding } from '@/components/onboarding/Onboarding'
-import { QrCodeOverlay } from '@/components/search/QrCodeOverlay'
-import { RenameWindowOverlay } from '@/components/search/RenameWindowOverlay'
-import { TabSearchOverlay } from '@/components/search/TabSearchOverlay'
-import { TaskManagerOverlay } from '@/components/search/TaskManagerOverlay'
-import { SettingsOverlay } from '@/components/settings/SettingsOverlay'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { useT } from '@/i18n/useT'
 import { holdZoomIndicator, initBridge, releaseZoomIndicator, runCommand } from '@/lib/actions'
@@ -32,6 +21,41 @@ import { usePagesStore } from '@/stores/pages'
 import { useSettingsStore } from '@/stores/settings'
 import { useSpacesStore } from '@/stores/spaces'
 import { useUiStore } from '@/stores/ui'
+
+// Chargées à la demande (jamais dans le bundle initial) : chacune n'est
+// montée que si son overlay est réellement ouvert (`ui.overlay === '…'`),
+// donc beaucoup de sessions ne les chargent JAMAIS — SettingsOverlay à elle
+// seule fait plus de 2000 lignes. `IntentionOverlay`/`MusePanel` restent en
+// import direct : utilisées dans les toutes premières secondes de chaque
+// session (Ctrl+K, Muse ouvert par défaut), un chargement différé y serait
+// plus gênant qu'utile.
+const SettingsOverlay = lazy(() =>
+  import('@/components/settings/SettingsOverlay').then((m) => ({ default: m.SettingsOverlay }))
+)
+const GuideOverlay = lazy(() => import('@/components/guide/GuideOverlay').then((m) => ({ default: m.GuideOverlay })))
+const DownloadsOverlay = lazy(() =>
+  import('@/components/downloads/DownloadsOverlay').then((m) => ({ default: m.DownloadsOverlay }))
+)
+const FavoritesOverlay = lazy(() =>
+  import('@/components/favorites/FavoritesOverlay').then((m) => ({ default: m.FavoritesOverlay }))
+)
+const HistoryOverlay = lazy(() =>
+  import('@/components/history/HistoryOverlay').then((m) => ({ default: m.HistoryOverlay }))
+)
+const TabSearchOverlay = lazy(() =>
+  import('@/components/search/TabSearchOverlay').then((m) => ({ default: m.TabSearchOverlay }))
+)
+const TaskManagerOverlay = lazy(() =>
+  import('@/components/search/TaskManagerOverlay').then((m) => ({ default: m.TaskManagerOverlay }))
+)
+const QrCodeOverlay = lazy(() =>
+  import('@/components/search/QrCodeOverlay').then((m) => ({ default: m.QrCodeOverlay }))
+)
+const RenameWindowOverlay = lazy(() =>
+  import('@/components/search/RenameWindowOverlay').then((m) => ({ default: m.RenameWindowOverlay }))
+)
+const Onboarding = lazy(() => import('@/components/onboarding/Onboarding').then((m) => ({ default: m.Onboarding })))
+const CoachMarks = lazy(() => import('@/components/guide/CoachMarks').then((m) => ({ default: m.CoachMarks })))
 
 const ACCENT_HEX: Record<string, string> = {
   glacier: '#a9c9ec',
@@ -170,17 +194,23 @@ export default function App() {
         </div>
 
         <IntentionOverlay />
-        <SettingsOverlay />
-        <GuideOverlay />
-        <DownloadsOverlay />
-        <FavoritesOverlay />
-        <HistoryOverlay />
-        <TabSearchOverlay />
-        <TaskManagerOverlay />
-        <QrCodeOverlay />
-        <RenameWindowOverlay />
-        <Onboarding />
-        <CoachMarks />
+        {/* `fallback={null}` : chacun de ces overlays ne se monte QUE si son
+            propre `ui.overlay`/état est actif — le court instant de
+            chargement du chunk (quasi instantané, fichier local) n'a jamais
+            de contenu précédent à remplacer, rien à voir clignoter. */}
+        <Suspense fallback={null}>
+          <SettingsOverlay />
+          <GuideOverlay />
+          <DownloadsOverlay />
+          <FavoritesOverlay />
+          <HistoryOverlay />
+          <TabSearchOverlay />
+          <TaskManagerOverlay />
+          <QrCodeOverlay />
+          <RenameWindowOverlay />
+          <Onboarding />
+          <CoachMarks />
+        </Suspense>
         <Toasts />
         <ZoomIndicator />
       </div>

@@ -4,6 +4,18 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.45.0] — 2026-07-16
+
+### Ajouté
+
+- **Filet de sécurité contre les écrans blancs** : une erreur de rendu React non rattrapée n'importe où dans l'appli affiche désormais un écran de récupération (« Recharger ») plutôt que de démonter toute l'interface sans recours — les espaces, pages et données restent intacts, seule la fenêtre a besoin d'être rechargée.
+
+### Optimisé
+
+- **Démarrage plus rapide** : les panneaux peu utilisés (Réglages, Historique, Téléchargements, Favoris, recherche d'onglets, gestionnaire de tâches, QR code, renommer la fenêtre, guide, introduction) sont désormais chargés à la demande plutôt qu'au lancement — environ 250 Ko de moins à analyser avant le tout premier affichage.
+- **Liste des extensions** : la taille de chaque extension (calculée en parcourant tous ses fichiers) est désormais mise en cache au lieu d'être recalculée à chaque ouverture de la liste — un parcours répété pouvait geler brièvement toute l'application pour une extension un peu volumineuse.
+- **Base de données** : `synchronous = NORMAL` (recommandation officielle de SQLite en mode WAL, déjà actif) — réduit les micro-blocages liés aux écritures fréquentes (historique, position de la caméra, état du focus) sans risque de corruption.
+
 ## [0.44.3] — 2026-07-16
 
 ### Corrigé
