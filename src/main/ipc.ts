@@ -71,6 +71,7 @@ import {
   removeExtension,
   setExtensionEnabled
 } from './extensions'
+import { openExtensionPopup, resizeExtensionPopup } from './extensionPopupWindow'
 import { readFlags, relaunchApp, writeFlags } from './flags'
 import {
   broadcastToPopover,
@@ -1287,6 +1288,22 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   ipcMain.handle(CH.extensionsRemove, (_e, id: string) => {
     removeExtension(activeProfile(), views.activePartition(), id)
+  })
+
+  // Vraie bulle d'une extension (son propre popup.html) — pas notre liste.
+  // Toujours déclenché depuis l'intérieur de la bulle « liste des extensions »
+  // (une AUTRE fenêtre popup, cf. main/popoverWindow.ts) : ses coordonnées
+  // locales ne décrivent rien dans la fenêtre principale, donc on ancre au
+  // curseur, même repli déjà en place pour favoriteShowContextMenu ci-dessous.
+  ipcMain.on(CH.extensionsOpenPopup, (_e, id: string) => {
+    hidePopoverWindow()
+    const info = listExtensions(activeProfile(), views.activePartition()).find((ext) => ext.id === id)
+    if (!info?.popupUrl) return
+    openExtensionPopup(win, views.activePartition(), info.popupUrl, screen.getCursorScreenPoint())
+  })
+
+  ipcMain.on(CH.extensionPopupResize, (_e, size: { width: number; height: number }) => {
+    resizeExtensionPopup(size.width, size.height)
   })
 
   // Réponse à la popup de confirmation d'installation (voir onInstallExtensionRequested

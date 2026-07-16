@@ -826,41 +826,34 @@ function NewsWidget({ style, onOpen }: { style: NewTabNewsStyle; onOpen: (url: s
       </div>
 
       {style === 'photos' ? (
+        // Le titre vit SOUS l'image (flux normal, jamais superposé) plutôt que
+        // dans un bandeau incrusté à hauteur plafonnée + fondu — cette dernière
+        // approche coupait quand même les titres longs (juste avec un dégradé
+        // au lieu d'un bord net). Ainsi le texte s'affiche TOUJOURS en entier,
+        // quelle que soit sa longueur, sans jamais toucher à l'image elle-même.
         <div className="grid grid-cols-3 gap-3.5">
           {displayItems.map((item, i) => (
             <button
               key={item.url + i}
               type="button"
               onClick={() => onOpen(item.url)}
-              className="group relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.03] text-left"
+              className="group flex w-full flex-col text-left"
             >
-              {item.imageUrl ? (
-                <img
-                  src={item.imageUrl}
-                  draggable={false}
-                  className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105"
-                  alt=""
-                />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-white/[0.06] to-transparent" />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" />
-              {/* `-webkit-line-clamp` s'est révélé peu fiable ici (le texte
-                  débordait quand même, rogné brutalement par le cadre sans
-                  points de suspension). Filet de sécurité en deux temps, sur
-                  un vrai `<div>` (jamais un `<span>` : un inline ignorerait
-                  `max-height`/`overflow` sans compter sur la blockification
-                  implicite d'un `position:absolute`, une dépendance inutile) :
-                  un plafond de hauteur + `overflow-hidden` empêchent tout
-                  débordement hors du cadre, PUIS un fondu (`mask-image`, même
-                  principe que `fade-truncate` ailleurs dans l'appli) sur une
-                  zone plus haute qu'une ligne de texte entière (≈24px pour
-                  ~17px de hauteur de ligne) — la dernière ligne partiellement
-                  visible s'estompe TOUJOURS en entier, jamais de lettre
-                  tranchée à mi-hauteur. */}
-              <div className="absolute inset-x-0 bottom-0 max-h-[4.75rem] overflow-hidden p-3 text-[12.5px] font-medium leading-snug text-white [mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)]">
-                {item.title}
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.03]">
+                {item.imageUrl ? (
+                  <img
+                    src={item.imageUrl}
+                    draggable={false}
+                    className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105"
+                    alt=""
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/[0.06] to-transparent" />
+                )}
               </div>
+              <p className="mt-2 text-[12.5px] font-medium leading-snug text-ink-dim transition-colors group-hover:text-ink">
+                {item.title}
+              </p>
             </button>
           ))}
         </div>
@@ -871,7 +864,7 @@ function NewsWidget({ style, onOpen }: { style: NewTabNewsStyle; onOpen: (url: s
               key={item.url + i}
               type="button"
               onClick={() => onOpen(item.url)}
-              className="block w-full truncate border-b border-white/[0.05] px-3.5 py-2.5 text-left text-[12px] text-ink-dim transition-colors last:border-b-0 hover:bg-white/[0.04] hover:text-ink"
+              className="block w-full border-b border-white/[0.05] px-3.5 py-2.5 text-left text-[12px] leading-snug text-ink-dim transition-colors last:border-b-0 hover:bg-white/[0.04] hover:text-ink"
             >
               {item.title}
             </button>

@@ -512,6 +512,10 @@ export interface ExtensionInfo {
   storeUrl: string | null
   /** URL chrome-extension://… vers la page d'options déclarée par l'extension, si elle en a une. */
   optionsUrl: string | null
+  /** URL chrome-extension://… vers la bulle (`action.default_popup`/`browser_action.default_popup`
+   * du manifest) déclarée par l'extension, si elle en a une — sinon un clic sur l'icône
+   * ne fait rien de plus que ce que montre déjà notre propre liste. */
+  popupUrl: string | null
   path: string
   enabled: boolean
   iconUrl: string | null

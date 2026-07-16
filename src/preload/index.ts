@@ -218,7 +218,8 @@ const api: AetherApi = {
     addUnpacked: (folderPath: string) => ipcRenderer.invoke(CH.extensionsAddUnpacked, folderPath),
     setEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke(CH.extensionsSetEnabled, id, enabled),
     remove: (id: string) => ipcRenderer.invoke(CH.extensionsRemove, id),
-    onInstallResult: (cb) => on(CH.extensionsInstallResult, cb)
+    onInstallResult: (cb) => on(CH.extensionsInstallResult, cb),
+    openPopup: (id: string) => ipcRenderer.send(CH.extensionsOpenPopup, id)
   },
   shortcuts: {
     onCommand: (cb) => on(CH.shortcut, cb)
@@ -241,4 +242,22 @@ const api: AetherApi = {
   }
 }
 
-contextBridge.exposeInMainWorld('aether', api)
+if (location.protocol === 'chrome-extension:') {
+  // Fenêtre de bulle d'une VRAIE extension (voir main/extensionPopupWindow.ts)
+  // — pas notre app, donc AUCUNE exposition de `window.aether` ici (surface
+  // d'attaque inutile pour du code tiers). On ne fait QUE mesurer la taille
+  // réelle du contenu de l'extension pour que le main ajuste la fenêtre
+  // flottante en conséquence, même principe que PopoverRoot.tsx pour nos
+  // propres bulles, mais sans bundle applicatif à charger côté page.
+  const report = (): void => {
+    const width = Math.ceil(document.documentElement.scrollWidth)
+    const height = Math.ceil(document.documentElement.scrollHeight)
+    if (width > 0 && height > 0) ipcRenderer.send(CH.extensionPopupResize, { width, height })
+  }
+  window.addEventListener('DOMContentLoaded', () => {
+    report()
+    new ResizeObserver(report).observe(document.documentElement)
+  })
+} else {
+  contextBridge.exposeInMainWorld('aether', api)
+}

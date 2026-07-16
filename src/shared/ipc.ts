@@ -238,6 +238,11 @@ export const CH = {
   extensionsSetEnabled: 'extensions:set-enabled',
   extensionsRemove: 'extensions:remove',
   extensionsInstallResult: 'extensions:install-result',
+  /** Ouvre la VRAIE bulle d'une extension (son `popup.html`) — pas notre liste. */
+  extensionsOpenPopup: 'extensions:open-popup',
+  /** Envoyé par la fenêtre de bulle d'extension elle-même (preload dédié, pas
+   * `window.aether`) pour ajuster sa taille au contenu réel de l'extension. */
+  extensionPopupResize: 'extension-popup:resize',
 
   // Raccourcis relayés depuis les pages web
   shortcut: 'shortcut',
@@ -534,6 +539,9 @@ export interface AetherApi {
     remove(id: string): Promise<void>
     /** Résultat d'une installation déclenchée par un clic sur « Installer » du vrai Chrome Web Store. */
     onInstallResult(cb: (result: ExtensionInstallResult) => void): Unsubscribe
+    /** Ouvre la vraie bulle de l'extension (son `popup.html`) façon Chrome —
+     * ne fait rien si elle n'en déclare aucune (`popupUrl` nul). */
+    openPopup(id: string): void
   }
   shortcuts: {
     onCommand(cb: (cmd: ShortcutCommand) => void): Unsubscribe

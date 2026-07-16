@@ -4,6 +4,17 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.42.0] — 2026-07-16
+
+### Ajouté
+
+- **Clic sur une extension → sa vraie bulle** (façon Chrome/Edge/Brave) : la liste d'extensions (icône puzzle) ouvre désormais le vrai `popup.html` de l'extension cliquée — son interface propre (options, état, actions), pas juste le nom et l'interrupteur activer/désactiver.
+
+### Corrigé
+
+- **« Ouvrir cette page (toujours neuve) » rouvrait quand même les onglets de la session précédente.** La vue Focus repartait bien à vide, mais la bande de pages restait peuplée des pages de l'espace actif (cartes permanentes par conception) — perçu comme un réglage cassé. Ce réglage ferme désormais réellement les pages de l'espace actif au lancement (comme Chrome), pas seulement leur affichage ; les autres espaces ne sont pas touchés.
+- **Page de nouvel onglet : titres d'actualités tronqués.** Coupés à une ligne (mode texte) ou masqués sous un fondu à hauteur plafonnée (mode photos) — les deux affichent désormais le titre en entier, sans troncature, quelle que soit sa longueur.
+
 ## [0.41.0] — 2026-07-16
 
 ### Corrigé

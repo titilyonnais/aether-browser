@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import type { ExtensionInfo } from '@shared/types'
 import { ExtensionIcon } from '@/components/ui/ExtensionIcon'
 import { MiniSwitch } from '@/components/ui/MiniSwitch'
+import { cn } from '@/lib/utils'
 
 function closePopover(): void {
   window.aether.popover.hide()
@@ -43,17 +44,43 @@ export function ExtensionsMenuPopoverCard() {
           <p className="px-2.5 py-2 text-[11.5px] text-ink-faint">Aucune extension chargée.</p>
         ) : (
           list.map((ext) => (
-            <div key={ext.id} className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
+            // `role="button"` sur un `<div>`, pas un vrai `<button>` : le MiniSwitch
+            // à droite EST déjà un `<button>` — en imbriquer un dans l'autre est un
+            // HTML invalide (le navigateur reparente/casse le second bouton).
+            <div
+              key={ext.id}
+              role="button"
+              tabIndex={ext.popupUrl ? 0 : -1}
+              title={ext.popupUrl ? undefined : "Cette extension n'a pas de bulle propre."}
+              onClick={() => {
+                if (!ext.popupUrl) return
+                window.aether.extensions.openPopup(ext.id)
+                closePopover()
+              }}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && ext.popupUrl) {
+                  e.preventDefault()
+                  window.aether.extensions.openPopup(ext.id)
+                  closePopover()
+                }
+              }}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors',
+                ext.popupUrl ? 'cursor-pointer hover:bg-white/[0.06]' : 'cursor-default'
+              )}
+            >
               <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-md border border-white/[0.08] bg-white/[0.03]">
                 <ExtensionIcon iconUrl={ext.iconUrl} />
               </span>
               <span className="min-w-0 flex-1 truncate text-[12px] text-ink-dim">{ext.name || 'Extension'}</span>
-              <MiniSwitch
-                checked={ext.enabled}
-                onChange={(v) => {
-                  void window.aether.extensions.setEnabled(ext.id, v).then(reload)
-                }}
-              />
+              <span onClick={(e) => e.stopPropagation()}>
+                <MiniSwitch
+                  checked={ext.enabled}
+                  onChange={(v) => {
+                    void window.aether.extensions.setEnabled(ext.id, v).then(reload)
+                  }}
+                />
+              </span>
             </div>
           ))
         )}

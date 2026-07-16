@@ -25,6 +25,7 @@ import { extensionsRepo } from './db/repositories'
 
 interface ActionLike {
   default_icon?: string | Record<string, string>
+  default_popup?: string
 }
 
 interface ManifestLike {
@@ -57,6 +58,14 @@ function resolveIconFile(manifest: ManifestLike): string | null {
     manifest.action?.default_icon ?? manifest.browser_action?.default_icon ?? manifest.page_action?.default_icon
   if (!actionIcon) return null
   return typeof actionIcon === 'string' ? actionIcon : (Object.values(actionIcon).at(-1) ?? null)
+}
+
+/** Chemin de la bulle déclarée par l'extension (MV3 `action.default_popup`,
+ * repli MV2 `browser_action.default_popup`) — `null` si l'extension n'en a
+ * aucune (son icône ne fait alors que déclencher `chrome.action.onClicked`
+ * côté background, rien à afficher). */
+function resolvePopupPath(manifest: ManifestLike): string | null {
+  return manifest.action?.default_popup ?? manifest.browser_action?.default_popup ?? null
 }
 
 /** Libellés lisibles des permissions les plus courantes — au mieux, comme
@@ -171,6 +180,7 @@ function toInfo(
   const iconFile = resolveIconFile(manifest)
   const isWebstore = row.path.startsWith(webStoreExtensionsRoot())
   const optionsPage = manifest.options_ui?.page ?? manifest.options_page ?? null
+  const popupPath = resolvePopupPath(manifest)
   return {
     id: row.id,
     extensionId: row.extensionId,
@@ -182,6 +192,7 @@ function toInfo(
     source: isWebstore ? 'webstore' : 'local',
     storeUrl: isWebstore ? `https://chromewebstore.google.com/detail/${basename(row.path)}` : null,
     optionsUrl: optionsPage && row.extensionId ? `chrome-extension://${row.extensionId}/${optionsPage}` : null,
+    popupUrl: popupPath && row.extensionId ? `chrome-extension://${row.extensionId}/${popupPath}` : null,
     path: row.path,
     enabled: row.enabled,
     addedAt: row.addedAt,
