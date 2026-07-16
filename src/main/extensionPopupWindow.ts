@@ -13,6 +13,7 @@
 import { BrowserWindow, screen, type BrowserWindow as BW } from 'electron'
 import { join } from 'node:path'
 import { disableNativeWindowTransitions } from './dwm'
+import { fadeWindowIn, fadeWindowOut } from './windowFade'
 
 let popup: BW | null = null
 /** Filet de sécurité si l'extension ne rapporte jamais sa taille réelle
@@ -52,11 +53,31 @@ function boundsForAnchor(width: number, height: number): { x: number; y: number 
   return sanitizeToDisplay(anchor.rightX - width, anchor.topY, width, height)
 }
 
-function destroyPopup(): void {
+/** Destruction immédiate, SANS fondu — utilisée uniquement quand une bulle
+ * remplace une autre déjà ouverte (`openExtensionPopup` ci-dessous) : la
+ * nouvelle bulle va de toute façon apparaître en fondu l'instant d'après,
+ * faire d'abord disparaître l'ancienne en fondu n'ajouterait que de la
+ * latence perçue sans bénéfice visuel. */
+function destroyPopupImmediate(): void {
   clearFallbackShow()
   if (popup && !popup.isDestroyed()) popup.close()
   popup = null
   currentAnchor = null
+}
+
+/** Fermeture normale (perte de focus, Échap, clic ailleurs) — même fondu de
+ * fermeture que toutes les autres bulles de l'appli avant la destruction réelle. */
+function closePopupWithFade(): void {
+  const win = popup
+  clearFallbackShow()
+  if (!win || win.isDestroyed()) return
+  fadeWindowOut(win, () => {
+    if (popup === win) {
+      popup = null
+      currentAnchor = null
+    }
+    if (!win.isDestroyed()) win.close()
+  })
 }
 
 /** Ouvre (en remplaçant toute bulle d'extension déjà ouverte) la bulle réelle
@@ -72,7 +93,7 @@ export function openExtensionPopup(
   popupUrl: string,
   anchor: { rightX: number; topY: number }
 ): void {
-  destroyPopup()
+  destroyPopupImmediate()
   currentAnchor = anchor
 
   const win = new BrowserWindow({
@@ -103,7 +124,7 @@ export function openExtensionPopup(
   win.setBounds({ x, y, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
 
   win.on('blur', () => {
-    if (popup === win) destroyPopup()
+    if (popup === win) closePopupWithFade()
   })
   win.on('closed', () => {
     if (popup === win) popup = null
@@ -111,20 +132,22 @@ export function openExtensionPopup(
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.key === 'Escape') {
       event.preventDefault()
-      destroyPopup()
+      closePopupWithFade()
     }
   })
 
-  // Affichage piloté par la taille réelle rapportée (`resizeExtensionPopup`),
-  // pas par `ready-to-show` (peindrait la taille par défaut AVANT que le vrai
-  // contenu ne soit mesuré — même piège de bulle qui saute de taille déjà
-  // rencontré et corrigé pour nos propres popovers, cf. popoverWindow.ts).
-  // Ce timer n'est qu'un FILET DE SÉCURITÉ si l'extension ne rapporte jamais rien.
+  // Affichage en fondu (`fadeWindowIn`, windowFade.ts — même délai/animation
+  // que toutes les autres bulles) piloté par la taille réelle rapportée
+  // (`resizeExtensionPopup`), pas par `ready-to-show` (peindrait la taille par
+  // défaut AVANT que le vrai contenu ne soit mesuré — même piège de bulle qui
+  // saute de taille déjà rencontré et corrigé pour nos propres popovers, cf.
+  // popoverWindow.ts). Ce timer n'est qu'un FILET DE SÉCURITÉ si l'extension
+  // ne rapporte jamais rien.
   clearFallbackShow()
   fallbackShowTimer = setTimeout(() => {
     fallbackShowTimer = null
     if (popup === win && !win.isDestroyed() && !win.isVisible()) {
-      win.showInactive()
+      fadeWindowIn(win)
       win.focus()
     }
   }, 600)
@@ -142,11 +165,11 @@ export function resizeExtensionPopup(width: number, height: number): void {
   popup.setBounds({ x, y, width: w, height: h })
   clearFallbackShow()
   if (!popup.isVisible()) {
-    popup.showInactive()
+    fadeWindowIn(popup)
     popup.focus()
   }
 }
 
 export function closeExtensionPopup(): void {
-  destroyPopup()
+  closePopupWithFade()
 }

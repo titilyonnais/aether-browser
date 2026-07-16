@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { CH } from '@shared/ipc'
 import type { ContextMenuRow, LocalRect, PopoverContent } from '@shared/types'
 import { disableNativeWindowTransitions } from './dwm'
+import { fadeWindowIn, fadeWindowOut } from './windowFade'
 
 let popup: BW | null = null
 let ready = false
@@ -113,24 +114,22 @@ export function openPopover(parent: BW, bounds: Rectangle, content: PopoverConte
   if (ready) push()
   else win.webContents.once('did-finish-load', push)
 
-  // Rendre la fenêtre visible AVANT que React ait fini de recevoir/peindre le
-  // nouveau contenu affiche un reste de l'ancien état (ou un flash vide) — le
-  // scintillement signalé. Un délai fixe (essayé précédemment) crée une
-  // COURSE avec un survol rapide entre onglets : un `hide()` peut arriver
-  // avant l'expiration du délai, puis le `showInactive()` différé s'exécute
-  // quand même ensuite → la bulle réapparaît toute seule (le « figement »
-  // signalé). À la place, on attend le vrai signal que le contenu a fini de
-  // se peindre : `resizePopoverWindow`, déclenché par le ResizeObserver du
-  // renderer une fois le nouveau contenu mesuré. `hidePopoverWindow` annule
-  // cette attente si l'utilisateur a déjà quitté la zone entre-temps.
-  // Ce timer n'est qu'un FILET DE SÉCURITÉ (contenu qui ne mesure jamais rien)
-  // — 200ms s'est révélé trop court : sur un premier affichage (renderer tout
-  // juste chargé, polices pas encore prêtes) le vrai signal ResizeObserver
-  // arrive parfois APRÈS, et la fenêtre apparaît alors à la taille par défaut
-  // avant de sauter à sa vraie taille l'instant d'après — le scintillement
-  // signalé. 500ms laisse largement le temps au vrai signal de gagner la
-  // course dans l'immense majorité des cas, sans changer le comportement de
-  // sécurité si le contenu ne mesure vraiment jamais rien.
+  // On attend le vrai signal que le contenu a fini de se peindre —
+  // `resizePopoverWindow`, déclenché par la mesure du renderer une fois le
+  // nouveau contenu rendu — avant de révéler la fenêtre EN FONDU
+  // (`fadeWindowIn`, windowFade.ts). Le fondu n'est pas qu'un habillage
+  // cosmétique ici : une fenêtre encore masquée peut ne composer AUCUN frame
+  // tant qu'elle n'est pas montrée, donc attendre plus ou moins longtemps
+  // avant `showInactive()` ne garantissait jamais que le contenu réel était
+  // peint — d'où la bulle translucide (fenêtre principale visible à travers)
+  // qui persistait malgré plusieurs passes de correction du seul TIMING.
+  // `fadeWindowIn` montre à opacité 0 (ce qui force Chromium à composer),
+  // masquant ainsi les tout premiers frames potentiellement incomplets.
+  // `hidePopoverWindow` annule cette attente si l'utilisateur a déjà quitté
+  // la zone entre-temps.
+  // Ce timer n'est qu'un FILET DE SÉCURITÉ (contenu qui ne mesure jamais rien,
+  // ex. page vide) — 500ms laisse largement le temps au vrai signal de
+  // gagner la course dans l'immense majorité des cas.
   if (!wasVisible) {
     pendingShow = true
     clearFallbackShow()
@@ -138,7 +137,7 @@ export function openPopover(parent: BW, bounds: Rectangle, content: PopoverConte
       fallbackShowTimer = null
       if (pendingShow && !win.isDestroyed()) {
         pendingShow = false
-        win.showInactive()
+        fadeWindowIn(win)
       }
     }, 500)
   }
@@ -198,7 +197,7 @@ export function hidePopoverWindow(): void {
   pendingShow = false
   clearFallbackShow()
   clearBoundsDebounce()
-  if (popup && !popup.isDestroyed()) popup.hide()
+  if (popup && !popup.isDestroyed()) fadeWindowOut(popup)
 }
 
 /** Ajuste la taille (position ancrée en haut-gauche) au contenu réel — c'est
@@ -220,7 +219,7 @@ export function resizePopoverWindow(width: number, height: number): void {
     if (pendingShow) {
       pendingShow = false
       clearFallbackShow()
-      popup.showInactive()
+      fadeWindowIn(popup)
     }
   }, 60)
 }

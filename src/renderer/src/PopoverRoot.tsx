@@ -6,7 +6,6 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { PopoverContent } from '@shared/types'
-import { cn } from '@/lib/utils'
 import { AppMenuPopoverCard } from '@/components/chrome/AppMenuPopoverCard'
 import { ContextMenuPopoverCard } from '@/components/chrome/ContextMenuPopoverCard'
 import { ExtensionsMenuPopoverCard } from '@/components/chrome/ExtensionsMenuPopoverCard'
@@ -34,33 +33,14 @@ export default function PopoverRoot() {
   const locale = 'fr'
   const rootRef = useRef<HTMLDivElement | null>(null)
 
-  // Neutralise toute transition CSS (ex. `transition-colors` au survol d'une
-  // ligne de menu) pendant les ~120ms suivant une nouvelle ouverture — un clic
-  // droit atterrit souvent avec le curseur déjà AU-DESSUS d'une ligne : la
-  // toute première évaluation de `:hover` par Chromium anime alors base→survol
-  // pile pendant que la fenêtre devient visible, se superposant à l'ouverture
-  // elle-même (repéré par analyse image par image d'un enregistrement fourni
-  // par l'utilisateur : contenu déjà rendu, mais « pop » visible malgré tout).
-  // `setTimeout`, pas `requestAnimationFrame` : cette fenêtre reste masquée
-  // jusqu'à ce que `report()` (plus bas) confirme sa taille — un rAF peut être
-  // fortement retardé par Chromium tant qu'une fenêtre n'est pas composée
-  // (déjà la cause d'un bug de latence corrigé précédemment), un minuteur non.
-  const [suppressTransitions, setSuppressTransitions] = useState(true)
-
   useEffect(
     () =>
       window.aether.popover.onSetContent((c) => {
         setContent(c)
         setContentNonce((n) => n + 1)
-        setSuppressTransitions(true)
       }),
     []
   )
-
-  useEffect(() => {
-    const t = setTimeout(() => setSuppressTransitions(false), 120)
-    return () => clearTimeout(t)
-  }, [contentNonce])
 
   useEffect(() => {
     void window.aether.settings.get().then((s) => {
@@ -101,11 +81,7 @@ export default function PopoverRoot() {
   if (!content) return null
 
   return (
-    <div
-      key={contentNonce}
-      ref={rootRef}
-      className={cn('inline-block', suppressTransitions && '[&_*]:!transition-none')}
-    >
+    <div key={contentNonce} ref={rootRef} className="inline-block">
       {content.kind === 'site-info' && <SiteInfoCard pageId={content.pageId} locale={locale} />}
       {content.kind === 'tab-preview' && (
         <TabPreviewCard pageId={content.pageId} showPreview={showPreview} locale={locale} />

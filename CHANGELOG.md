@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.44.0] — 2026-07-16
+
+### Corrigé
+
+- **La bulle « translucide puis pop » persistait malgré le fix DWM de la 0.43.0 — mécanisme d'affichage entièrement réécrit.** Vraie cause, cette fois confirmée par une seconde analyse image par image : une fenêtre popup encore masquée peut ne composer AUCUN frame tant qu'elle n'est pas montrée (rien à afficher), donc aucun délai côté JS — aussi long soit-il — ne pouvait garantir que le contenu était réellement peint avant `showInactive()`. Toutes les bulles (menu principal, menus contextuels, infos de site, aperçus d'onglet, liste d'extensions, vraie bulle d'extension…) utilisent désormais un fondu natif partagé (opacité pilotée depuis le processus principal, immunisé contre le throttling de `requestAnimationFrame` sur les fenêtres masquées) : la fenêtre apparaît à opacité 0 — ce qui force la composition réelle du contenu — puis devient visible en ~90ms, masquant ainsi les tout premiers instants de rendu. La fermeture suit exactement le même fondu, en sens inverse — même délai et même animation pour l'arrivée et la fermeture, sur toutes les bulles de l'appli.
+
 ## [0.43.0] — 2026-07-16
 
 ### Corrigé
