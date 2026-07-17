@@ -16,6 +16,7 @@ import { isQuitting } from './quitState'
 import { getSettings } from './settings'
 import { checkForUpdates, initUpdater } from './updater'
 import { ViewManager } from './viewManager'
+import { registerWindowContext } from './windowRegistry'
 
 // Filet de sécurité pour une classe d'erreur bien identifiée : un canal IPC
 // « one-way » (`ipcMain.on`, fire-and-forget — contrairement à `.handle()`,
@@ -85,6 +86,12 @@ if (!gotLock) {
     views = new ViewManager(mainWindow, delegate)
     // Les nouvelles vues naîtront dans la partition (session isolée) du profil actif.
     views.setActiveProfile(activeProfileId, profilesRepo.get(activeProfileId)?.isPrivate ?? false)
+    // Fondation multi-fenêtre (windowRegistry.ts) : enregistrée dès maintenant
+    // même si une seule fenêtre existe encore — `ipc.ts` ne s'en sert pas
+    // encore (`registerIpc` ci-dessous reste sur l'unique {win, views}
+    // fourni ici), ce n'est donc pour l'instant qu'un registre tenu à jour en
+    // parallèle, sans effet observable.
+    registerWindowContext({ win: mainWindow, views })
 
     registerIpc({ win: mainWindow, views, router })
 

@@ -375,7 +375,7 @@ export class ViewManager {
     this.lru.push(pageId)
   }
 
-  // ─── Profil actif ────────────────────────────────────────────────────────
+  // ─── Profil actif (état PROPRE à cette fenêtre — chaque ViewManager a le sien) ─
 
   /** Fixe le profil dont la partition (session isolée) sert aux nouvelles vues. */
   setActiveProfile(profileId: ProfileId, isPrivate: boolean): void {
@@ -384,8 +384,34 @@ export class ViewManager {
     ensurePartitionHardened(webPartitionForProfile(profileId, isPrivate), profileId, this.win)
   }
 
+  getActiveProfileId(): ProfileId {
+    return this.activeProfileId
+  }
+
+  isActiveProfilePrivate(): boolean {
+    return this.activeProfilePrivate
+  }
+
   activePartition(): string {
     return webPartitionForProfile(this.activeProfileId, this.activeProfilePrivate)
+  }
+
+  // ─── Espace actif (idem — par fenêtre, pas par profil) ──────────────────────
+  // Avant le support multi-fenêtre, « l'espace actif » d'un profil était une
+  // clé partagée en base (`state.activeSpaceId.<profileId>`) — correct pour
+  // UNE fenêtre, mais deux fenêtres sur le MÊME profil se disputeraient cette
+  // même valeur si elle restait globale. Chaque ViewManager garde désormais
+  // la sienne ; la valeur en base ne sert plus qu'à SEMER un défaut au moment
+  // où une fenêtre s'ouvre sur ce profil (voir `setActiveSpaceId` plus bas).
+
+  private activeSpaceId: SpaceId | null = null
+
+  getActiveSpaceId(): SpaceId | null {
+    return this.activeSpaceId
+  }
+
+  setActiveSpaceId(id: SpaceId): void {
+    this.activeSpaceId = id
   }
 
   // ─── Cycle de vie des vues ─────────────────────────────────────────────────

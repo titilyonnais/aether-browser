@@ -424,7 +424,7 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   // l'appli (favoris, dossiers, onglets, espaces, page web) : une bulle DOM
   // mesure sa vraie taille et se positionne exactement, contrairement à un
   // menu natif dont Electron ne permet pas de connaître la largeur réelle.
-  ipcMain.on(CH.contextMenuAction, (_e, id: string) => runContextMenuAction(String(id)))
+  ipcMain.on(CH.contextMenuAction, (e, id: string) => runContextMenuAction(e.sender, String(id)))
 
   // ─── Fenêtre ───────────────────────────────────────────────────────────────
 
@@ -1365,8 +1365,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     openExtensionPopup(win, views.activePartition(), info.popupUrl, anchor)
   })
 
-  ipcMain.on(CH.extensionPopupResize, (_e, size: { width: number; height: number }) => {
-    resizeExtensionPopup(size.width, size.height)
+  ipcMain.on(CH.extensionPopupResize, (e, size: { width: number; height: number }) => {
+    resizeExtensionPopup(e.sender, size.width, size.height)
   })
 
   // Réponse à la popup de confirmation d'installation (voir onInstallExtensionRequested
@@ -1420,8 +1420,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   ipcMain.on(CH.popoverHide, () => hidePopoverWindow())
 
-  ipcMain.on(CH.popoverResize, (_e, size: { width: number; height: number }) => {
-    resizePopoverWindow(size.width, size.height)
+  ipcMain.on(CH.popoverResize, (e, size: { width: number; height: number }) => {
+    resizePopoverWindow(e.sender, size.width, size.height)
   })
 
   // Le popup natif du contenu d'un dossier de favoris (fenêtre séparée, aucun
