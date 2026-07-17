@@ -232,6 +232,76 @@ export interface ViewManagerDelegate {
   onInstallExtensionRequested(pageId: PageId, extensionId: string, name: string, iconUrl: string | null): void
 }
 
+/** Taille de lot partagée entre la collecte et l'application (voir
+ * `ViewManager.runTranslation`) — DOIT rester identique des deux côtés,
+ * chaque lot étant retrouvé par son index dans `window.__aetherPendingNodes`. */
+const TRANSLATE_BATCH_SIZE = 50
+
+/** Exécuté DANS la page (`executeJavaScript`) : réinitialise au HTML
+ * d'origine si nécessaire, parcourt les nœuds de texte traduisibles, les
+ * garde en vie sur `window` (une référence DOM ne peut pas traverser
+ * `executeJavaScript`, seules des valeurs sérialisables le peuvent) et ne
+ * renvoie que les lots de texte joints — le réseau se fait côté main
+ * (voir `runTranslation`). */
+const COLLECT_TRANSLATABLE_TEXT_SCRIPT = `(() => {
+  if (window.__aetherOriginalHTML !== undefined) {
+    document.body.innerHTML = window.__aetherOriginalHTML
+  } else {
+    window.__aetherOriginalHTML = document.body.innerHTML
+  }
+
+  const SKIP_TAGS = new Set([
+    'SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION',
+    'IFRAME', 'CODE', 'PRE', 'TITLE'
+  ])
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT
+      const parent = node.parentElement
+      if (!parent || SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT
+      if (parent.closest('[contenteditable="true"]')) return NodeFilter.FILTER_REJECT
+      return NodeFilter.FILTER_ACCEPT
+    }
+  })
+  const nodes = []
+  let current
+  while ((current = walker.nextNode())) nodes.push(current)
+  window.__aetherPendingNodes = nodes
+
+  const BATCH_SIZE = ${TRANSLATE_BATCH_SIZE}
+  const batches = []
+  for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
+    const batch = nodes.slice(i, i + BATCH_SIZE)
+    batches.push(batch.map((node) => node.nodeValue.replace(/\\s*\\n\\s*/g, ' ').trim()).join('\\n'))
+  }
+  return batches
+})()`
+
+/** Exécuté DANS la page — reçoit les lots déjà traduits (ou `null` pour un
+ * lot dont la requête réseau a échoué, laissé en langue d'origine) et les
+ * réapplique aux nœuds posés par `COLLECT_TRANSLATABLE_TEXT_SCRIPT`. Une
+ * vraie fonction (pas juste un gabarit de chaîne) pour garder le corps
+ * lisible/typable ; son `.toString()` est injecté tel quel dans le script
+ * exécuté (voir `runTranslation`), donc RIEN ici ne doit fermer sur une
+ * variable extérieure — uniquement l'argument reçu et les globaux de page.
+ */
+function APPLY_TRANSLATED_TEXT_FN(translatedBatches: (string[] | null)[], batchSize: number): void {
+  const w = window as unknown as { __aetherPendingNodes?: Text[] }
+  const nodes = w.__aetherPendingNodes ?? []
+  for (let b = 0; b < translatedBatches.length; b++) {
+    const lines = translatedBatches[b]
+    if (!lines) continue
+    const batch = nodes.slice(b * batchSize, b * batchSize + batchSize)
+    for (let j = 0; j < batch.length && j < lines.length; j++) {
+      const original = batch[j].nodeValue ?? ''
+      const leading = /^\s*/.exec(original)?.[0] ?? ''
+      const trailing = /\s*$/.exec(original)?.[0] ?? ''
+      batch[j].nodeValue = leading + lines[j].trim() + trailing
+    }
+  }
+  delete w.__aetherPendingNodes
+}
+
 export class ViewManager {
   private views = new Map<PageId, WebContentsView>()
   private runtime = new Map<PageId, PageRuntime>()
@@ -518,12 +588,14 @@ export class ViewManager {
     wc.on('leave-html-full-screen', () => this.delegate.onFullscreenChange(pageId, false))
 
     wc.on('focus', () => {
-      const timer = this.suppressNextFocusHide.get(pageId)
-      if (timer !== undefined) {
-        clearTimeout(timer)
-        this.suppressNextFocusHide.delete(pageId)
-        return
-      }
+      // Ignore TOUS les focus tant que la fenêtre de suppression est active
+      // (pas seulement le premier) — un rechargement (`untranslate`) peut
+      // redéclencher plusieurs évènements `focus` rapprochés sur certains
+      // sites (redirections, scripts tiers/publicités qui reprennent puis
+      // rendent le focus) ; consommer la garde au tout premier laissait les
+      // suivants fermer la bulle de traduction à tort. Le `setTimeout` posé
+      // par l'appelant (`untranslate`) reste l'unique responsable du nettoyage.
+      if (this.suppressNextFocusHide.has(pageId)) return
       this.delegate.onPageFocused(pageId)
     })
 
@@ -991,86 +1063,84 @@ export class ViewManager {
    * la page (donc AUCUNE bannière possible, structurellement) :
    *  1. parcourt les nœuds de texte visibles du DOM (`TreeWalker`, en
    *     ignorant script/style/code/formulaires/contenteditable) ;
-   *  2. les regroupe en lots, chaque nœud sur sa propre ligne, et interroge
-   *     l'API publique `translate_a/single` (même service que le widget,
-   *     mais SANS son JS/UI — juste un endpoint JSON) ;
-   *  3. reconstruit la traduction par nœud : Google peut re-découper une
+   *  2. les regroupe en lots, chaque nœud sur sa propre ligne ;
+   *  3. le process PRINCIPAL (pas la page — voir `runTranslation`, un CSP de
+   *     page bloquait sinon `fetch()` sur certains sites, ex. GitHub, sans
+   *     la moindre erreur visible) interroge l'API publique `translate_a/single`
+   *     (même service que le widget, mais SANS son JS/UI — juste un endpoint
+   *     JSON) ;
+   *  4. reconstruit la traduction par nœud : Google peut re-découper une
    *     ligne en plusieurs phrases dans sa réponse, donc on recolle les
    *     segments jusqu'à ce que le texte ORIGINAL d'un segment se termine
    *     par `\n` (frontière de ligne fiable, vérifiée empiriquement) ;
-   *  4. remplace `textContent` des nœuds correspondants, sans toucher à la
+   *  5. remplace `textContent` des nœuds correspondants, sans toucher à la
    *     structure du DOM.
-   * L'échec d'un lot (réseau, CSP du site qui bloque `fetch`) est silencieux
-   * et n'affecte que ce lot — jamais de bannière d'erreur, conformément à
-   * la demande explicite de l'utilisateur.
+   * L'échec d'un lot (réseau) est silencieux et n'affecte que ce lot —
+   * jamais de bannière d'erreur, conformément à la demande explicite de
+   * l'utilisateur.
    */
   translate(id: PageId, targetLang: string, sourceLang = 'auto'): void {
     const wc = this.liveContents(id)
     if (!wc) return
-    const lang = JSON.stringify(targetLang)
-    const srcLang = JSON.stringify(sourceLang || 'auto')
-    void wc.executeJavaScript(
-      `(async () => {
-        // Repart toujours du texte ORIGINAL (pas de la traduction précédente,
-        // sinon changer de langue cible traduirait une traduction déjà faite).
-        if (window.__aetherOriginalHTML !== undefined) {
-          document.body.innerHTML = window.__aetherOriginalHTML
-        } else {
-          window.__aetherOriginalHTML = document.body.innerHTML
-        }
+    void this.runTranslation(wc, targetLang, sourceLang || 'auto')
+  }
 
-        const SKIP_TAGS = new Set([
-          'SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION',
-          'IFRAME', 'CODE', 'PRE', 'TITLE'
-        ])
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-          acceptNode(node) {
-            if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT
-            const parent = node.parentElement
-            if (!parent || SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT
-            if (parent.closest('[contenteditable="true"]')) return NodeFilter.FILTER_REJECT
-            return NodeFilter.FILTER_ACCEPT
+  /** Les appels réseau vers `translate_a/single` se font ICI (process
+   * principal), plus depuis la page (`fetch()` dans `executeJavaScript`
+   * comme la toute première version) — un site avec un CSP `connect-src`
+   * strict (GitHub, entre autres) bloquait CHAQUE lot, silencieusement par
+   * design (voir plus haut), donnant l'impression que rien ne se passait
+   * du tout à la traduction. Node n'est soumis à AUCUN CSP de page. Les
+   * nœuds de texte eux-mêmes ne peuvent pas traverser `executeJavaScript`
+   * (seules des valeurs sérialisables le peuvent) : ils restent posés sur
+   * `window.__aetherPendingNodes` ENTRE les deux appels — valide tant que la
+   * page ne navigue pas dans l'intervalle (le seul risque : un très gros
+   * document avec beaucoup de lots à traduire un par un). */
+  private async runTranslation(wc: WebContents, targetLang: string, sourceLang: string): Promise<void> {
+    let batches: string[]
+    try {
+      batches = (await wc.executeJavaScript(COLLECT_TRANSLATABLE_TEXT_SCRIPT, true)) as string[]
+    } catch {
+      return
+    }
+    if (!Array.isArray(batches) || batches.length === 0) return
+
+    const translated: (string[] | null)[] = []
+    for (const joined of batches) {
+      const url =
+        'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=' +
+        encodeURIComponent(sourceLang) +
+        '&tl=' +
+        encodeURIComponent(targetLang) +
+        '&q=' +
+        encodeURIComponent(joined)
+      try {
+        const res = await fetch(url)
+        const data = (await res.json()) as unknown[]
+        const segments = (data?.[0] as [string, string][] | undefined) ?? []
+        const lines: string[] = []
+        let acc = ''
+        segments.forEach((seg, i) => {
+          acc += seg[0]
+          if (seg[1]?.endsWith('\n') || i === segments.length - 1) {
+            lines.push(acc)
+            acc = ''
           }
         })
-        const nodes = []
-        let current
-        while ((current = walker.nextNode())) nodes.push(current)
+        translated.push(lines)
+      } catch {
+        // Ce lot échoue (réseau) — laissé en langue d'origine, silencieusement,
+        // les autres lots continuent.
+        translated.push(null)
+      }
+    }
 
-        const BATCH_SIZE = 50
-        for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
-          const batch = nodes.slice(i, i + BATCH_SIZE)
-          const joined = batch.map((node) => node.nodeValue.replace(/\\s*\\n\\s*/g, ' ').trim()).join('\\n')
-          const url =
-            'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=' +
-            encodeURIComponent(${srcLang}) + '&tl=' + encodeURIComponent(${lang}) + '&q=' + encodeURIComponent(joined)
-          try {
-            const res = await fetch(url)
-            const data = await res.json()
-            const segments = (data && data[0]) || []
-            const lines = []
-            let acc = ''
-            for (const seg of segments) {
-              acc += seg[0]
-              const isLastSeg = seg === segments[segments.length - 1]
-              if (String(seg[1]).endsWith('\\n') || isLastSeg) {
-                lines.push(acc)
-                acc = ''
-              }
-            }
-            for (let j = 0; j < batch.length && j < lines.length; j++) {
-              const original = batch[j].nodeValue
-              const leading = (original.match(/^\\s*/) || [''])[0]
-              const trailing = (original.match(/\\s*$/) || [''])[0]
-              batch[j].nodeValue = leading + lines[j].trim() + trailing
-            }
-          } catch (e) {
-            // Ce lot échoue (réseau, CSP du site) — on continue avec les suivants,
-            // silencieusement : jamais d'UI d'erreur visible dans la page.
-          }
-        }
-      })()`,
-      true
-    )
+    await wc
+      .executeJavaScript(
+        `(${APPLY_TRANSLATED_TEXT_FN.toString()})(${JSON.stringify(translated)}, ${TRANSLATE_BATCH_SIZE})`,
+        true
+      )
+      .catch(() => undefined)
   }
 
   /**

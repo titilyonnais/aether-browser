@@ -4,6 +4,13 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.48.1] — 2026-07-17
+
+### Corrigé
+
+- **Le popup de traduction se fermait à tort en revenant à l'original sur certains sites** : le rechargement déclenché par « Afficher l'original » pouvait provoquer PLUSIEURS évènements de focus rapprochés sur des pages complexes (redirections, scripts tiers) — seul le premier était couvert par la garde anti-fermeture, les suivants fermaient la bulle. La garde couvre désormais toute la fenêtre de temps, pas un seul évènement.
+- **La traduction ne faisait rien sur les sites avec un CSP strict** (GitHub notamment) : les requêtes vers l'API de traduction se faisaient jusqu'ici depuis la page elle-même, bloquées silencieusement par le `Content-Security-Policy` du site. Elles partent désormais du process principal, qui n'est soumis à aucun CSP de page.
+
 ## [0.48.0] — 2026-07-17
 
 ### Ajouté
