@@ -394,6 +394,19 @@ export class ViewManager {
     }
   }
 
+  /** Aperçu approximatif pour Réglages › Performance — pages vivantes (vues
+   * natives réellement chargées, pas le total de pages en base) et mémoire
+   * cumulée de leurs processus. Approximatif par nature (deux pages peuvent
+   * partager un même processus renderer — le compter deux fois grossit
+   * légèrement l'estimation plutôt que de la sous-estimer). */
+  getStats(): { liveViews: number; totalMemoryKB: number } {
+    let totalMemoryKB = 0
+    for (const id of this.views.keys()) {
+      totalMemoryKB += this.getMemoryKB(id) ?? 0
+    }
+    return { liveViews: this.views.size, totalMemoryKB }
+  }
+
   /** Câble tous les événements d'une page web. */
   private wire(pageId: PageId, wc: WebContents): void {
     const nav = wc.navigationHistory

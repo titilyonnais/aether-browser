@@ -28,6 +28,7 @@ interface MuseState {
   clearThread(spaceId: SpaceId): void
 
   addNote(note: NoteItem): void
+  updateNoteContent(id: string, content: string): void
   removeNote(id: string): void
 }
 
@@ -91,5 +92,7 @@ export const useMuseStore = create<MuseState>()((set, get) => ({
   },
 
   addNote: (note) => set({ notes: [note, ...get().notes] }),
+  updateNoteContent: (id, content) =>
+    set({ notes: get().notes.map((n) => (n.id === id ? { ...n, content } : n)) }),
   removeNote: (id) => set({ notes: get().notes.filter((n) => n.id !== id) })
 }))

@@ -1218,6 +1218,8 @@ function PerformanceSection() {
         </div>
       </Block>
 
+      <PerformanceStatsBlock />
+
       <Block title={t('settings.performance.engineTitle')} hint={t('settings.performance.engineHint')}>
         <div className="space-y-1">
           <EngineFlagToggle id="hardwareAcceleration" />
@@ -1225,6 +1227,58 @@ function PerformanceSection() {
         </div>
       </Block>
     </div>
+  )
+}
+
+function PerformanceStatsBlock() {
+  const t = useT()
+  const [stats, setStats] = useState<{ liveViews: number; totalMemoryKB: number; previewsDirBytes: number } | null>(
+    null
+  )
+  const [loading, setLoading] = useState(false)
+
+  const refresh = (): void => {
+    setLoading(true)
+    void window.aether.performance
+      .stats()
+      .then(setStats)
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(refresh, [])
+
+  return (
+    <Block title={t('settings.performance.statsTitle')} hint={t('settings.performance.statsHint')}>
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { n: stats?.liveViews ?? '—', label: t('settings.performance.statLiveViews') },
+          {
+            n: stats ? formatBytes(stats.totalMemoryKB * 1024) : '—',
+            label: t('settings.performance.statMemory')
+          },
+          {
+            n: stats ? formatBytes(stats.previewsDirBytes) : '—',
+            label: t('settings.performance.statPreviews')
+          }
+        ].map((stat) => (
+          <div
+            key={stat.label}
+            className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 text-center"
+          >
+            <p className="font-display text-[20px] leading-none text-ink">{stat.n}</p>
+            <p className="mt-1.5 text-[10px] uppercase tracking-[0.12em] text-ink-faint">{stat.label}</p>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={refresh}
+        disabled={loading}
+        className="mt-3 rounded-full border border-white/[0.1] bg-white/[0.03] px-4 py-1.5 text-[11.5px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink disabled:opacity-50"
+      >
+        {t('settings.performance.statsRefresh')}
+      </button>
+    </Block>
   )
 }
 
@@ -2303,6 +2357,8 @@ function SelectInput({
     <div ref={ref} className="relative">
       <button
         type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
         className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[12px] text-ink outline-none transition-colors hover:bg-white/[0.05] focus:border-glacier/40"
@@ -2315,11 +2371,13 @@ function SelectInput({
         />
       </button>
       {open && (
-        <div className="glass-strong absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-60 overflow-y-auto rounded-lg p-1">
+        <div role="listbox" className="glass-strong absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-60 overflow-y-auto rounded-lg p-1">
           {options.map((o) => (
             <button
               key={o.value}
               type="button"
+              role="option"
+              aria-selected={o.value === value}
               onClick={() => {
                 onChange(o.value)
                 setOpen(false)

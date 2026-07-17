@@ -172,6 +172,7 @@ const api: AetherApi = {
   },
   notes: {
     create: (n) => ipcRenderer.invoke(CH.noteCreate, n),
+    update: (id: string, content: string) => ipcRenderer.invoke(CH.noteUpdate, id, content),
     remove: (id: string) => ipcRenderer.invoke(CH.noteRemove, id)
   },
   history: {
@@ -190,6 +191,9 @@ const api: AetherApi = {
   },
   previews: {
     cleanup: () => ipcRenderer.invoke(CH.previewsCleanup)
+  },
+  performance: {
+    stats: () => ipcRenderer.invoke(CH.performanceStats)
   },
   searchEngines: {
     list: () => ipcRenderer.invoke(CH.searchEnginesList),

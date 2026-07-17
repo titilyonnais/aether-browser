@@ -44,3 +44,20 @@ nsis:
   shortcutName: Aether
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
+# Ciblage Linux ajouté (config seule) — NON VÉRIFIÉ : ce dépôt n'a été packagé/
+# testé que sur Windows jusqu'ici, `.github/workflows/release.yml` tourne sur
+# `windows-latest` et ne construit/publie que la cible Windows ci-dessus (donc
+# CETTE section reste inerte tant que le workflow n'est pas aussi étendu à un
+# runner Linux — volontairement pas fait dans le même changement, modifier un
+# pipeline CI qui fonctionne sans pouvoir vérifier qu'un build Linux réussit
+# vraiment aurait été plus risqué que d'ajouter la config seule). Modules
+# natifs (better-sqlite3, koffi) à revérifier : leurs binaires prébuilts
+# doivent exister pour linux-x64, sans quoi le build échouerait à l'usage réel.
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  category: Network
+  icon: build/icon.png

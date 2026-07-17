@@ -77,6 +77,26 @@ export interface PreviewsCleanupResult {
   freedBytes: number
 }
 
+/** Taille actuelle du dossier d'aperçus (Réglages › Performance). */
+export async function previewsDirSize(): Promise<number> {
+  ensureDir()
+  let entries: string[]
+  try {
+    entries = await readdir(previewsDir())
+  } catch {
+    return 0
+  }
+  let total = 0
+  for (const file of entries) {
+    try {
+      total += (await stat(join(previewsDir(), file))).size
+    } catch {
+      // Disparu entretemps — ignoré.
+    }
+  }
+  return total
+}
+
 /** Supprime les aperçus ORPHELINS (page fermée sans passer par `deletePreview`
  * — suppression d'un espace/profil entier, crash) puis, si le dossier dépasse
  * encore une des deux limites, évince les plus anciens (mtime croissant)

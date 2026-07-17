@@ -694,6 +694,13 @@ export async function pinNote(content: string): Promise<void> {
   useUiStore.getState().toast(tShell('shell.toast.pinnedToNotes'))
 }
 
+export async function updateNote(id: string, content: string): Promise<void> {
+  const trimmed = content.trim()
+  if (!trimmed) return
+  useMuseStore.getState().updateNoteContent(id, trimmed)
+  await window.aether.notes.update(id, trimmed)
+}
+
 export async function removeNote(id: string): Promise<void> {
   useMuseStore.getState().removeNote(id)
   await window.aether.notes.remove(id)

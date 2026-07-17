@@ -577,6 +577,10 @@ export const notesRepo = {
     return toNote(row)
   },
 
+  update(id: string, content: string): void {
+    getDb().prepare('UPDATE notes SET content = ? WHERE id = ?').run(content, id)
+  },
+
   remove(id: string): void {
     getDb().prepare('DELETE FROM notes WHERE id = ?').run(id)
   }

@@ -8,6 +8,7 @@ import {
   ArrowUp,
   Copy,
   MessageCircle,
+  Pencil,
   Pin,
   RefreshCw,
   Settings2,
@@ -21,7 +22,7 @@ import type { AiStatus } from '@shared/types'
 import { Favicon } from '@/components/ui/Favicon'
 import { Spinner } from '@/components/ui/Spinner'
 import { useT, type TFunction } from '@/i18n/useT'
-import { getActivePage, museAbort, museSend, pinNote, removeNote } from '@/lib/actions'
+import { getActivePage, museAbort, museSend, pinNote, removeNote, updateNote } from '@/lib/actions'
 import { cn, timeAgo } from '@/lib/utils'
 import { useMuseStore, type MuseMessage } from '@/stores/muse'
 import { usePagesStore } from '@/stores/pages'
@@ -566,6 +567,18 @@ function NotesTab() {
   const t = useT()
   const spaceId = useSpacesStore((s) => s.activeSpaceId)
   const notes = useMuseStore((s) => s.notes).filter((n) => n.spaceId === spaceId)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+
+  const startEdit = (id: string, content: string): void => {
+    setEditingId(id)
+    setDraft(content)
+  }
+
+  const commitEdit = (id: string): void => {
+    void updateNote(id, draft)
+    setEditingId(null)
+  }
 
   if (notes.length === 0) {
     return (
@@ -581,31 +594,65 @@ function NotesTab() {
   return (
     <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
       <AnimatePresence initial={false}>
-        {notes.map((note) => (
-          <motion.article
-            key={note.id}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-            className="group rounded-xl border border-white/[0.07] bg-white/[0.02] p-3"
-          >
-            <p className="line-clamp-5 select-text whitespace-pre-wrap text-[12px] leading-relaxed text-ink-dim">
-              {note.content}
-            </p>
-            <div className="mt-2 flex items-center gap-2 text-[10px] text-ink-faint">
-              {note.pageTitle && <span className="truncate">{note.pageTitle}</span>}
-              <span className="ml-auto shrink-0">{timeAgo(note.createdAt)}</span>
-              <button
-                type="button"
-                title={t('focusCanvas.musePanel.deleteNote')}
-                onClick={() => void removeNote(note.id)}
-                className="grid h-5 w-5 shrink-0 place-items-center rounded opacity-0 transition-opacity hover:bg-red-400/10 hover:text-red-200 group-hover:opacity-100"
-              >
-                <Trash2 size={10.5} strokeWidth={1.7} />
-              </button>
-            </div>
-          </motion.article>
-        ))}
+        {notes.map((note) => {
+          const isEditing = editingId === note.id
+          return (
+            <motion.article
+              key={note.id}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97 }}
+              className="group rounded-xl border border-white/[0.07] bg-white/[0.02] p-3"
+            >
+              {isEditing ? (
+                <textarea
+                  autoFocus
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setEditingId(null)
+                    else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) commitEdit(note.id)
+                  }}
+                  onBlur={() => commitEdit(note.id)}
+                  rows={4}
+                  className="w-full resize-none rounded-lg bg-white/[0.04] p-2 text-[12px] leading-relaxed text-ink outline-none"
+                />
+              ) : (
+                <p
+                  onClick={() => startEdit(note.id, note.content)}
+                  title={t('focusCanvas.musePanel.editNote')}
+                  className="line-clamp-5 cursor-text select-text whitespace-pre-wrap text-[12px] leading-relaxed text-ink-dim"
+                >
+                  {note.content}
+                </p>
+              )}
+              <div className="mt-2 flex items-center gap-2 text-[10px] text-ink-faint">
+                {note.pageTitle && <span className="truncate">{note.pageTitle}</span>}
+                <span className="ml-auto shrink-0">{timeAgo(note.createdAt)}</span>
+                {!isEditing && (
+                  <button
+                    type="button"
+                    title={t('focusCanvas.musePanel.editNote')}
+                    aria-label={t('focusCanvas.musePanel.editNote')}
+                    onClick={() => startEdit(note.id, note.content)}
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-ink-dim group-hover:opacity-100"
+                  >
+                    <Pencil size={10.5} strokeWidth={1.7} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  title={t('focusCanvas.musePanel.deleteNote')}
+                  aria-label={t('focusCanvas.musePanel.deleteNote')}
+                  onClick={() => void removeNote(note.id)}
+                  className="grid h-5 w-5 shrink-0 place-items-center rounded opacity-0 transition-opacity hover:bg-red-400/10 hover:text-red-200 group-hover:opacity-100"
+                >
+                  <Trash2 size={10.5} strokeWidth={1.7} />
+                </button>
+              </div>
+            </motion.article>
+          )
+        })}
       </AnimatePresence>
     </div>
   )

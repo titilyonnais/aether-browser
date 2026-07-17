@@ -191,6 +191,7 @@ export const CH = {
 
   // Notes
   noteCreate: 'note:create',
+  noteUpdate: 'note:update',
   noteRemove: 'note:remove',
 
   // Historique
@@ -206,6 +207,7 @@ export const CH = {
   settingsChooseDownloadDir: 'settings:choose-download-dir',
   settingsReset: 'settings:reset',
   previewsCleanup: 'previews:cleanup',
+  performanceStats: 'performance:stats',
 
   // Moteurs de recherche personnalisés
   searchEnginesList: 'search-engines:list',
@@ -483,6 +485,7 @@ export interface AetherApi {
       pageTitle: string | null
       content: string
     }): Promise<NoteItem>
+    update(id: string, content: string): Promise<void>
     remove(id: string): Promise<void>
   }
   history: {
@@ -506,6 +509,10 @@ export interface AetherApi {
     /** Supprime les aperçus orphelins + évince les plus anciens si les
      * limites de taille/nombre sont dépassées. Retourne ce qui a été fait. */
     cleanup(): Promise<{ removedOrphans: number; removedForLimit: number; freedBytes: number }>
+  }
+  performance: {
+    /** Aperçu approximatif pour Réglages › Performance. */
+    stats(): Promise<{ liveViews: number; totalMemoryKB: number; previewsDirBytes: number }>
   }
   searchEngines: {
     list(): Promise<CustomSearchEngine[]>

@@ -168,6 +168,7 @@ export const focusCanvas: Record<string, string> = {
   'focusCanvas.musePanel.notesEmptyLine1': 'Aucune note épinglée.',
   'focusCanvas.musePanel.notesEmptyLine2': 'Survolez une réponse de Muse et épinglez-la.',
   'focusCanvas.musePanel.deleteNote': 'Supprimer',
+  'focusCanvas.musePanel.editNote': 'Modifier',
   'focusCanvas.musePanel.inputPlaceholderDisabled': 'Aucune intelligence disponible',
   'focusCanvas.musePanel.inputPlaceholder': 'Demandez à Muse…',
   'focusCanvas.musePanel.send': 'Envoyer (⏎)',

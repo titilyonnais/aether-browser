@@ -228,6 +228,9 @@ export function PageStrip() {
               else tabRefs.current.delete(id)
             }}
             type="button"
+            role="tab"
+            aria-selected={active}
+            aria-label={page.title || domainOf(page.url)}
             data-page-id={id}
             onClick={() => {
               if (drag.current?.active) return
@@ -305,6 +308,7 @@ export function PageStrip() {
         transition={TAB_SHIFT_TRANSITION}
         type="button"
         title={t('focusCanvas.pageStrip.newTab')}
+        aria-label={t('focusCanvas.pageStrip.newTab')}
         onClick={() => void openUrl(newTabUrl.trim() || 'aether://newtab')}
         className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-white/[0.05] hover:text-ink-dim"
       >

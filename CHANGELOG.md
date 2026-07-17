@@ -4,6 +4,15 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.47.2] — 2026-07-17
+
+### Ajouté
+
+- **Édition des notes** (Muse) : cliquer une note l'ouvre en édition (ou l'icône crayon au survol) — jusqu'ici création/suppression uniquement.
+- **Indicateurs de performance** (Réglages › Performance) : nombre de pages vivantes, mémoire approximative, taille du dossier d'aperçus.
+- **Accessibilité de base** : rôles/labels ARIA sur la bande de pages (`role="tab"`), les actions d'espace de la Constellation, les notes de Muse, et le nouveau menu déroulant des réglages (`listbox`/`option`).
+- **Support Linux** (config `electron-builder.yml`, cibles AppImage + deb) — **non vérifié** : ce dépôt n'a été packagé/testé que sur Windows, le workflow de release ne construit/publie encore que la cible Windows.
+
 ## [0.47.1] — 2026-07-17
 
 ### Ajouté

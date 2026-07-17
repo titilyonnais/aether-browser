@@ -93,7 +93,7 @@ import {
   openPageOptionsSchema,
   safeValidate
 } from './ipcSchemas'
-import { cleanupPreviews } from './previews'
+import { cleanupPreviews, previewsDirSize } from './previews'
 import { markQuitting } from './quitState'
 import { chooseDirectory, clearBrowsingData } from './sessionActions'
 import {
@@ -1176,6 +1176,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
       notesRepo.create({ ...n, content: n.content.slice(0, 20_000) })
   )
 
+  ipcMain.handle(CH.noteUpdate, (_e, id: string, content: string) =>
+    notesRepo.update(id, String(content).slice(0, 20_000))
+  )
   ipcMain.handle(CH.noteRemove, (_e, id: string) => notesRepo.remove(id))
 
   // ─── Historique ────────────────────────────────────────────────────────────
@@ -1229,6 +1232,12 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   })
 
   ipcMain.handle(CH.previewsCleanup, () => cleanupPreviews())
+
+  ipcMain.handle(CH.performanceStats, async () => {
+    const { liveViews, totalMemoryKB } = views.getStats()
+    const previewsDirBytes = await previewsDirSize()
+    return { liveViews, totalMemoryKB, previewsDirBytes }
+  })
 
   // ─── Moteurs de recherche personnalisés ──────────────────────────────────────
 

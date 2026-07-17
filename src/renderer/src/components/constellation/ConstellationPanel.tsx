@@ -184,6 +184,7 @@ function SpacesList() {
               <button
                 type="button"
                 title={t('shell.constellation.confirmDelete')}
+                aria-label={t('shell.constellation.confirmDelete')}
                 onClick={() => {
                   setConfirmId(null)
                   void removeSpace(space.id)
@@ -195,6 +196,7 @@ function SpacesList() {
               <button
                 type="button"
                 title={t('shell.constellation.cancel')}
+                aria-label={t('shell.constellation.cancel')}
                 onClick={() => setConfirmId(null)}
                 className="grid h-6 w-6 place-items-center rounded-md text-ink-faint hover:bg-white/[0.05]"
               >
@@ -206,6 +208,7 @@ function SpacesList() {
               <button
                 type="button"
                 title={t('shell.constellation.rename')}
+                aria-label={t('shell.constellation.rename')}
                 onClick={() => {
                   setDraft(space.name)
                   setEditingId(space.id)
@@ -217,6 +220,7 @@ function SpacesList() {
               <button
                 type="button"
                 title={t('shell.constellation.dissolveSpace')}
+                aria-label={t('shell.constellation.dissolveSpace')}
                 onClick={() => setConfirmId(space.id)}
                 className="grid h-6 w-6 place-items-center rounded-md text-ink-faint hover:bg-red-400/10 hover:text-red-200"
               >

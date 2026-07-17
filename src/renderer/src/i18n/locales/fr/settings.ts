@@ -180,6 +180,12 @@ export const settings: Record<string, string> = {
   'settings.performance.memorySaverHint':
     'Nombre de pages gardées actives en mémoire. Les autres deviennent des cartes légères, rechargées au clic. La valeur initiale s’adapte à la RAM de votre machine ; ce curseur la remplace définitivement une fois touché.',
   'settings.performance.pagesCount': '{{count}} pages',
+  'settings.performance.statsTitle': 'Aperçu des ressources',
+  'settings.performance.statsHint': 'Approximatif — quelques pages peuvent partager un même processus.',
+  'settings.performance.statLiveViews': 'pages vivantes',
+  'settings.performance.statMemory': 'mémoire (approx.)',
+  'settings.performance.statPreviews': 'dossier aperçus',
+  'settings.performance.statsRefresh': 'Actualiser',
   'settings.performance.engineTitle': 'Moteur',
   'settings.performance.engineHint': 'Réglages avancés du moteur Chromium — un redémarrage peut être nécessaire.',
 
