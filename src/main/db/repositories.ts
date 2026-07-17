@@ -111,14 +111,28 @@ export const profilesRepo = {
   },
 
   remove(id: ProfileId): void {
-    // Les espaces (et par cascade pages/notes) du profil disparaissent avec lui.
-    getDb().prepare('DELETE FROM spaces WHERE profile_id = ?').run(id)
-    getDb().prepare('DELETE FROM visits WHERE profile_id = ?').run(id)
-    getDb().prepare('DELETE FROM downloads WHERE profile_id = ?').run(id)
-    getDb().prepare('DELETE FROM extensions WHERE profile_id = ?').run(id)
-    getDb().prepare('DELETE FROM favorite_folders WHERE profile_id = ?').run(id)
-    getDb().prepare('DELETE FROM favorites WHERE profile_id = ?').run(id)
-    getDb().prepare('DELETE FROM profiles WHERE id = ?').run(id)
+    const db = getDb()
+    // Les espaces (et par cascade pages/notes) du profil disparaissent avec lui
+    // — mais `embeddings.ref_id` n'a aucune contrainte de clé étrangère (voir
+    // le même commentaire dans `spacesRepo.remove`), donc rien ne les efface
+    // par cascade : nettoyage explicite AVANT que les pages/notes ne disparaissent.
+    const refs = db
+      .prepare(
+        `SELECT p.id FROM pages p JOIN spaces s ON p.space_id = s.id WHERE s.profile_id = ?
+         UNION ALL
+         SELECT n.id FROM notes n JOIN spaces s ON n.space_id = s.id WHERE s.profile_id = ?`
+      )
+      .all(id, id) as { id: string }[]
+    const deleteEmbedding = db.prepare('DELETE FROM embeddings WHERE ref_id = ?')
+    for (const ref of refs) deleteEmbedding.run(ref.id)
+
+    db.prepare('DELETE FROM spaces WHERE profile_id = ?').run(id)
+    db.prepare('DELETE FROM visits WHERE profile_id = ?').run(id)
+    db.prepare('DELETE FROM downloads WHERE profile_id = ?').run(id)
+    db.prepare('DELETE FROM extensions WHERE profile_id = ?').run(id)
+    db.prepare('DELETE FROM favorite_folders WHERE profile_id = ?').run(id)
+    db.prepare('DELETE FROM favorites WHERE profile_id = ?').run(id)
+    db.prepare('DELETE FROM profiles WHERE id = ?').run(id)
   },
 
   count(): number {
@@ -193,7 +207,19 @@ export const spacesRepo = {
   },
 
   remove(id: SpaceId): void {
-    getDb().prepare('DELETE FROM spaces WHERE id = ?').run(id)
+    const db = getDb()
+    // `pages`/`notes` disparaissent par cascade SQL (`ON DELETE CASCADE`,
+    // `foreign_keys = ON`) — mais `embeddings.ref_id` n'a aucune contrainte de
+    // clé étrangère (référence lâche, `page` ou `note`), donc rien ne les
+    // efface automatiquement : sans ce nettoyage explicite, supprimer un
+    // espace entier laissait leurs embeddings orphelins en base pour de bon.
+    const refs = [
+      ...(db.prepare('SELECT id FROM pages WHERE space_id = ?').all(id) as { id: string }[]),
+      ...(db.prepare('SELECT id FROM notes WHERE space_id = ?').all(id) as { id: string }[])
+    ]
+    const deleteEmbedding = db.prepare('DELETE FROM embeddings WHERE ref_id = ?')
+    for (const { id: refId } of refs) deleteEmbedding.run(refId)
+    db.prepare('DELETE FROM spaces WHERE id = ?').run(id)
   },
 
   updateCanvas(id: SpaceId, view: CanvasView): void {

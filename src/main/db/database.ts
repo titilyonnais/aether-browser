@@ -385,4 +385,11 @@ CREATE INDEX IF NOT EXISTS idx_search_queries_profile ON search_queries(profile_
 `)
     database.pragma('user_version = 9')
   }
+  if (version < 10) {
+    // `favoritesRepo.findByUrl`/`removeByUrl` filtrent sur EXACTEMENT ces deux
+    // colonnes (contrairement à la recherche d'historique, un `LIKE '%…%'`
+    // qu'aucun index ne peut accélérer) — celui-ci, lui, sert vraiment.
+    database.exec('CREATE INDEX IF NOT EXISTS idx_favorites_lookup ON favorites(profile_id, url)')
+    database.pragma('user_version = 10')
+  }
 }

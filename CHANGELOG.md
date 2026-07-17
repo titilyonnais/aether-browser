@@ -4,6 +4,16 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.46.1] — 2026-07-17
+
+### Corrigé
+
+- **Embeddings orphelins à la suppression d'un espace ou d'un profil** : les pages/notes disparaissent déjà en cascade avec leur espace (contrainte SQL), mais leurs embeddings (colonne sans clé étrangère) ne suivaient jamais — ils restaient en base pour de bon. Nettoyés explicitement dans les deux cas désormais.
+
+### Optimisé
+
+- **Base de données** : ajout d'un index sur `favorites(profil, url)`, réellement utilisé par la recherche/suppression d'un favori par URL (contrairement à la recherche d'historique, un `LIKE` qu'aucun index ne peut accélérer).
+
 ## [0.46.0] — 2026-07-17
 
 À partir de cette version : suivi d'une analyse externe exhaustive du projet (voir mémoire), traité point par point par priorité.
