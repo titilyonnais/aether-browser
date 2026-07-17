@@ -61,7 +61,8 @@ const api: AetherApi = {
     onSwitchRequested: (cb) => on(CH.profileSwitchRequested, cb),
     onCreateRequested: (cb) => on(CH.profileCreateRequested, cb),
     onStartPrivateRequested: (cb) => on(CH.profileStartPrivateRequested, cb),
-    onManageRequested: (cb) => on(CH.profileManageRequested, cb)
+    onManageRequested: (cb) => on(CH.profileManageRequested, cb),
+    onForceSwitched: (cb) => on(CH.profileForceSwitched, cb)
   },
   spaces: {
     create: (name: string) => ipcRenderer.invoke(CH.spaceCreate, name),

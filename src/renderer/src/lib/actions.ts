@@ -112,6 +112,12 @@ export async function initBridge(): Promise<void> {
   window.aether.profiles.onManageRequested(() =>
     useUiStore.getState().openOverlay('settings', { section: 'profils' })
   )
+  // Une AUTRE fenêtre ÆTHER vient de supprimer le profil que CETTE fenêtre
+  // affichait — bascule forcée vers le workspace de remplacement (support
+  // multi-fenêtre, voir profileRemove côté main/ipc.ts).
+  window.aether.profiles.onForceSwitched(({ activeProfileId, workspace }) =>
+    loadWorkspace(activeProfileId, workspace)
+  )
 
   // Menu contextuel d'une image (« Créer un QR code pour cette image ») —
   // le main pousse une cible arbitraire, pas forcément la page active.

@@ -233,6 +233,9 @@ export interface ViewManagerDelegate {
   /** Menu contextuel d'une image (« Créer un QR code pour cette image ») —
    * ouvre l'overlay QR déjà existant sur une URL arbitraire. */
   onCreateQrCode(url: string, title: string): void
+  /** Menu contextuel d'un lien (« Ouvrir dans une nouvelle fenêtre » / « …en
+   * navigation privée ») — ouvre une VRAIE fenêtre ÆTHER séparée sur `url`. */
+  onOpenInNewWindow(url: string, isPrivate: boolean): void
 }
 
 /** Taille de lot partagée entre la collecte et l'application (voir
@@ -764,10 +767,14 @@ export class ViewManager {
       if (params.linkURL) {
         rows.push(
           { kind: 'item', id: 'open-link', label: 'Ouvrir dans un nouvel onglet' },
+          { kind: 'item', id: 'open-link-new-window', label: 'Ouvrir dans une nouvelle fenêtre' },
+          { kind: 'item', id: 'open-link-new-window-private', label: 'Ouvrir dans une nouvelle fenêtre en navigation privée' },
           { kind: 'item', id: 'copy-link', label: "Copier l'adresse du lien" },
           { kind: 'separator' }
         )
         actions['open-link'] = () => this.delegate.onOpenRequest(pageId, params.linkURL)
+        actions['open-link-new-window'] = () => this.delegate.onOpenInNewWindow(params.linkURL, false)
+        actions['open-link-new-window-private'] = () => this.delegate.onOpenInNewWindow(params.linkURL, true)
         actions['copy-link'] = () => clipboard.writeText(params.linkURL)
       }
       if (params.selectionText) {

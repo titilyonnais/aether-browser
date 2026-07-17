@@ -73,6 +73,7 @@ import {
 } from './extensions'
 import { openExtensionPopup, resizeExtensionPopup } from './extensionPopupWindow'
 import { readFlags, relaunchApp, writeFlags } from './flags'
+import { createChildWindow } from './mainWindow'
 import {
   broadcastToPopover,
   hidePopoverWindow,
@@ -94,7 +95,7 @@ import {
   safeValidate
 } from './ipcSchemas'
 import { cleanupPreviews, previewsDirSize } from './previews'
-import { markQuitting } from './quitState'
+import { isQuitting, markQuitting } from './quitState'
 import { chooseDirectory, clearBrowsingData } from './sessionActions'
 import {
   applySettingsPatch,
@@ -108,8 +109,9 @@ import {
   setFocusState
 } from './settings'
 import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
-import type { ViewManager } from './viewManager'
+import { ViewManager } from './viewManager'
 import { applyProxy, applySpellcheckLanguages, liveDownloads, webPartitionForProfile } from './webSession'
+import { allWindowContexts, registerWindowContext, resolveWindowContext, windowContextsForProfile } from './windowRegistry'
 
 /** Palette de teintes attribuées aux espaces et profils, en rotation. */
 const SPACE_HUES = [210, 262, 158, 24, 318, 44]
@@ -169,13 +171,16 @@ const PROFILE_ICONS = ['✦', '◆', '❋', '➶', '❖', '✺', '❂', '✧']
 
 const DEFAULT_CARD = { w: 360, h: 260 }
 
-/** Profil actif garanti (le bootstrap en assure toujours un). */
-function activeProfile(): ProfileId {
-  return getActiveProfileId() ?? ''
+/** Profil actif de CETTE fenêtre (`views` — chaque ViewManager garde le
+ * sien, voir viewManager.ts) — remplace les anciennes `activeProfile()`/
+ * `getActiveProfileId()` globales, correctes pour une seule fenêtre mais pas
+ * pour plusieurs fenêtres sur des profils différents. */
+function activeProfileOf(views: ViewManager): ProfileId {
+  return views.getActiveProfileId()
 }
 
-function activeProfileRecord(): Profile | undefined {
-  return profilesRepo.get(activeProfile())
+function activeProfileRecordOf(views: ViewManager): Profile | undefined {
+  return profilesRepo.get(activeProfileOf(views))
 }
 
 function toFavorite(r: FavoriteRow): Favorite {
@@ -195,17 +200,27 @@ function toFavoriteFolder(r: FavoriteFolderRow): FavoriteFolder {
   return { id: r.id, name: r.name, position: r.position, createdAt: r.created_at }
 }
 
-/** Assemble le contenu (espaces/pages/notes/favoris/dossiers) d'un profil. */
+/** Assemble le contenu (espaces/pages/notes/favoris/dossiers) d'un profil.
+ * L'espace actif retenu est d'abord celui déjà connu de CETTE fenêtre
+ * (`views` — elle a peut-être déjà navigué), sinon le dernier connu en base
+ * pour ce profil (mémoire d'une session à l'autre), sinon le premier
+ * disponible — jamais une clé globale unique par profil (deux fenêtres sur
+ * le même profil se disputeraient sinon le même espace actif). La base est
+ * quand même mise à jour à chaque résolution : c'est elle qui sert de
+ * défaut pour la PROCHAINE fenêtre/session ouverte sur ce profil. */
 function buildWorkspace(views: ViewManager, profileId: ProfileId): Workspace {
   const spaces = spacesRepo.listByProfile(profileId)
   const pages = pagesRepo.listByProfile(profileId).map((r) => buildPageMeta(views, r))
   const notes = notesRepo.listByProfile(profileId)
   const favorites = favoritesRepo.listByProfile(profileId).map(toFavorite)
   const favoriteFolders = favoriteFoldersRepo.listByProfile(profileId).map(toFavoriteFolder)
-  let activeSpaceId = getActiveSpaceId(profileId) ?? ''
+  let activeSpaceId = views.getActiveSpaceId() ?? getActiveSpaceId(profileId) ?? ''
   if (!spaces.some((s) => s.id === activeSpaceId)) {
     activeSpaceId = spaces[0]?.id ?? ''
-    if (activeSpaceId) setActiveSpaceId(profileId, activeSpaceId)
+  }
+  if (activeSpaceId) {
+    views.setActiveSpaceId(activeSpaceId)
+    setActiveSpaceId(profileId, activeSpaceId)
   }
   const focusBySpace: Record<SpaceId, FocusState> = {}
   for (const space of spaces) {
@@ -215,22 +230,27 @@ function buildWorkspace(views: ViewManager, profileId: ProfileId): Workspace {
   return { spaces, pages, notes, favorites, favoriteFolders, activeSpaceId, focusBySpace }
 }
 
-/** Bascule vers un profil : ferme les vues, change de partition, recharge ses extensions. */
+/** Bascule CETTE fenêtre vers un profil : ferme ses vues, change de
+ * partition, recharge ses extensions. */
 async function switchToProfile(views: ViewManager, id: ProfileId): Promise<Workspace> {
-  const outgoingId = activeProfile()
+  const outgoingId = activeProfileOf(views)
   const profile = profilesRepo.get(id)
   views.closeAll()
-  setActiveProfileId(id)
   views.setActiveProfile(id, profile?.isPrivate ?? false)
+  // Défaut pour la PROCHAINE fenêtre principale ouverte au démarrage
+  // (`ensureBootstrap`) — pas un état partagé « en direct » entre fenêtres.
+  setActiveProfileId(id)
   await loadExtensionsForProfile(id, views.activePartition())
   const workspace = buildWorkspace(views, id)
   // La session de navigation privée est déjà éphémère (partition en mémoire,
   // jamais persistée) — son PROFIL (métadonnées SQLite : espaces, pages,
   // notes) doit l'être tout autant, sinon il reste indéfiniment listé dans
-  // Paramètres › Profils une fois qu'on en est sorti.
+  // Paramètres › Profils une fois qu'on en est sorti. Seulement si AUCUNE
+  // AUTRE fenêtre n'est encore dessus (sinon on couperait sa session en cours).
   if (outgoingId && outgoingId !== id) {
     const outgoing = profilesRepo.get(outgoingId)
-    if (outgoing?.isPrivate) profilesRepo.remove(outgoingId)
+    const stillInUse = windowContextsForProfile(outgoingId).some((ctx) => ctx.views !== views)
+    if (outgoing?.isPrivate && !stillInUse) profilesRepo.remove(outgoingId)
   }
   return workspace
 }
@@ -265,7 +285,7 @@ export function buildPageMeta(views: ViewManager, row: PageRow): PageMeta {
 }
 
 /** Assemble les infos HTTPS/certificat/permissions de la page (façon Chrome). */
-function siteInfoForPage(id: PageId): SiteInfo | null {
+function siteInfoForPage(views: ViewManager, id: PageId): SiteInfo | null {
   const row = pagesRepo.get(id)
   if (!row) return null
   let url: URL
@@ -276,10 +296,10 @@ function siteInfoForPage(id: PageId): SiteInfo | null {
   }
   if (!/^https?:$/.test(url.protocol)) return null
   const isHttps = url.protocol === 'https:'
-  const isPrivate = activeProfileRecord()?.isPrivate ?? false
-  const partition = webPartitionForProfile(activeProfile(), isPrivate)
+  const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
+  const partition = webPartitionForProfile(activeProfileOf(views), isPrivate)
   const cert = isHttps ? getCertInfo(partition, url.hostname) : null
-  const overrides = sitePermissionsRepo.forOrigin(activeProfile(), url.origin)
+  const overrides = sitePermissionsRepo.forOrigin(activeProfileOf(views), url.origin)
   return {
     origin: url.origin,
     isHttps,
@@ -335,6 +355,70 @@ export function ensureBootstrap(): { activeProfileId: ProfileId; activeSpaceId: 
     setActiveSpaceId(profileId, activeSpaceId)
   }
   return { activeProfileId: profileId, activeSpaceId }
+}
+
+/** Relaie l'agrandissement/plein écran natif de CETTE fenêtre à son renderer
+ * (barre de titre custom — TitleBar.tsx a besoin de savoir pour dessiner le
+ * bon état des boutons). Une seule fenêtre à la fois avant le support
+ * multi-fenêtre : ces écouteurs vivaient directement dans `registerIpc`,
+ * fermés sur l'unique fenêtre — désormais posés PAR fenêtre, à sa création. */
+export function attachWindowLifecycleEvents(win: BrowserWindow): void {
+  win.on('maximize', () => sendTo(win, CH.winMaximizedChanged, true))
+  win.on('unmaximize', () => sendTo(win, CH.winMaximizedChanged, false))
+  win.on('enter-full-screen', () => sendTo(win, CH.winFullscreenChanged, true))
+  win.on('leave-full-screen', () => sendTo(win, CH.winFullscreenChanged, false))
+}
+
+/** Ouvre une VRAIE fenêtre ÆTHER secondaire (« Ouvrir dans une nouvelle
+ * fenêtre » / navigation privée dédiée) sur le profil donné, avec un onglet
+ * `initialUrl` déjà ouvert dans son espace actif — même patron que
+ * `CH.pageOpen`, exécuté ici avant même que le renderer de la nouvelle
+ * fenêtre ne charge, pour qu'il apparaisse dans son tout premier `stateInitial()`. */
+function createSecondaryContentWindow(
+  profileId: ProfileId,
+  isPrivate: boolean,
+  initialUrl: string,
+  router: AiRouter
+): BrowserWindow {
+  const cascadeOffset = 32 * ((allWindowContexts().length % 6) + 1)
+  const win = createChildWindow(cascadeOffset)
+  let views!: ViewManager
+  const delegate = createViewDelegate(win, () => views, router)
+  views = new ViewManager(win, delegate)
+  views.setActiveProfile(profileId, isPrivate)
+  registerWindowContext({ win, views })
+  attachWindowLifecycleEvents(win)
+
+  if (isAllowedUrl(initialUrl)) {
+    const spaces = spacesRepo.listByProfile(profileId)
+    const spaceId = getActiveSpaceId(profileId) ?? spaces[0]?.id
+    if (spaceId) {
+      const row = pagesRepo.create({ spaceId, url: initialUrl, parentId: null, canvas: placeCard(spaceId, null) })
+      views.ensureLive(row)
+    }
+  }
+
+  win.on('close', (event) => {
+    // Dernière fenêtre restante : redonne la main au même réglage « minimiser
+    // au lieu de fermer » que la fenêtre principale (main/index.ts), plutôt
+    // que de fermer purement cette fenêtre secondaire (ce qui quitterait
+    // l'appli entière, `window-all-closed` n'ayant plus aucune fenêtre à voir).
+    if (!isQuitting() && getSettings().minimizeOnClose && allWindowContexts().length <= 1) {
+      event.preventDefault()
+      win.minimize()
+    }
+  })
+  win.on('closed', () => {
+    views.closeAll()
+    // Navigation privée dédiée à cette seule fenêtre : si aucune autre fenêtre
+    // n'affiche plus ce profil, il n'a plus aucune raison de survivre (même
+    // filet que `switchToProfile`/`profileRemove` ci-dessous).
+    if (isPrivate && windowContextsForProfile(profileId).length === 0) {
+      profilesRepo.remove(profileId)
+    }
+  })
+
+  return win
 }
 
 /** Position libre pour une nouvelle carte (cascade simple, écartée du parent). */
@@ -405,18 +489,33 @@ function buildMuseSystem(context: MuseContext | null): string {
   return parts.join('\n')
 }
 
-export function registerIpc({ win, views, router }: IpcDeps): void {
-  const send = (channel: string, ...args: unknown[]): void => {
-    if (!win.isDestroyed()) win.webContents.send(channel, ...args)
-  }
+/** Diffuse un évènement à la fenêtre `win` précise (remplace l'ancien `send`
+ * unique fermé sur une seule fenêtre globale). */
+function sendTo(win: BrowserWindow, channel: string, ...args: unknown[]): void {
+  if (!win.isDestroyed()) win.webContents.send(channel, ...args)
+}
 
-  // Point d'ancrage ÉCRAN de l'icône puzzle (barre de titre, coin haut-droit)
-  // — capturé à chaque ouverture de la liste des extensions, réutilisé pour
-  // positionner la VRAIE bulle d'une extension TOUJOURS au même endroit
-  // (voir CH.extensionsOpenPopup plus bas), quelle que soit la ligne cliquée
-  // dans la liste — ce clic vient de l'intérieur d'une AUTRE fenêtre popup,
-  // dont les coordonnées locales ne décrivent rien ici.
-  let extensionsMenuAnchor: { rightX: number; topY: number } | null = null
+/** Diffuse à TOUTES les fenêtres actuellement sur ce profil (favoris,
+ * historique, extensions… — des données PARTAGÉES par profil, façon Chrome :
+ * deux fenêtres sur le même profil doivent voir la même chose en direct). */
+function broadcastToProfile(profileId: ProfileId, channel: string, ...args: unknown[]): void {
+  for (const ctx of windowContextsForProfile(profileId)) sendTo(ctx.win, channel, ...args)
+}
+
+/** Point d'ancrage ÉCRAN de l'icône puzzle (barre de titre, coin haut-droit),
+ * PAR FENÊTRE — capturé à chaque ouverture de la liste des extensions,
+ * réutilisé pour positionner la VRAIE bulle d'une extension TOUJOURS au même
+ * endroit (voir CH.extensionsOpenPopup plus bas), quelle que soit la ligne
+ * cliquée dans la liste — ce clic vient de l'intérieur d'une AUTRE fenêtre
+ * popup, dont les coordonnées locales ne décrivent rien ici. */
+const extensionsMenuAnchors = new Map<number, { rightX: number; topY: number }>()
+
+/** Installation en attente de confirmation (popup « webstore-confirm »
+ * ouverte), PAR FENÊTRE — une seule à la fois PAR fenêtre, comme
+ * `contextMenuActions` dans popoverWindow.ts. */
+const pendingWebstoreInstalls = new Map<number, { pageId: PageId; extensionId: string }>()
+
+export function registerIpc(router: AiRouter): void {
 
   // Menu contextuel générique (bulle DOM, voir ContextMenuPopoverCard et
   // `showContextMenuPopover`/`runContextMenuAction` dans popoverWindow.ts) —
@@ -428,22 +527,30 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   // ─── Fenêtre ───────────────────────────────────────────────────────────────
 
-  ipcMain.on(CH.winMinimize, () => win.minimize())
-  ipcMain.on(CH.winToggleMaximize, () => (win.isMaximized() ? win.unmaximize() : win.maximize()))
-  ipcMain.on(CH.winClose, () => win.close())
-  ipcMain.handle(CH.winIsMaximized, () => win.isMaximized())
-  win.on('maximize', () => send(CH.winMaximizedChanged, true))
-  win.on('unmaximize', () => send(CH.winMaximizedChanged, false))
+  ipcMain.on(CH.winMinimize, (e) => resolveWindowContext(e).win.minimize())
+  ipcMain.on(CH.winToggleMaximize, (e) => {
+    const { win } = resolveWindowContext(e)
+    win.isMaximized() ? win.unmaximize() : win.maximize()
+  })
+  ipcMain.on(CH.winClose, (e) => resolveWindowContext(e).win.close())
+  ipcMain.handle(CH.winIsMaximized, (e) => resolveWindowContext(e).win.isMaximized())
 
-  ipcMain.handle(CH.winIsFullscreen, () => win.isFullScreen())
-  ipcMain.on(CH.winToggleFullscreen, () => win.setFullScreen(!win.isFullScreen()))
-  win.on('enter-full-screen', () => send(CH.winFullscreenChanged, true))
-  win.on('leave-full-screen', () => send(CH.winFullscreenChanged, false))
+  ipcMain.handle(CH.winIsFullscreen, (e) => resolveWindowContext(e).win.isFullScreen())
+  ipcMain.on(CH.winToggleFullscreen, (e) => {
+    const { win } = resolveWindowContext(e)
+    win.setFullScreen(!win.isFullScreen())
+  })
 
   // ─── État initial ──────────────────────────────────────────────────────────
 
-  ipcMain.handle(CH.stateInitial, async (): Promise<InitialState> => {
-    const { activeProfileId } = ensureBootstrap()
+  ipcMain.handle(CH.stateInitial, async (e): Promise<InitialState> => {
+    const { views } = resolveWindowContext(e)
+    // Le profil actif de CETTE fenêtre est déjà fixé par `createAppWindow`
+    // AVANT que son renderer ne charge — pas de nouveau `ensureBootstrap()`
+    // ici, qui relirait le dernier profil connu en base (correct pour la
+    // toute première fenêtre au lancement, mais écraserait le profil PROPRE
+    // à une fenêtre secondaire, ex. une navigation privée dédiée).
+    const activeProfileId = views.getActiveProfileId()
     await loadExtensionsForProfile(activeProfileId, views.activePartition())
     return {
       profiles: profilesRepo.list(),
@@ -477,7 +584,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     return profile
   })
 
-  ipcMain.handle(CH.profileCreatePrivate, async (): Promise<{ profile: Profile; workspace: Workspace }> => {
+  ipcMain.handle(CH.profileCreatePrivate, async (e): Promise<{ profile: Profile; workspace: Workspace }> => {
+    const { views } = resolveWindowContext(e)
     const profile = profilesRepo.create('Navigation privée', 262, { icon: '🕶', color: '#20202c' }, { isPrivate: true })
     spacesRepo.create('Espace privé', 262, profile.id)
     const workspace = await switchToProfile(views, profile.id)
@@ -495,7 +603,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     return profilesRepo.get(id) as Profile
   })
 
-  ipcMain.handle(CH.profileSetAvatarImage, async (_e, id: ProfileId): Promise<Profile | null> => {
+  ipcMain.handle(CH.profileSetAvatarImage, async (e, id: ProfileId): Promise<Profile | null> => {
+    const { win } = resolveWindowContext(e)
     const filename = await chooseAndSaveAvatarImage(win)
     if (!filename) return null
     const current = profilesRepo.get(id)
@@ -504,7 +613,7 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     return profilesRepo.get(id) as Profile
   })
 
-  ipcMain.handle(CH.profileChooseAvatarImage, () => chooseAndSaveAvatarImage(win))
+  ipcMain.handle(CH.profileChooseAvatarImage, (e) => chooseAndSaveAvatarImage(resolveWindowContext(e).win))
 
   ipcMain.handle(CH.profileClearAvatar, (_e, id: ProfileId): Profile => {
     const current = profilesRepo.get(id)
@@ -516,31 +625,41 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   ipcMain.handle(
     CH.profileRemove,
     async (
-      _e,
+      e,
       id: ProfileId
     ): Promise<{ profiles: Profile[]; switched: { activeProfileId: ProfileId; workspace: Workspace } | null }> => {
+      const { views } = resolveWindowContext(e)
       if (profilesRepo.count() <= 1) {
         // On ne supprime jamais le dernier profil.
         return { profiles: profilesRepo.list(), switched: null }
       }
       const removed = profilesRepo.get(id)
-      const wasActive = activeProfile() === id
-      if (wasActive) views.closeAll()
+      const wasActive = activeProfileOf(views) === id
+      // TOUTE fenêtre affichant ce profil (pas seulement celle-ci) doit en
+      // sortir — sans quoi une autre fenêtre resterait plantée sur un profil
+      // qui n'existe plus.
+      for (const ctx of windowContextsForProfile(id)) ctx.views.closeAll()
       if (removed?.avatarImage) deleteAvatarImage(removed.avatarImage)
       profilesRepo.remove(id)
       const profiles = profilesRepo.list()
       let switched: { activeProfileId: ProfileId; workspace: Workspace } | null = null
-      if (wasActive) {
-        const next = profiles[0].id
-        const workspace = await switchToProfile(views, next)
-        switched = { activeProfileId: next, workspace }
+      const next = profiles[0].id
+      for (const ctx of windowContextsForProfile(id)) {
+        const workspace = await switchToProfile(ctx.views, next)
+        if (ctx.views === views) switched = { activeProfileId: next, workspace }
+        else sendTo(ctx.win, CH.profileForceSwitched, { activeProfileId: next, workspace })
       }
+      // Compatibilité : si CETTE fenêtre n'était pas sur le profil supprimé
+      // (ex. suppression depuis Réglages › Profils en étant ailleurs), rien
+      // à switcher pour elle — `wasActive` reste informatif seulement.
+      void wasActive
       return { profiles, switched }
     }
   )
 
-  ipcMain.handle(CH.profileSwitch, async (_e, id: ProfileId): Promise<Workspace | null> => {
-    if (!profilesRepo.get(id) || id === activeProfile()) return null
+  ipcMain.handle(CH.profileSwitch, async (e, id: ProfileId): Promise<Workspace | null> => {
+    const { views } = resolveWindowContext(e)
+    if (!profilesRepo.get(id) || id === activeProfileOf(views)) return null
     return switchToProfile(views, id)
   })
 
@@ -551,13 +670,14 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   // la fenêtre principale (`*Requested`), qui exécute la même logique que les
   // boutons du menu (rechargement complet du workspace, stores…), impossible
   // à reproduire depuis ce process ou depuis un popup sans store partagé.
-  ipcMain.on(CH.profileShowMenu, (_e, rawAnchor: LocalRect) => {
+  ipcMain.on(CH.profileShowMenu, (e, rawAnchor: LocalRect) => {
+    const { win, views } = resolveWindowContext(e)
     const anchor = safeValidate(localRectSchema, rawAnchor, 'profile:show-menu')
     if (!anchor) return
     const winBounds = win.getBounds()
     const x = Math.round(winBounds.x + anchor.x)
     const y = Math.round(winBounds.y + anchor.y + anchor.height + 6)
-    const activeId = activeProfile()
+    const activeId = activeProfileOf(views)
     Menu.buildFromTemplate([
       { label: 'Profils', enabled: false },
       { type: 'separator' },
@@ -565,23 +685,24 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
         label: p.name,
         type: 'checkbox' as const,
         checked: p.id === activeId,
-        click: () => send(CH.profileSwitchRequested, p.id)
+        click: () => sendTo(win, CH.profileSwitchRequested, p.id)
       })),
       { type: 'separator' },
-      { label: 'Nouveau profil', click: () => send(CH.profileCreateRequested) },
+      { label: 'Nouveau profil', click: () => sendTo(win, CH.profileCreateRequested) },
       {
         label: 'Navigation privée',
         accelerator: 'Ctrl+Shift+N',
-        click: () => send(CH.profileStartPrivateRequested)
+        click: () => sendTo(win, CH.profileStartPrivateRequested)
       },
-      { label: 'Gérer les profils…', click: () => send(CH.profileManageRequested) }
+      { label: 'Gérer les profils…', click: () => sendTo(win, CH.profileManageRequested) }
     ]).popup({ window: win, x, y })
   })
 
   // ─── Espaces ───────────────────────────────────────────────────────────────
 
-  ipcMain.handle(CH.spaceCreate, (_e, name: string): Space => {
-    const profileId = activeProfile()
+  ipcMain.handle(CH.spaceCreate, (e, name: string): Space => {
+    const { views } = resolveWindowContext(e)
+    const profileId = activeProfileOf(views)
     const count = spacesRepo.listByProfile(profileId).length
     return spacesRepo.create(
       (name || 'Nouvel espace').slice(0, 60),
@@ -594,8 +715,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     spacesRepo.rename(id, (name || 'Espace').slice(0, 60))
   })
 
-  ipcMain.handle(CH.spaceRemove, (_e, id: SpaceId): Space | null => {
-    const profileId = activeProfile()
+  ipcMain.handle(CH.spaceRemove, (e, id: SpaceId): Space | null => {
+    const { views } = resolveWindowContext(e)
+    const profileId = activeProfileOf(views)
     for (const page of pagesRepo.listBySpace(id)) {
       views.closePage(page.id)
     }
@@ -611,7 +733,10 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     return replacement
   })
 
-  ipcMain.on(CH.spaceSetActive, (_e, id: SpaceId) => setActiveSpaceId(activeProfile(), id))
+  ipcMain.on(CH.spaceSetActive, (e, id: SpaceId) => {
+    const { views } = resolveWindowContext(e)
+    setActiveSpaceId(activeProfileOf(views), id)
+  })
 
   // Persisté à chaque changement (setFocus, quel que soit l'appelant) pour
   // pouvoir le restaurer au prochain démarrage si `startupTabs === 'restore'`.
@@ -624,26 +749,30 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     if (parsed) spacesRepo.updateCanvas(id, parsed)
   })
 
-  const duplicateSpace = (id: SpaceId): Space | null => {
+  const duplicateSpace = (views: ViewManager, id: SpaceId): Space | null => {
     const source = spacesRepo.get(id)
-    if (!source || spacesRepo.profileOf(id) !== activeProfile()) return null
-    return spacesRepo.create(`${source.name} (copie)`.slice(0, 60), source.hue, activeProfile())
+    const profileId = activeProfileOf(views)
+    if (!source || spacesRepo.profileOf(id) !== profileId) return null
+    return spacesRepo.create(`${source.name} (copie)`.slice(0, 60), source.hue, profileId)
   }
 
-  ipcMain.handle(CH.spaceSetHue, (_e, id: SpaceId, hue: number) => {
-    if (spacesRepo.profileOf(id) !== activeProfile()) return null
+  ipcMain.handle(CH.spaceSetHue, (e, id: SpaceId, hue: number) => {
+    const { views } = resolveWindowContext(e)
+    if (spacesRepo.profileOf(id) !== activeProfileOf(views)) return null
     spacesRepo.setHue(id, ((Math.round(hue) % 360) + 360) % 360)
     return spacesRepo.get(id)
   })
 
-  ipcMain.handle(CH.spaceDuplicate, (_e, id: SpaceId) => duplicateSpace(id))
+  ipcMain.handle(CH.spaceDuplicate, (e, id: SpaceId) => duplicateSpace(resolveWindowContext(e).views, id))
 
-  ipcMain.on(CH.spaceShowContextMenu, (_e, id: SpaceId, rawAnchor: LocalRect) => {
+  ipcMain.on(CH.spaceShowContextMenu, (e, id: SpaceId, rawAnchor: LocalRect) => {
+    const { win, views } = resolveWindowContext(e)
     const anchor = safeValidate(localRectSchema, rawAnchor, 'space:show-context-menu')
     if (!anchor) return
     const space = spacesRepo.get(id)
-    if (!space || spacesRepo.profileOf(id) !== activeProfile()) return
-    const spaceCount = spacesRepo.listByProfile(activeProfile()).length
+    const profileId = activeProfileOf(views)
+    if (!space || spacesRepo.profileOf(id) !== profileId) return
+    const spaceCount = spacesRepo.listByProfile(profileId).length
     showContextMenuPopover(
       win,
       anchor,
@@ -667,25 +796,25 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
         { kind: 'item', id: 'dissolve', label: 'Dissoudre l’espace', disabled: spaceCount <= 1, danger: true }
       ],
       {
-        rename: () => send(CH.spaceStartRename, id),
+        rename: () => sendTo(win, CH.spaceStartRename, id),
         ...Object.fromEntries(
           SPACE_HUE_PALETTE.map(({ hue }) => [
             `hue-${hue}`,
             () => {
               spacesRepo.setHue(id, hue)
               const row = spacesRepo.get(id)
-              if (row) send(CH.spaceUpdated, row)
+              if (row) sendTo(win, CH.spaceUpdated, row)
             }
           ])
         ),
         duplicate: () => {
-          const dup = duplicateSpace(id)
-          if (dup) send(CH.spaceUpdated, dup)
+          const dup = duplicateSpace(views, id)
+          if (dup) sendTo(win, CH.spaceUpdated, dup)
         },
         'new-space': () => {
-          const count = spacesRepo.listByProfile(activeProfile()).length
-          const created = spacesRepo.create('Nouvel espace', SPACE_HUES[count % SPACE_HUES.length], activeProfile())
-          send(CH.spaceUpdated, created)
+          const count = spacesRepo.listByProfile(profileId).length
+          const created = spacesRepo.create('Nouvel espace', SPACE_HUES[count % SPACE_HUES.length], profileId)
+          sendTo(win, CH.spaceUpdated, created)
         },
         dissolve: () => {
           const confirmed = dialog.showMessageBoxSync(win, {
@@ -697,7 +826,7 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
             message: `Dissoudre « ${space.name} » ?`,
             detail: 'Toutes ses pages seront définitivement fermées.'
           })
-          if (confirmed === 1) send(CH.spaceRemoveRequested, id)
+          if (confirmed === 1) sendTo(win, CH.spaceRemoveRequested, id)
         }
       }
     )
@@ -705,7 +834,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   // ─── Pages ─────────────────────────────────────────────────────────────────
 
-  ipcMain.handle(CH.pageOpen, (_e, raw: OpenPageOptions): PageMeta => {
+  ipcMain.handle(CH.pageOpen, (e, raw: OpenPageOptions): PageMeta => {
+    const { views } = resolveWindowContext(e)
     const opts = openPageOptionsSchema.parse(raw)
     if (!isAllowedUrl(opts.url)) throw new Error(`URL refusée : ${opts.url.slice(0, 80)}`)
     const canvas: CanvasRect = opts.canvasPos
@@ -721,66 +851,70 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     return buildPageMeta(views, row)
   })
 
-  ipcMain.handle(CH.pageClose, (_e, id: PageId) => {
+  ipcMain.handle(CH.pageClose, (e, id: PageId) => {
+    const { win, views } = resolveWindowContext(e)
     views.closePage(id)
     pagesRepo.remove(id)
-    send(CH.pageRemoved, id)
+    sendTo(win, CH.pageRemoved, id)
   })
 
-  ipcMain.on(CH.pageNavigate, (_e, id: PageId, url: string) => {
-    if (isAllowedUrl(url)) void views.navigate(id, url)
+  ipcMain.on(CH.pageNavigate, (e, id: PageId, url: string) => {
+    if (isAllowedUrl(url)) void resolveWindowContext(e).views.navigate(id, url)
   })
-  ipcMain.on(CH.pageBack, (_e, id: PageId) => views.goBack(id))
-  ipcMain.on(CH.pageForward, (_e, id: PageId) => views.goForward(id))
-  ipcMain.on(CH.pageReload, (_e, id: PageId) => views.reload(id))
-  ipcMain.on(CH.pageStop, (_e, id: PageId) => views.stop(id))
-  ipcMain.on(CH.pageDevtools, (_e, id: PageId) => views.openDevtools(id))
+  ipcMain.on(CH.pageBack, (e, id: PageId) => resolveWindowContext(e).views.goBack(id))
+  ipcMain.on(CH.pageForward, (e, id: PageId) => resolveWindowContext(e).views.goForward(id))
+  ipcMain.on(CH.pageReload, (e, id: PageId) => resolveWindowContext(e).views.reload(id))
+  ipcMain.on(CH.pageStop, (e, id: PageId) => resolveWindowContext(e).views.stop(id))
+  ipcMain.on(CH.pageDevtools, (e, id: PageId) => resolveWindowContext(e).views.openDevtools(id))
 
-  ipcMain.on(CH.pageSetVisible, (_e, ids: PageId[]) => {
+  ipcMain.on(CH.pageSetVisible, (e, ids: PageId[]) => {
     const parsed = safeValidate(idArraySchema, Array.isArray(ids) ? ids.slice(0, 2) : [], 'page:set-visible')
-    views.setVisible(parsed ?? [])
+    resolveWindowContext(e).views.setVisible(parsed ?? [])
   })
 
-  ipcMain.on(CH.pageSetBounds, (_e, id: PageId, bounds: Bounds) => {
+  ipcMain.on(CH.pageSetBounds, (e, id: PageId, bounds: Bounds) => {
     const parsed = safeValidate(boundsSchema, bounds, 'page:set-bounds')
-    if (parsed) views.setBounds(id, parsed)
+    if (parsed) resolveWindowContext(e).views.setBounds(id, parsed)
   })
 
-  ipcMain.on(CH.pageOverlay, (_e, open: boolean) => views.setOverlay(Boolean(open)))
+  ipcMain.on(CH.pageOverlay, (e, open: boolean) => resolveWindowContext(e).views.setOverlay(Boolean(open)))
 
   ipcMain.on(CH.pageUpdateCanvas, (_e, id: PageId, rect: CanvasRect) => {
     const parsed = safeValidate(canvasRectSchema, rect, 'page:update-canvas')
     if (parsed) pagesRepo.updateCanvas(id, parsed)
   })
 
-  ipcMain.on(CH.pageRequestPreview, (_e, id: PageId) => {
-    void views.capture(id, true)
+  ipcMain.on(CH.pageRequestPreview, (e, id: PageId) => {
+    void resolveWindowContext(e).views.capture(id, true)
   })
 
   ipcMain.handle(CH.pageAffinities, (_e, spaceId: SpaceId) => computeAffinities(spaceId))
 
-  ipcMain.handle(CH.pageContext, (_e, id: PageId) => views.getPageContext(id))
+  ipcMain.handle(CH.pageContext, (e, id: PageId) => resolveWindowContext(e).views.getPageContext(id))
 
-  ipcMain.handle(CH.pageToggleMute, (_e, id: PageId) => {
-    views.toggleMute(id)
+  ipcMain.handle(CH.pageToggleMute, (e, id: PageId) => {
+    resolveWindowContext(e).views.toggleMute(id)
   })
 
-  ipcMain.handle(CH.pageReorder, (_e, spaceId: SpaceId, orderedIds: PageId[]) => {
+  ipcMain.handle(CH.pageReorder, (e, spaceId: SpaceId, orderedIds: PageId[]) => {
+    const { win, views } = resolveWindowContext(e)
     pagesRepo.reorder(spaceId, Array.isArray(orderedIds) ? orderedIds : [])
     for (const id of orderedIds) {
       const row = pagesRepo.get(id)
-      if (row) send(CH.pageUpdated, buildPageMeta(views, row))
+      if (row) sendTo(win, CH.pageUpdated, buildPageMeta(views, row))
     }
   })
 
-  ipcMain.handle(CH.pageGetMemoryKB, (_e, id: PageId) => views.getMemoryKB(id))
+  ipcMain.handle(CH.pageGetMemoryKB, (e, id: PageId) => resolveWindowContext(e).views.getMemoryKB(id))
 
-  ipcMain.handle(CH.pageGet, (_e, id: PageId): PageMeta | null => {
+  ipcMain.handle(CH.pageGet, (e, id: PageId): PageMeta | null => {
+    const { views } = resolveWindowContext(e)
     const row = pagesRepo.get(id)
     return row ? buildPageMeta(views, row) : null
   })
 
-  ipcMain.on(CH.pageShowContextMenu, (_e, id: PageId, rawAnchor: LocalRect) => {
+  ipcMain.on(CH.pageShowContextMenu, (e, id: PageId, rawAnchor: LocalRect) => {
+    const { win, views } = resolveWindowContext(e)
     const anchor = safeValidate(localRectSchema, rawAnchor, 'page:show-context-menu')
     if (!anchor) return
     const row = pagesRepo.get(id)
@@ -790,9 +924,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     const closeOne = (pid: PageId): void => {
       views.closePage(pid)
       pagesRepo.remove(pid)
-      send(CH.pageRemoved, pid)
+      sendTo(win, CH.pageRemoved, pid)
     }
-    const isFavorite = Boolean(favoritesRepo.findByUrl(activeProfile(), row.url))
+    const isFavorite = Boolean(favoritesRepo.findByUrl(activeProfileOf(views), row.url))
     showContextMenuPopover(
       win,
       anchor,
@@ -817,22 +951,23 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
         'new-tab': () => {
           const created = pagesRepo.create({ spaceId: row.space_id, url: 'about:blank', parentId: null, canvas: placeCard(row.space_id, null) })
           views.ensureLive(created)
-          send(CH.pageOpened, buildPageMeta(views, created))
+          sendTo(win, CH.pageOpened, buildPageMeta(views, created))
         },
         'toggle-mute': () => views.toggleMute(id),
         'toggle-favorite': () => {
-          const existing = favoritesRepo.findByUrl(activeProfile(), row.url)
+          const profileId = activeProfileOf(views)
+          const existing = favoritesRepo.findByUrl(profileId, row.url)
           if (existing) {
             favoritesRepo.remove(existing.id)
           } else {
-            favoritesRepo.create(activeProfile(), {
+            favoritesRepo.create(profileId, {
               url: row.url,
               title: row.title,
               faviconUrl: row.favicon_url,
               spaceId: row.space_id
             })
           }
-          sendFavorites()
+          sendFavorites(profileId)
         },
         reload: () => views.reload(id),
         close: () => closeOne(id),
@@ -844,98 +979,110 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
         'close-right': () => {
           for (const p of siblings.slice(index + 1)) closeOne(p.id)
         },
-        'reopen-closed': () => void reopenLastClosed(views, send)
+        'reopen-closed': () => void reopenLastClosed(views, (channel, ...args) => sendTo(win, channel, ...args))
       }
     )
   })
 
-  ipcMain.handle(CH.pageReopenClosed, () => reopenLastClosed(views, send))
-
-  ipcMain.on(CH.pageZoom, (_e, id: PageId, direction: 'in' | 'out' | 'reset') => {
-    views.zoom(id, direction)
+  ipcMain.handle(CH.pageReopenClosed, (e) => {
+    const { win, views } = resolveWindowContext(e)
+    return reopenLastClosed(views, (channel, ...args) => sendTo(win, channel, ...args))
   })
 
-  ipcMain.on(CH.pagePrint, (_e, id: PageId) => {
-    views.print(id)
+  ipcMain.on(CH.pageZoom, (e, id: PageId, direction: 'in' | 'out' | 'reset') => {
+    resolveWindowContext(e).views.zoom(id, direction)
   })
 
-  ipcMain.on(CH.pageCopy, (_e, id: PageId) => views.copy(id))
-  ipcMain.on(CH.pagePaste, (_e, id: PageId) => views.paste(id))
-  ipcMain.on(CH.pageCut, (_e, id: PageId) => views.cut(id))
-  ipcMain.on(CH.pageSavePage, (_e, id: PageId) => void views.savePage(id))
-  ipcMain.on(CH.pageScreenshot, (_e, id: PageId) => void views.captureScreenshot(id))
+  ipcMain.on(CH.pagePrint, (e, id: PageId) => {
+    resolveWindowContext(e).views.print(id)
+  })
+
+  ipcMain.on(CH.pageCopy, (e, id: PageId) => resolveWindowContext(e).views.copy(id))
+  ipcMain.on(CH.pagePaste, (e, id: PageId) => resolveWindowContext(e).views.paste(id))
+  ipcMain.on(CH.pageCut, (e, id: PageId) => resolveWindowContext(e).views.cut(id))
+  ipcMain.on(CH.pageSavePage, (e, id: PageId) => void resolveWindowContext(e).views.savePage(id))
+  ipcMain.on(CH.pageScreenshot, (e, id: PageId) => void resolveWindowContext(e).views.captureScreenshot(id))
   ipcMain.on(
     CH.pageFindInPage,
-    (_e, id: PageId, text: string, opts: { forward: boolean; findNext: boolean }) => {
-      views.findInPage(id, String(text ?? ''), opts)
+    (e, id: PageId, text: string, opts: { forward: boolean; findNext: boolean }) => {
+      resolveWindowContext(e).views.findInPage(id, String(text ?? ''), opts)
     }
   )
   ipcMain.on(
     CH.pageStopFindInPage,
-    (_e, id: PageId, action: 'clearSelection' | 'keepSelection' | 'activateSelection') => {
-      views.stopFindInPage(id, action)
+    (e, id: PageId, action: 'clearSelection' | 'keepSelection' | 'activateSelection') => {
+      resolveWindowContext(e).views.stopFindInPage(id, action)
     }
   )
-  ipcMain.on(CH.pageTranslate, (_e, id: PageId, targetLang: string, sourceLang?: string) => {
-    views.translate(id, String(targetLang || 'fr'), String(sourceLang || 'auto'))
+  ipcMain.on(CH.pageTranslate, (e, id: PageId, targetLang: string, sourceLang?: string) => {
+    resolveWindowContext(e).views.translate(id, String(targetLang || 'fr'), String(sourceLang || 'auto'))
   })
-  ipcMain.on(CH.pageUntranslate, (_e, id: PageId) => views.untranslate(id))
-  ipcMain.handle(CH.pageDetectLanguage, (_e, id: PageId) => views.detectLanguage(id))
+  ipcMain.on(CH.pageUntranslate, (e, id: PageId) => resolveWindowContext(e).views.untranslate(id))
+  ipcMain.handle(CH.pageDetectLanguage, (e, id: PageId) => resolveWindowContext(e).views.detectLanguage(id))
 
   // ─── Favoris (entité indépendante — survit à la fermeture de l'onglet) ────────
+  // Partagés par PROFIL : si plusieurs fenêtres affichent le même profil, elles
+  // doivent toutes voir la même liste de favoris à jour.
 
-  const sendFavorites = (): void => {
-    const favorites = favoritesRepo.listByProfile(activeProfile()).map(toFavorite)
-    send(CH.favoritesUpdated, favorites)
+  const sendFavorites = (profileId: ProfileId): void => {
+    const favorites = favoritesRepo.listByProfile(profileId).map(toFavorite)
+    broadcastToProfile(profileId, CH.favoritesUpdated, favorites)
     broadcastToPopover(CH.favoritesUpdated, favorites)
   }
 
-  ipcMain.handle(CH.favoritesList, () => favoritesRepo.listByProfile(activeProfile()).map(toFavorite))
+  ipcMain.handle(CH.favoritesList, (e) => favoritesRepo.listByProfile(activeProfileOf(resolveWindowContext(e).views)).map(toFavorite))
 
   ipcMain.handle(
     CH.favoritesAdd,
-    (_e, f: { url: string; title: string; faviconUrl: string | null; spaceId: SpaceId | null }) => {
-      const row = favoritesRepo.create(activeProfile(), f)
-      sendFavorites()
+    (e, f: { url: string; title: string; faviconUrl: string | null; spaceId: SpaceId | null }) => {
+      const profileId = activeProfileOf(resolveWindowContext(e).views)
+      const row = favoritesRepo.create(profileId, f)
+      sendFavorites(profileId)
       return toFavorite(row)
     }
   )
 
-  ipcMain.handle(CH.favoritesRemove, (_e, id: string) => {
+  ipcMain.handle(CH.favoritesRemove, (e, id: string) => {
+    const profileId = activeProfileOf(resolveWindowContext(e).views)
     favoritesRepo.remove(id)
-    sendFavorites()
+    sendFavorites(profileId)
   })
 
-  ipcMain.handle(CH.favoritesRemoveByUrl, (_e, url: string) => {
-    favoritesRepo.removeByUrl(activeProfile(), url)
-    sendFavorites()
+  ipcMain.handle(CH.favoritesRemoveByUrl, (e, url: string) => {
+    const profileId = activeProfileOf(resolveWindowContext(e).views)
+    favoritesRepo.removeByUrl(profileId, url)
+    sendFavorites(profileId)
   })
 
-  ipcMain.handle(CH.favoritesSetFolder, (_e, id: string, folderId: string | null) => {
+  ipcMain.handle(CH.favoritesSetFolder, (e, id: string, folderId: string | null) => {
+    const profileId = activeProfileOf(resolveWindowContext(e).views)
     favoritesRepo.setFolder(id, folderId)
-    sendFavorites()
+    sendFavorites(profileId)
   })
 
-  ipcMain.handle(CH.favoritesReorder, (_e, orderedIds: string[]) => {
-    favoritesRepo.reorder(activeProfile(), idArraySchema.parse(Array.isArray(orderedIds) ? orderedIds : []))
-    sendFavorites()
+  ipcMain.handle(CH.favoritesReorder, (e, orderedIds: string[]) => {
+    const profileId = activeProfileOf(resolveWindowContext(e).views)
+    favoritesRepo.reorder(profileId, idArraySchema.parse(Array.isArray(orderedIds) ? orderedIds : []))
+    sendFavorites(profileId)
   })
 
   ipcMain.on(CH.favoriteShowContextMenu, (e, id: string, rawAnchor: LocalRect) => {
+    const { win, views } = resolveWindowContext(e)
+    const profileId = activeProfileOf(views)
     const anchor = safeValidate(localRectSchema, rawAnchor, 'favorite:show-context-menu')
     if (!anchor) return
     const row = favoritesRepo.get(id)
     if (!row) return
-    const folders = favoriteFoldersRepo.listByProfile(activeProfile())
+    const folders = favoriteFoldersRepo.listByProfile(profileId)
     const moveTo = (folderId: string | null) => (): void => {
       favoritesRepo.setFolder(id, folderId)
-      sendFavorites()
+      sendFavorites(profileId)
     }
     const removeFavorite = (): void => {
       favoritesRepo.remove(id)
-      sendFavorites()
+      sendFavorites(profileId)
     }
-    const openManage = (): void => send(CH.favoritesManageRequested)
+    const openManage = (): void => sendTo(win, CH.favoritesManageRequested)
 
     // Appelé depuis le popup du contenu d'un dossier (fenêtre séparée) : ses
     // coordonnées locales ne décrivent rien dans la fenêtre principale, donc
@@ -944,7 +1091,7 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     if (isPopoverWebContents(e.sender)) {
       const point = screen.getCursorScreenPoint()
       Menu.buildFromTemplate([
-        { label: 'Ouvrir', click: () => send(CH.favoriteOpenRequested, row.url) },
+        { label: 'Ouvrir', click: () => sendTo(win, CH.favoriteOpenRequested, row.url) },
         { type: 'separator' },
         { label: 'Copier le lien', click: () => clipboard.writeText(row.url) },
         {
@@ -991,7 +1138,7 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
         { kind: 'item', id: 'manage', label: 'Gérer les favoris…' }
       ],
       {
-        open: () => send(CH.favoriteOpenRequested, row.url),
+        open: () => sendTo(win, CH.favoriteOpenRequested, row.url),
         'copy-link': () => clipboard.writeText(row.url),
         'move-none': moveTo(null),
         ...Object.fromEntries(folders.map((f) => [`move-${f.id}`, moveTo(f.id)])),
@@ -1003,20 +1150,21 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   })
 
   // ─── Dossiers de favoris ────────────────────────────────────────────────────
+  // Partagés par PROFIL, même raison que sendFavorites ci-dessus.
 
-  const sendFolders = (): void => {
-    const folders = favoriteFoldersRepo.listByProfile(activeProfile()).map((r) => ({
+  const sendFolders = (profileId: ProfileId): void => {
+    const folders = favoriteFoldersRepo.listByProfile(profileId).map((r) => ({
       id: r.id,
       name: r.name,
       position: r.position,
       createdAt: r.created_at
     }))
-    send(CH.favoriteFoldersUpdated, folders)
+    broadcastToProfile(profileId, CH.favoriteFoldersUpdated, folders)
     broadcastToPopover(CH.favoriteFoldersUpdated, folders)
   }
 
-  ipcMain.handle(CH.favoriteFoldersList, () =>
-    favoriteFoldersRepo.listByProfile(activeProfile()).map((r) => ({
+  ipcMain.handle(CH.favoriteFoldersList, (e) =>
+    favoriteFoldersRepo.listByProfile(activeProfileOf(resolveWindowContext(e).views)).map((r) => ({
       id: r.id,
       name: r.name,
       position: r.position,
@@ -1024,23 +1172,26 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     }))
   )
 
-  ipcMain.handle(CH.favoriteFoldersCreate, (_e, name: string) => {
-    const row = favoriteFoldersRepo.create(activeProfile(), (name || 'Nouveau dossier').slice(0, 60))
-    sendFolders()
+  ipcMain.handle(CH.favoriteFoldersCreate, (e, name: string) => {
+    const profileId = activeProfileOf(resolveWindowContext(e).views)
+    const row = favoriteFoldersRepo.create(profileId, (name || 'Nouveau dossier').slice(0, 60))
+    sendFolders(profileId)
     return { id: row.id, name: row.name, position: row.position, createdAt: row.created_at }
   })
 
-  ipcMain.handle(CH.favoriteFoldersRename, (_e, id: string, name: string) => {
+  ipcMain.handle(CH.favoriteFoldersRename, (e, id: string, name: string) => {
+    const profileId = activeProfileOf(resolveWindowContext(e).views)
     favoriteFoldersRepo.rename(id, (name || 'Dossier').slice(0, 60))
-    sendFolders()
+    sendFolders(profileId)
   })
 
-  ipcMain.handle(CH.favoriteFoldersRemove, (_e, id: string) => {
+  ipcMain.handle(CH.favoriteFoldersRemove, (e, id: string) => {
+    const profileId = activeProfileOf(resolveWindowContext(e).views)
     // favoriteFoldersRepo.remove() met déjà `folder_id = NULL` sur les favoris
     // affectés (voir la table `favorites`) — il suffit de resynchroniser les deux listes.
     favoriteFoldersRepo.remove(id)
-    sendFolders()
-    sendFavorites()
+    sendFolders(profileId)
+    sendFavorites(profileId)
   })
 
   // Clic droit sur une pastille de dossier (barre de favoris) — même patron
@@ -1048,10 +1199,12 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   // Pas de saisie de texte possible dans un menu natif : « Renommer » relaie
   // la demande à la fenêtre principale (favoriteFolderRenameRequested), qui
   // demande le nouveau nom puis appelle favoriteFoldersRename normalement.
-  ipcMain.on(CH.favoriteFoldersShowContextMenu, (_e, id: string, rawAnchor: LocalRect) => {
+  ipcMain.on(CH.favoriteFoldersShowContextMenu, (e, id: string, rawAnchor: LocalRect) => {
+    const { win, views } = resolveWindowContext(e)
+    const profileId = activeProfileOf(views)
     const anchor = safeValidate(localRectSchema, rawAnchor, 'favorite-folders:show-context-menu')
     if (!anchor) return
-    const folder = favoriteFoldersRepo.listByProfile(activeProfile()).find((f) => f.id === id)
+    const folder = favoriteFoldersRepo.listByProfile(profileId).find((f) => f.id === id)
     if (!folder) return
     showContextMenuPopover(
       win,
@@ -1062,11 +1215,11 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
         { kind: 'item', id: 'delete', label: 'Supprimer le dossier', danger: true }
       ],
       {
-        rename: () => send(CH.favoriteFolderRenameRequested, id),
+        rename: () => sendTo(win, CH.favoriteFolderRenameRequested, id),
         delete: () => {
           favoriteFoldersRepo.remove(id)
-          sendFolders()
-          sendFavorites()
+          sendFolders(profileId)
+          sendFavorites(profileId)
         }
       }
     )
@@ -1078,7 +1231,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   // WebContentsView de la page active, qui compose toujours au-dessus du DOM
   // quel que soit le z-index — les clics ne l'atteignaient jamais). La
   // fenêtre principale n'envoie que des ids : le main réhydrate les détails.
-  ipcMain.on(CH.favoritesShowOverflowMenu, (_e, raw: FavoritesOverflowEntry[]) => {
+  ipcMain.on(CH.favoritesShowOverflowMenu, (e, raw: FavoritesOverflowEntry[]) => {
+    const { win, views } = resolveWindowContext(e)
+    const profileId = activeProfileOf(views)
     const entries = safeValidate(favoritesOverflowEntriesSchema, raw, 'favorites:show-overflow-menu')
     if (!entries || entries.length === 0) return
     const point = screen.getCursorScreenPoint()
@@ -1087,17 +1242,17 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
         if (entry.kind === 'favorite') {
           const row = favoritesRepo.get(entry.id)
           if (!row) return null
-          return { label: row.title || row.url, click: () => send(CH.favoriteOpenRequested, row.url) }
+          return { label: row.title || row.url, click: () => sendTo(win, CH.favoriteOpenRequested, row.url) }
         }
-        const folder = favoriteFoldersRepo.listByProfile(activeProfile()).find((f) => f.id === entry.id)
+        const folder = favoriteFoldersRepo.listByProfile(profileId).find((f) => f.id === entry.id)
         if (!folder) return null
-        const items = favoritesRepo.listByProfile(activeProfile()).filter((f) => f.folder_id === folder.id)
+        const items = favoritesRepo.listByProfile(profileId).filter((f) => f.folder_id === folder.id)
         const submenu: Electron.MenuItemConstructorOptions[] =
           items.length === 0
             ? [{ label: 'Dossier vide', enabled: false }]
             : items.map((f) => ({
                 label: f.title || f.url,
-                click: () => send(CH.favoriteOpenRequested, f.url)
+                click: () => sendTo(win, CH.favoriteOpenRequested, f.url)
               }))
         return { label: folder.name, submenu }
       })
@@ -1108,11 +1263,12 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   // ─── Informations de site ──────────────────────────────────────────────────
 
-  ipcMain.handle(CH.siteInfo, (_e, id: PageId): SiteInfo | null => siteInfoForPage(id))
+  ipcMain.handle(CH.siteInfo, (e, id: PageId): SiteInfo | null => siteInfoForPage(resolveWindowContext(e).views, id))
 
   ipcMain.handle(
     CH.siteSetPermission,
-    (_e, id: PageId, kind: SitePermissionKind, state: SitePermissionState): SiteInfo | null => {
+    (e, id: PageId, kind: SitePermissionKind, state: SitePermissionState): SiteInfo | null => {
+      const { views } = resolveWindowContext(e)
       const row = pagesRepo.get(id)
       if (!row) return null
       let origin: string
@@ -1121,8 +1277,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
       } catch {
         return null
       }
-      sitePermissionsRepo.set(activeProfile(), origin, kind, state)
-      return siteInfoForPage(id)
+      sitePermissionsRepo.set(activeProfileOf(views), origin, kind, state)
+      return siteInfoForPage(views, id)
     }
   )
 
@@ -1138,9 +1294,12 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   ipcMain.handle(CH.newTabNews, (_e, force?: boolean) => getNewTabNews(Boolean(force)))
   ipcMain.handle(CH.newTabCitySearch, (_e, query: string) => searchNewTabCities(String(query).slice(0, 80)))
   ipcMain.handle(CH.newTabSearchSuggestions, (_e, query: string) => getSearchSuggestions(String(query).slice(0, 200)))
-  ipcMain.handle(CH.newTabRecentSearches, (_e, limit?: number) => searchQueriesRepo.recent(activeProfile(), limit))
-  ipcMain.on(CH.newTabRecordSearch, (_e, query: string) => {
-    if (!activeProfileRecord()?.isPrivate) searchQueriesRepo.record(activeProfile(), String(query).slice(0, 300))
+  ipcMain.handle(CH.newTabRecentSearches, (e, limit?: number) =>
+    searchQueriesRepo.recent(activeProfileOf(resolveWindowContext(e).views), limit)
+  )
+  ipcMain.on(CH.newTabRecordSearch, (e, query: string) => {
+    const { views } = resolveWindowContext(e)
+    if (!activeProfileRecordOf(views)?.isPrivate) searchQueriesRepo.record(activeProfileOf(views), String(query).slice(0, 300))
   })
 
   // ─── IA ────────────────────────────────────────────────────────────────────
@@ -1148,25 +1307,30 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   ipcMain.handle(CH.aiStatus, () => router.getStatus())
   ipcMain.handle(CH.aiRefreshStatus, () => router.refreshStatus())
 
-  ipcMain.on(CH.aiChat, (_e, raw: ChatRequest) => {
+  ipcMain.on(CH.aiChat, (e, raw: ChatRequest) => {
+    const { win } = resolveWindowContext(e)
     const req = safeValidate(chatRequestSchema, raw, 'ai:chat')
     if (!req) return
     const system = buildMuseSystem(req.context)
     router
       .chat(req.requestId, system, req.messages, (delta) => {
-        send(CH.aiChunk, { requestId: req.requestId, delta })
+        sendTo(win, CH.aiChunk, { requestId: req.requestId, delta })
       })
       .then((provider) => {
-        send(CH.aiDone, { requestId: req.requestId, error: null, providerUsed: provider })
+        sendTo(win, CH.aiDone, { requestId: req.requestId, error: null, providerUsed: provider })
       })
       .catch((err: Error) => {
-        send(CH.aiDone, { requestId: req.requestId, error: err.message, providerUsed: null })
+        sendTo(win, CH.aiDone, { requestId: req.requestId, error: err.message, providerUsed: null })
       })
   })
 
   ipcMain.on(CH.aiAbort, (_e, requestId: string) => router.abort(requestId))
 
-  router.onStatusChanged = (status) => send(CH.aiStatusChanged, status)
+  // Diffusé à TOUTES les fenêtres (l'état IA — Ollama local, clés configurées —
+  // n'est pas propre à un profil ni à une fenêtre).
+  router.onStatusChanged = (status) => {
+    for (const ctx of allWindowContexts()) sendTo(ctx.win, CH.aiStatusChanged, status)
+  }
 
   // ─── Notes ─────────────────────────────────────────────────────────────────
 
@@ -1183,20 +1347,21 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   // ─── Historique ────────────────────────────────────────────────────────────
 
-  ipcMain.handle(CH.historySearch, (_e, query: string, limit?: number) =>
-    visitsRepo.search(activeProfile(), String(query).slice(0, 200), limit)
+  ipcMain.handle(CH.historySearch, (e, query: string, limit?: number) =>
+    visitsRepo.search(activeProfileOf(resolveWindowContext(e).views), String(query).slice(0, 200), limit)
   )
-  ipcMain.handle(CH.historyList, (_e, limit?: number) => visitsRepo.recent(activeProfile(), limit))
-  ipcMain.handle(CH.historyClear, (_e, sinceTs: number | null) =>
-    visitsRepo.clear(activeProfile(), sinceTs)
+  ipcMain.handle(CH.historyList, (e, limit?: number) => visitsRepo.recent(activeProfileOf(resolveWindowContext(e).views), limit))
+  ipcMain.handle(CH.historyClear, (e, sinceTs: number | null) =>
+    visitsRepo.clear(activeProfileOf(resolveWindowContext(e).views), sinceTs)
   )
-  ipcMain.handle(CH.historyRemove, (_e, id: string) => visitsRepo.remove(activeProfile(), String(id)))
+  ipcMain.handle(CH.historyRemove, (e, id: string) => visitsRepo.remove(activeProfileOf(resolveWindowContext(e).views), String(id)))
 
   // ─── Réglages ──────────────────────────────────────────────────────────────
 
   ipcMain.handle(CH.settingsGet, () => getSettings())
 
-  ipcMain.handle(CH.settingsSet, (_e, patch: SettingsPatch) => {
+  ipcMain.handle(CH.settingsSet, (e, patch: SettingsPatch) => {
+    const { views } = resolveWindowContext(e)
     const previousZoom = getSettings().defaultZoom
     const next = applySettingsPatch(patch)
     applySideEffects(views, patch, previousZoom)
@@ -1204,10 +1369,11 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     return next
   })
 
-  ipcMain.handle(CH.settingsClearData, async (_e, kinds: BrowsingDataKind[], range: ClearDataRange) => {
+  ipcMain.handle(CH.settingsClearData, async (e, kinds: BrowsingDataKind[], range: ClearDataRange) => {
+    const { views } = resolveWindowContext(e)
     const list = Array.isArray(kinds) ? kinds : []
     const cutoff = rangeToCutoff(range ?? 'all')
-    const profileId = activeProfile()
+    const profileId = activeProfileOf(views)
 
     if (list.includes('history')) visitsRepo.clear(profileId, cutoff)
     if (list.includes('downloads')) downloadsRepo.clear(profileId, cutoff)
@@ -1215,17 +1381,18 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     // Cookies/cache : l'API Electron ne filtre pas par date (tout ou rien).
     const sessionKinds = list.filter((k): k is 'cache' | 'cookies' => k === 'cache' || k === 'cookies')
     if (sessionKinds.length > 0) {
-      const isPrivate = activeProfileRecord()?.isPrivate ?? false
+      const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
       await clearBrowsingData(webPartitionForProfile(profileId, isPrivate), sessionKinds)
     }
   })
 
-  ipcMain.handle(CH.settingsChooseDownloadDir, () => chooseDirectory(win))
+  ipcMain.handle(CH.settingsChooseDownloadDir, (e) => chooseDirectory(resolveWindowContext(e).win))
 
-  ipcMain.handle(CH.settingsReset, () => {
+  ipcMain.handle(CH.settingsReset, (e) => {
+    const { views } = resolveWindowContext(e)
     const next = resetSettings()
-    const isPrivate = activeProfileRecord()?.isPrivate ?? false
-    applyProxy(webPartitionForProfile(activeProfile(), isPrivate))
+    const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
+    applyProxy(webPartitionForProfile(activeProfileOf(views), isPrivate))
     views.applyZoomToAll()
     void router.refreshStatus()
     return next
@@ -1233,8 +1400,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   ipcMain.handle(CH.previewsCleanup, () => cleanupPreviews())
 
-  ipcMain.handle(CH.performanceStats, async () => {
-    const { liveViews, totalMemoryKB } = views.getStats()
+  ipcMain.handle(CH.performanceStats, async (e) => {
+    const { liveViews, totalMemoryKB } = resolveWindowContext(e).views.getStats()
     const previewsDirBytes = await previewsDirSize()
     return { liveViews, totalMemoryKB, previewsDirBytes }
   })
@@ -1273,8 +1440,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     app.quit()
   })
 
-  ipcMain.on(CH.appSetTitle, (_e, title: string) => {
-    win.setTitle(String(title ?? '').trim().slice(0, 80) || 'ÆTHER')
+  ipcMain.on(CH.appSetTitle, (e, title: string) => {
+    resolveWindowContext(e).win.setTitle(String(title ?? '').trim().slice(0, 80) || 'ÆTHER')
   })
 
   // Menu principal (façon Chrome/Edge/Brave) — bulle DOM dans le popup natif
@@ -1287,15 +1454,16 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   // exactement — même mécanisme fiable que la bulle de dossier de favoris.
   // Chaque clic relaie une commande déjà gérée par `runCommand` côté renderer
   // (même relais que les raccourcis clavier globaux).
-  ipcMain.on(CH.appMenuRunCommand, (_e, cmd: ShortcutCommand) => {
-    hidePopoverWindow()
-    send(CH.shortcut, cmd)
+  ipcMain.on(CH.appMenuRunCommand, (e, cmd: ShortcutCommand) => {
+    const { win } = resolveWindowContext(e)
+    hidePopoverWindow(win)
+    sendTo(win, CH.shortcut, cmd)
   })
 
   // ─── Téléchargements ──────────────────────────────────────────────────────────
 
-  ipcMain.handle(CH.downloadsList, (): DownloadEntry[] =>
-    downloadsRepo.listByProfile(activeProfile()).map((d) => ({
+  ipcMain.handle(CH.downloadsList, (e): DownloadEntry[] =>
+    downloadsRepo.listByProfile(activeProfileOf(resolveWindowContext(e).views)).map((d) => ({
       ...d,
       // Vérifié à la demande (pas de veille filesystem) : suffisant pour
       // signaler un fichier supprimé dès qu'on regarde le panneau.
@@ -1303,21 +1471,21 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     }))
   )
 
-  ipcMain.handle(CH.downloadsClear, (_e, sinceTs: number | null) => {
-    downloadsRepo.clear(activeProfile(), sinceTs)
+  ipcMain.handle(CH.downloadsClear, (e, sinceTs: number | null) => {
+    downloadsRepo.clear(activeProfileOf(resolveWindowContext(e).views), sinceTs)
   })
 
   ipcMain.handle(CH.downloadsCancel, (_e, id: string) => {
     liveDownloads.get(id)?.cancel()
   })
 
-  ipcMain.handle(CH.downloadsOpenFile, async (_e, id: string) => {
-    const entry = downloadsRepo.listByProfile(activeProfile()).find((d) => d.id === id)
+  ipcMain.handle(CH.downloadsOpenFile, async (e, id: string) => {
+    const entry = downloadsRepo.listByProfile(activeProfileOf(resolveWindowContext(e).views)).find((d) => d.id === id)
     if (entry?.path && existsSync(entry.path)) await shell.openPath(entry.path)
   })
 
-  ipcMain.handle(CH.downloadsShowInFolder, (_e, id: string) => {
-    const entry = downloadsRepo.listByProfile(activeProfile()).find((d) => d.id === id)
+  ipcMain.handle(CH.downloadsShowInFolder, (e, id: string) => {
+    const entry = downloadsRepo.listByProfile(activeProfileOf(resolveWindowContext(e).views)).find((d) => d.id === id)
     if (entry?.path) shell.showItemInFolder(entry.path)
   })
 
@@ -1327,38 +1495,45 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   // ─── Extensions ───────────────────────────────────────────────────────────────
 
-  ipcMain.handle(CH.extensionsList, (): ExtensionInfo[] => listExtensions(activeProfile(), views.activePartition()))
+  ipcMain.handle(CH.extensionsList, (e): ExtensionInfo[] => {
+    const { views } = resolveWindowContext(e)
+    return listExtensions(activeProfileOf(views), views.activePartition())
+  })
 
-  ipcMain.handle(CH.extensionsChooseFolder, () => chooseExtensionFolder(win))
+  ipcMain.handle(CH.extensionsChooseFolder, (e) => chooseExtensionFolder(resolveWindowContext(e).win))
 
-  ipcMain.handle(CH.extensionsAddUnpacked, (_e, folderPath: string) =>
-    addUnpackedExtension(activeProfile(), views.activePartition(), String(folderPath))
-  )
+  ipcMain.handle(CH.extensionsAddUnpacked, (e, folderPath: string) => {
+    const { views } = resolveWindowContext(e)
+    return addUnpackedExtension(activeProfileOf(views), views.activePartition(), String(folderPath))
+  })
 
-  ipcMain.handle(CH.extensionsSetEnabled, (_e, id: string, enabled: boolean) =>
-    setExtensionEnabled(activeProfile(), views.activePartition(), id, Boolean(enabled))
-  )
+  ipcMain.handle(CH.extensionsSetEnabled, (e, id: string, enabled: boolean) => {
+    const { views } = resolveWindowContext(e)
+    setExtensionEnabled(activeProfileOf(views), views.activePartition(), id, Boolean(enabled))
+  })
 
-  ipcMain.handle(CH.extensionsRemove, (_e, id: string) => {
-    removeExtension(activeProfile(), views.activePartition(), id)
+  ipcMain.handle(CH.extensionsRemove, (e, id: string) => {
+    const { views } = resolveWindowContext(e)
+    removeExtension(activeProfileOf(views), views.activePartition(), id)
   })
 
   // Vraie bulle d'une extension (son propre popup.html) — pas notre liste.
   // Toujours ancrée au même endroit (sous l'icône puzzle, haut-droit) via
-  // `extensionsMenuAnchor` — pas au curseur : le clic vient de l'intérieur de
-  // la bulle « liste des extensions » (une AUTRE fenêtre popup), qui pourrait
-  // avoir défilé/varier en hauteur selon la ligne cliquée.
-  ipcMain.on(CH.extensionsOpenPopup, (_e, id: string) => {
-    hidePopoverWindow()
+  // `extensionsMenuAnchors` (par fenêtre) — pas au curseur : le clic vient de
+  // l'intérieur de la bulle « liste des extensions » (une AUTRE fenêtre
+  // popup), qui pourrait avoir défilé/varier en hauteur selon la ligne cliquée.
+  ipcMain.on(CH.extensionsOpenPopup, (e, id: string) => {
+    const { win, views } = resolveWindowContext(e)
+    hidePopoverWindow(win)
     // `hidePopoverWindow()` masque bien la fenêtre, mais ne prévient jamais le
     // renderer principal (seul `onPageFocused` le fait normalement) — sans ce
     // signal, `ExtensionsButton` (TitleBar.tsx) restait persuadé que la liste
     // était encore ouverte et n'aurait rouvert au clic suivant qu'un `close()`
     // sur une fenêtre déjà masquée.
-    send(CH.popoverClosed)
-    const info = listExtensions(activeProfile(), views.activePartition()).find((ext) => ext.id === id)
+    sendTo(win, CH.popoverClosed)
+    const info = listExtensions(activeProfileOf(views), views.activePartition()).find((ext) => ext.id === id)
     if (!info?.popupUrl) return
-    const anchor = extensionsMenuAnchor ?? (() => {
+    const anchor = extensionsMenuAnchors.get(win.id) ?? (() => {
       const p = screen.getCursorScreenPoint()
       return { rightX: p.x, topY: p.y }
     })()
@@ -1372,10 +1547,11 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   // Réponse à la popup de confirmation d'installation (voir onInstallExtensionRequested
   // ci-dessous, et WEBSTORE_HOOK_SCRIPT dans viewManager.ts) — déclenche le vrai
   // téléchargement/installation seulement après ce clic explicite de l'utilisateur.
-  ipcMain.on(CH.webstoreInstallConfirm, (_e, confirmed: boolean) => {
-    const pending = pendingWebstoreInstall
-    pendingWebstoreInstall = null
-    hidePopoverWindow()
+  ipcMain.on(CH.webstoreInstallConfirm, (e, confirmed: boolean) => {
+    const { win, views } = resolveWindowContext(e)
+    const pending = pendingWebstoreInstalls.get(win.id) ?? null
+    pendingWebstoreInstalls.delete(win.id)
+    hidePopoverWindow(win)
     if (!pending) return
     const resolveScript = (ok: boolean): string =>
       `window.__aetherResolveInstall && window.__aetherResolveInstall(${JSON.stringify(pending.extensionId)}, ${ok})`
@@ -1383,9 +1559,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
       views.runScript(pending.pageId, resolveScript(false))
       return
     }
-    void installExtensionFromWebStore(activeProfile(), views.activePartition(), pending.extensionId).then((result) => {
+    void installExtensionFromWebStore(activeProfileOf(views), views.activePartition(), pending.extensionId).then((result) => {
       views.runScript(pending.pageId, resolveScript(result.ok))
-      send(CH.extensionsInstallResult, result)
+      sendTo(win, CH.extensionsInstallResult, result)
     })
   })
 
@@ -1397,7 +1573,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   // ─── Popover flottant (fenêtre native) ─────────────────────────────────────
 
-  ipcMain.on(CH.popoverShow, (_e, req: PopoverShowRequest) => {
+  ipcMain.on(CH.popoverShow, (e, req: PopoverShowRequest) => {
+    const { win } = resolveWindowContext(e)
     const content: PopoverContent =
       req.kind === 'favorites-folder'
         ? { kind: 'favorites-folder', folderId: req.folderId, folder: req.folder, items: req.items }
@@ -1410,15 +1587,15 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
               : { kind: req.kind, pageId: req.pageId }
     if (req.kind === 'extensions-menu') {
       const winBounds = win.getBounds()
-      extensionsMenuAnchor = {
+      extensionsMenuAnchors.set(win.id, {
         rightX: winBounds.x + req.anchor.x + req.anchor.width,
         topY: winBounds.y + req.anchor.y + req.anchor.height + POPOVER_GAP
-      }
+      })
     }
     openPopover(win, computePopoverBounds(win, req), content)
   })
 
-  ipcMain.on(CH.popoverHide, () => hidePopoverWindow())
+  ipcMain.on(CH.popoverHide, (e) => hidePopoverWindow(resolveWindowContext(e).win))
 
   ipcMain.on(CH.popoverResize, (e, size: { width: number; height: number }) => {
     resizePopoverWindow(e.sender, size.width, size.height)
@@ -1427,7 +1604,7 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   // Le popup natif du contenu d'un dossier de favoris (fenêtre séparée, aucun
   // store partagé) relaie l'ouverture d'un favori via ce canal — la fenêtre
   // principale décide (onglet déjà ouvert → focus, sinon nouvel onglet).
-  ipcMain.on(CH.favoritesRequestOpen, (_e, url: string) => send(CH.favoriteOpenRequested, String(url)))
+  ipcMain.on(CH.favoritesRequestOpen, (e, url: string) => sendTo(resolveWindowContext(e).win, CH.favoriteOpenRequested, String(url)))
 }
 
 /** Effets de bord d'un changement de réglages (zoom, proxy appliqués à chaud). */
@@ -1436,19 +1613,14 @@ function applySideEffects(views: ViewManager, patch: SettingsPatch, previousZoom
     views.applyZoomToAll()
   }
   if (patch.proxyMode !== undefined || patch.proxyRules !== undefined) {
-    const isPrivate = activeProfileRecord()?.isPrivate ?? false
-    applyProxy(webPartitionForProfile(getActiveProfileId() ?? '', isPrivate))
+    const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
+    applyProxy(webPartitionForProfile(activeProfileOf(views), isPrivate))
   }
   if (patch.spellcheckLanguages !== undefined) {
-    const isPrivate = activeProfileRecord()?.isPrivate ?? false
-    applySpellcheckLanguages(webPartitionForProfile(getActiveProfileId() ?? '', isPrivate))
+    const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
+    applySpellcheckLanguages(webPartitionForProfile(activeProfileOf(views), isPrivate))
   }
 }
-
-/** Installation en attente de confirmation (popup « webstore-confirm » ouverte) —
- * une seule à la fois, comme `contextMenuActions` dans popoverWindow.ts. Consommée
- * par le handler `CH.webstoreInstallConfirm` (registerIpc, ci-dessous). */
-let pendingWebstoreInstall: { pageId: PageId; extensionId: string } | null = null
 
 /** Fabrique le délégué reliant le ViewManager aux événements renderer. */
 export function createViewDelegate(
@@ -1477,7 +1649,7 @@ export function createViewDelegate(
     onPageFocused() {
       // Un clic dans une page (WebContentsView) n'atteint jamais le DOM du
       // renderer hôte — seul signal fiable pour fermer un popover ouvert.
-      hidePopoverWindow()
+      hidePopoverWindow(win)
       send(CH.popoverClosed)
     },
     onZoomChanged(pageId, percent) {
@@ -1512,7 +1684,7 @@ export function createViewDelegate(
       queuePageEmbedding(router, pageId, text)
     },
     onInstallExtensionRequested(pageId, extensionId, name, iconUrl) {
-      pendingWebstoreInstall = { pageId, extensionId }
+      pendingWebstoreInstalls.set(win.id, { pageId, extensionId })
       const width = 360
       const height = 200
       const wb = win.getBounds()
@@ -1532,9 +1704,19 @@ export function createViewDelegate(
     onCreateQrCode(url, title) {
       send(CH.qrCodeShow, { url, title })
     },
+    onOpenInNewWindow(url, isPrivate) {
+      if (isPrivate) {
+        const profile = profilesRepo.create('Navigation privée', 262, { icon: '🕶', color: '#20202c' }, { isPrivate: true })
+        spacesRepo.create('Espace privé', 262, profile.id)
+        createSecondaryContentWindow(profile.id, true, url, router)
+      } else {
+        createSecondaryContentWindow(activeProfileOf(getViews()), false, url, router)
+      }
+    },
     onVisit(pageId, url, title) {
+      const views = getViews()
       // La navigation privée ne laisse aucune trace dans l'historique.
-      if (activeProfileRecord()?.isPrivate) return
+      if (activeProfileRecordOf(views)?.isPrivate) return
       // Filet de sécurité (en plus du filtre déjà posé dans ViewManager) :
       // certaines pages émettent un `did-stop-loading` fantôme pour leur
       // commit initial (`about:blank`, avant même le vrai `loadURL`), URL et
@@ -1542,7 +1724,7 @@ export function createViewDelegate(
       // recherche avec des lignes sans aucun texte. Jamais une vraie visite.
       if (!url || url === 'about:blank' || url.startsWith('aether:')) return
       const row = pagesRepo.get(pageId)
-      visitsRepo.record(activeProfile(), url, title, row?.favicon_url ?? null)
+      visitsRepo.record(activeProfileOf(views), url, title, row?.favicon_url ?? null)
     }
   }
 }

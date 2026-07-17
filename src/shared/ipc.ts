@@ -83,6 +83,9 @@ export const CH = {
   profileCreateRequested: 'profile:create-requested',
   profileStartPrivateRequested: 'profile:start-private-requested',
   profileManageRequested: 'profile:manage-requested',
+  // Poussé aux AUTRES fenêtres (pas celle qui a demandé la suppression) quand
+  // leur profil actif vient d'être supprimé depuis ailleurs — support multi-fenêtre.
+  profileForceSwitched: 'profile:force-switched',
 
   // Espaces
   spaceCreate: 'space:create',
@@ -316,6 +319,9 @@ export interface AetherApi {
     onCreateRequested(cb: () => void): Unsubscribe
     onStartPrivateRequested(cb: () => void): Unsubscribe
     onManageRequested(cb: () => void): Unsubscribe
+    /** Cette fenêtre affichait un profil supprimé depuis une AUTRE fenêtre —
+     * bascule forcée vers le workspace de remplacement (support multi-fenêtre). */
+    onForceSwitched(cb: (payload: { activeProfileId: ProfileId; workspace: Workspace }) => void): Unsubscribe
   }
   spaces: {
     create(name: string): Promise<Space>
