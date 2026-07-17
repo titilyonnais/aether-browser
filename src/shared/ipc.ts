@@ -205,6 +205,7 @@ export const CH = {
   settingsClearData: 'settings:clear-data',
   settingsChooseDownloadDir: 'settings:choose-download-dir',
   settingsReset: 'settings:reset',
+  previewsCleanup: 'previews:cleanup',
 
   // Moteurs de recherche personnalisés
   searchEnginesList: 'search-engines:list',
@@ -500,6 +501,11 @@ export interface AetherApi {
     chooseDownloadDir(): Promise<string | null>
     /** Réinitialise toutes les préférences (garde clés API & mémoire). */
     reset(): Promise<AppSettings>
+  }
+  previews: {
+    /** Supprime les aperçus orphelins + évince les plus anciens si les
+     * limites de taille/nombre sont dépassées. Retourne ce qui a été fait. */
+    cleanup(): Promise<{ removedOrphans: number; removedForLimit: number; freedBytes: number }>
   }
   searchEngines: {
     list(): Promise<CustomSearchEngine[]>

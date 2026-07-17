@@ -4,6 +4,19 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.46.0] — 2026-07-17
+
+À partir de cette version : suivi d'une analyse externe exhaustive du projet (voir mémoire), traité point par point par priorité.
+
+### Ajouté
+
+- **Licence** : fichier `LICENSE` (MIT) ajouté à la racine — `package.json` la déclarait déjà, mais GitHub ne la détectait pas faute du fichier.
+- **Nettoyage des aperçus de pages** : les miniatures JPEG orphelines (page supprimée avec son espace/profil, ou après un crash) sont désormais purgées au démarrage, avec une limite de 500 Mo/2000 fichiers (éviction des plus anciennes au-delà). Bouton « Nettoyer maintenant » dans Réglages › Données.
+
+### Corrigé
+
+- **Profils de navigation privée après un crash** : leur suppression n'avait lieu qu'à la fermeture propre de l'application (`will-quit`) — un crash ou un arrêt forcé laissait le profil et toutes ses données (espaces, pages, favoris, visites) en base indéfiniment, prêt à réapparaître au lancement suivant. Un même nettoyage tourne désormais aussi au démarrage.
+
 ## [0.45.3] — 2026-07-17
 
 ### Ajouté

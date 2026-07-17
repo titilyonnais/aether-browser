@@ -10,6 +10,7 @@ import { profilesRepo } from './db/repositories'
 import { applyFlagsBeforeReady } from './flags'
 import { createViewDelegate, ensureBootstrap, registerIpc } from './ipc'
 import { createMainWindow } from './mainWindow'
+import { cleanupPreviews } from './previews'
 import { installAetherProtocol, registerAetherScheme } from './protocol'
 import { isQuitting } from './quitState'
 import { getSettings } from './settings'
@@ -61,6 +62,15 @@ if (!gotLock) {
     Menu.setApplicationMenu(null)
 
     openDatabase()
+    // Filet de sécurité si un crash/kill forcé a empêché le nettoyage normal
+    // de `will-quit` (ci-dessous) : un profil de navigation privée resté en
+    // base survivrait sinon indéfiniment (espaces/pages/visites/favoris),
+    // et réapparaîtrait dans le sélecteur de profils au lancement suivant —
+    // AVANT `ensureBootstrap()` pour qu'un profil actif pointant vers l'un
+    // d'eux retombe proprement sur un profil normal.
+    for (const profile of profilesRepo.list()) {
+      if (profile.isPrivate) profilesRepo.remove(profile.id)
+    }
     const { activeProfileId } = ensureBootstrap()
     installAetherProtocol()
 
@@ -86,6 +96,13 @@ if (!gotLock) {
     // (Réglages › À propos) : la vérification MANUELLE, elle, marche toujours.
     initUpdater(mainWindow)
     if (getSettings().autoCheckForUpdates) setTimeout(() => checkForUpdates(), 4000)
+
+    // Ménage des aperçus JPEG en arrière-plan : orphelins (page supprimée sans
+    // passer par `deletePreview` — suppression d'un espace/profil entier,
+    // crash) + éviction des plus anciens si le dossier dépasse la limite de
+    // taille/nombre. Différé et fire-and-forget, comme la vérif de mise à
+    // jour ci-dessus — travail d'I/O pur, aucune UI n'en dépend.
+    setTimeout(() => void cleanupPreviews(), 6000)
 
     // Réglage « minimiser au lieu de fermer » — n'intercepte QUE le bouton X/
     // Alt+F4 (pas un vrai « Quitter ÆTHER », qui marque `isQuitting()` avant

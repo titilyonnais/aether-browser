@@ -82,6 +82,7 @@ import {
   runContextMenuAction,
   showContextMenuPopover
 } from './popoverWindow'
+import { cleanupPreviews } from './previews'
 import { markQuitting } from './quitState'
 import { chooseDirectory, clearBrowsingData } from './sessionActions'
 import {
@@ -1197,6 +1198,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     void router.refreshStatus()
     return next
   })
+
+  ipcMain.handle(CH.previewsCleanup, () => cleanupPreviews())
 
   // ─── Moteurs de recherche personnalisés ──────────────────────────────────────
 

@@ -268,6 +268,13 @@ export const settings: Record<string, string> = {
   'settings.data.clearNow': 'Effacer maintenant',
   'settings.data.clearedMessage': 'Données effacées.',
   'settings.data.clearedToast': 'Données de navigation effacées',
+  'settings.data.previewsTitle': 'Aperçus des pages',
+  'settings.data.previewsHint':
+    'Miniatures JPEG de vos cartes — nettoyées automatiquement au démarrage (orphelines et les plus anciennes au-delà de 500 Mo/2000 fichiers), ou à la demande ici.',
+  'settings.data.previewsCleanNow': 'Nettoyer maintenant',
+  'settings.data.previewsCleaning': 'Nettoyage…',
+  'settings.data.previewsNothingToClean': 'Rien à nettoyer.',
+  'settings.data.previewsCleanedMessage': '{{count}} aperçu(s) supprimé(s) — {{size}} libérés.',
 
   // Section Extensions
   'settings.extensions.storeTitle': 'Chrome Web Store',

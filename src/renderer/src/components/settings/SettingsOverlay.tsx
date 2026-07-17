@@ -1598,6 +1598,7 @@ function DataSection() {
           {t('settings.data.privacyText')}
         </p>
       </Block>
+      <PreviewsCleanupBlock />
       <ClearDataBlock />
       <Block title={t('settings.data.introTitle')}>
         <button
@@ -1612,6 +1613,48 @@ function DataSection() {
         </button>
       </Block>
     </div>
+  )
+}
+
+function PreviewsCleanupBlock() {
+  const t = useT()
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ removedOrphans: number; removedForLimit: number; freedBytes: number } | null>(
+    null
+  )
+
+  const run = async (): Promise<void> => {
+    setBusy(true)
+    setResult(null)
+    try {
+      const r = await window.aether.previews.cleanup()
+      setResult(r)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Block title={t('settings.data.previewsTitle')} hint={t('settings.data.previewsHint')}>
+      <button
+        type="button"
+        onClick={() => void run()}
+        disabled={busy}
+        className="rounded-full border border-white/[0.1] bg-white/[0.03] px-4 py-2 text-[12px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink disabled:opacity-50"
+      >
+        {busy ? t('settings.data.previewsCleaning') : t('settings.data.previewsCleanNow')}
+      </button>
+      {result && (
+        <p className="mt-2 text-[11px] text-emerald-200/80">
+          {result.removedOrphans + result.removedForLimit === 0
+            ? t('settings.data.previewsNothingToClean')
+            : t('settings.data.previewsCleanedMessage', {
+                count: result.removedOrphans + result.removedForLimit,
+                size: formatBytes(result.freedBytes)
+              })}
+        </p>
+      )}
+    </Block>
   )
 }
 

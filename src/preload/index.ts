@@ -188,6 +188,9 @@ const api: AetherApi = {
     chooseDownloadDir: () => ipcRenderer.invoke(CH.settingsChooseDownloadDir),
     reset: () => ipcRenderer.invoke(CH.settingsReset)
   },
+  previews: {
+    cleanup: () => ipcRenderer.invoke(CH.previewsCleanup)
+  },
   searchEngines: {
     list: () => ipcRenderer.invoke(CH.searchEnginesList),
     create: (label: string, url: string) => ipcRenderer.invoke(CH.searchEnginesCreate, label, url),
