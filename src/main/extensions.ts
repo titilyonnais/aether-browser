@@ -22,6 +22,7 @@ import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { ExtensionInfo, ProfileId } from '@shared/types'
 import { extensionsRepo } from './db/repositories'
+import { logger } from './logger'
 
 interface ActionLike {
   default_icon?: string | Record<string, string>
@@ -245,7 +246,11 @@ export async function addUnpackedExtension(
     const id = extensionsRepo.add(profileId, folderPath, name)
     extensionsRepo.setExtensionId(id, loaded.id)
     return toInfo({ id, extensionId: loaded.id, name, path: folderPath, enabled: true, addedAt: Date.now() }, loaded)
-  } catch {
+  } catch (e) {
+    // Action directement demandée par l'utilisateur (« Charger une extension
+    // décompressée ») — sans ce log, un manifeste invalide ou une permission
+    // Chrome non supportée échouait sans laisser la moindre trace exploitable.
+    logger.error('extensions', `Échec du chargement de l'extension décompressée (${folderPath})`, e)
     return null
   }
 }
@@ -294,8 +299,10 @@ export async function setExtensionEnabled(
     try {
       const loaded = await webSession.extensions.loadExtension(row.path, { allowFileAccess: true })
       extensionsRepo.setExtensionId(id, loaded.id)
-    } catch {
-      // Rechargement impossible — l'utilisateur le verra désactivé.
+    } catch (e) {
+      // Rechargement impossible — l'utilisateur le verra désactivé, sans
+      // savoir pourquoi si ce n'est pas journalisé quelque part.
+      logger.error('extensions', `Échec du rechargement de l'extension ${row.name} (${row.path})`, e)
     }
   }
 }

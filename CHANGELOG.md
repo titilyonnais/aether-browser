@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.46.2] — 2026-07-17
+
+### Ajouté
+
+- **Journal d'erreurs local** (`userData/logs/aether.log`, rotation simple) : quelques échecs qui se dégradaient jusqu'ici en silence total laissent désormais une trace exploitable — repli d'un provider IA vers un autre pendant une conversation, échec d'un embedding (Ollama puis OpenAI), échec du chargement/rechargement d'une extension. Purement local, aucune télémétrie, rien n'est envoyé nulle part.
+
 ## [0.46.1] — 2026-07-17
 
 ### Corrigé

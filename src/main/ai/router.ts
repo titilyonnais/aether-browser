@@ -5,6 +5,7 @@
  *   token, on tente le candidat suivant.
  */
 import type { AiStatus, ApiProviderKind, ChatMessage, ProviderKind } from '@shared/types'
+import { logger } from '../logger'
 import { getSettings, hasSecret, readSecret } from '../settings'
 import {
   anthropicChat,
@@ -160,6 +161,7 @@ export class AiRouter {
         } catch (e) {
           if (controller.signal.aborted) return candidate.kind
           lastError = e instanceof Error ? e : new Error(String(e))
+          logger.warn('ai.router', `Échec du provider ${candidate.kind}, passage au suivant`, lastError)
           if (emitted) throw lastError // flux entamé : ne pas rejouer sur un autre provider
         }
       }
@@ -209,8 +211,10 @@ export class AiRouter {
       try {
         const vector = await ollamaEmbed(settings.ollamaBaseUrl, ollamaModel, text.slice(0, 6000))
         return { vector, model: `ollama:${ollamaModel}` }
-      } catch {
-        // Repli silencieux vers OpenAI si configuré.
+      } catch (e) {
+        // Repli vers OpenAI si configuré — journalisé quand même : sans ça,
+        // rien n'indiquait jamais qu'Ollama avait échoué à ce moment précis.
+        logger.warn('ai.router', "Échec de l'embedding Ollama, repli vers OpenAI si configuré", e)
       }
     }
     const openaiKey = readSecret('openai')
@@ -218,7 +222,8 @@ export class AiRouter {
       try {
         const vector = await openaiEmbed(openaiKey, 'text-embedding-3-small', text)
         return { vector, model: 'openai:text-embedding-3-small' }
-      } catch {
+      } catch (e) {
+        logger.error('ai.router', "Échec de l'embedding OpenAI — aucun backend disponible, embedding abandonné", e)
         return null
       }
     }
