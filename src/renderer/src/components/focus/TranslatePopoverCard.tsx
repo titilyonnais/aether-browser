@@ -6,11 +6,11 @@
  * bannière insérée dans la page elle-même (voir ViewManager.translate côté
  * main, qui traduit lui-même le texte sans jamais injecter d'UI Google).
  */
-import { Check, ChevronLeft, Languages, MoreVertical, X } from 'lucide-react'
+import { Check, ChevronLeft, MoreVertical, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { PageId } from '@shared/types'
 import { translate, type Locale } from '@/i18n'
-import { domainOf } from '@/lib/utils'
+import { cn, domainOf } from '@/lib/utils'
 
 interface TranslatePopoverCardProps {
   pageId: PageId
@@ -57,6 +57,7 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
   const [panel, setPanel] = useState<MenuPanel>('none')
   const [domain, setDomain] = useState<string | null>(null)
   const [neverTranslateDomains, setNeverTranslateDomains] = useState<string[]>([])
+  const [alwaysTranslateLanguages, setAlwaysTranslateLanguages] = useState<string[]>([])
   const menuRef = useRef<HTMLDivElement | null>(null)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
 
@@ -66,7 +67,10 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
     setPanel('none')
     void window.aether.pages.detectLanguage(pageId).then(setDetected)
     void window.aether.pages.get(pageId).then((page) => setDomain(page ? domainOf(page.url) : null))
-    void window.aether.settings.get().then((s) => setNeverTranslateDomains(s.neverTranslateDomains))
+    void window.aether.settings.get().then((s) => {
+      setNeverTranslateDomains(s.neverTranslateDomains)
+      setAlwaysTranslateLanguages(s.alwaysTranslateLanguages)
+    })
   }, [pageId])
 
   useEffect(() => {
@@ -108,6 +112,17 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
     runTranslate(targetLang, lang)
   }
 
+  const alwaysTranslate = sourceCode ? alwaysTranslateLanguages.includes(sourceCode) : false
+
+  const toggleAlwaysTranslate = (): void => {
+    if (!sourceCode) return
+    const next = alwaysTranslate
+      ? alwaysTranslateLanguages.filter((l) => l !== sourceCode)
+      : Array.from(new Set([...alwaysTranslateLanguages, sourceCode]))
+    setAlwaysTranslateLanguages(next)
+    void window.aether.settings.set({ alwaysTranslateLanguages: next })
+  }
+
   const neverTranslateThisSite = (): void => {
     if (!domain) return
     void window.aether.settings.set({
@@ -119,15 +134,42 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
 
   return (
     <div className="popover-surface relative w-80 overflow-hidden rounded-xl p-3">
-      <div className="mb-2.5 flex items-center gap-2">
-        <Languages size={14} strokeWidth={1.8} className="shrink-0 text-glacier" />
-        <p className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{t('focusCanvas.translate.title')}</p>
+      {/* Deux onglets façon bulle native Chrome/Edge : langue détectée à
+          gauche, langue cible à droite — celui qui correspond à l'état
+          affiché EST la page active, cliquer l'autre bascule dessus (pas un
+          simple bouton « Traduire »/« Original » séparé des noms de langue). */}
+      <div className="mb-3 flex items-center gap-1">
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 rounded-lg bg-white/[0.03] p-0.5">
+          <button
+            type="button"
+            onClick={() => translated && runRestore()}
+            disabled={busy}
+            className={cn(
+              'min-w-0 flex-1 truncate rounded-md px-3 py-1.5 text-center text-[12px] transition-colors disabled:opacity-50',
+              !translated ? 'bg-white/[0.08] text-ink ring-1 ring-white/[0.14]' : 'text-ink-faint hover:text-ink-dim'
+            )}
+          >
+            {sourceLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => !translated && runTranslate()}
+            disabled={busy}
+            className={cn(
+              'min-w-0 flex-1 truncate rounded-md px-3 py-1.5 text-center text-[12px] transition-colors disabled:opacity-50',
+              translated ? 'bg-white/[0.08] text-ink ring-1 ring-white/[0.14]' : 'text-ink-faint hover:text-ink-dim'
+            )}
+          >
+            {targetLabel}
+          </button>
+        </div>
         <button
           ref={menuButtonRef}
           type="button"
+          title={t('focusCanvas.translate.menuPickTarget')}
           onClick={() => setPanel((p) => (p === 'none' ? 'menu' : 'none'))}
           className={
-            'grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim' +
+            'grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim' +
             (panel !== 'none' ? ' bg-white/[0.06] text-ink-dim' : '')
           }
         >
@@ -136,39 +178,27 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
         <button
           type="button"
           onClick={closePopover}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim"
         >
           <X size={13} strokeWidth={1.8} />
         </button>
       </div>
 
-      <p className="mb-1 text-[11.5px] text-ink-faint">
-        {t('focusCanvas.translate.detected', { language: sourceLabel })}
-      </p>
-      <p className="mb-3 text-[11.5px] text-ink-faint">
-        {t('focusCanvas.translate.targetLabel')} <span className="text-ink-dim">{targetLabel}</span>
-      </p>
-
-      {translated ? (
-        <button
-          type="button"
-          onClick={runRestore}
-          disabled={busy}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-white/[0.06] px-3 py-2 text-[12px] text-ink-dim transition-colors hover:bg-white/[0.09] disabled:opacity-50"
-        >
-          {t('focusCanvas.translate.showOriginal')}
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => runTranslate()}
-          disabled={busy}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-glacier/90 px-3 py-2 text-[12px] font-medium text-ink-onaccent transition-colors hover:bg-glacier disabled:opacity-50"
-        >
-          <Check size={13} strokeWidth={2} />
-          {t('focusCanvas.translate.translateAction')}
-        </button>
-      )}
+      <label
+        className={cn(
+          'mb-1 flex items-center gap-2 text-[11.5px] text-glacier',
+          sourceCode ? 'cursor-pointer' : 'cursor-default opacity-50'
+        )}
+      >
+        <input
+          type="checkbox"
+          checked={alwaysTranslate}
+          onChange={toggleAlwaysTranslate}
+          disabled={!sourceCode}
+          className="h-3.5 w-3.5 shrink-0 accent-glacier"
+        />
+        {t('focusCanvas.translate.alwaysTranslate', { language: sourceLabel })}
+      </label>
 
       {panel !== 'none' && (
         <div
@@ -232,6 +262,8 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
           )}
         </div>
       )}
+
+      <p className="mt-2.5 text-center text-[10px] text-ink-faint/50">Google Translate</p>
     </div>
   )
 }

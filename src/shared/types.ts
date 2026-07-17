@@ -380,6 +380,10 @@ export interface AppSettings {
   spellcheckLanguages: string[]
   /** Domaines où le bouton Traduire ne doit plus jamais s'afficher (« Ne jamais traduire ce site »). */
   neverTranslateDomains: string[]
+  /** Langues source (codes ISO 639-1) traduites automatiquement à chaque
+   * visite, sans repasser par le popup (« Toujours traduire les pages
+   * rédigées en… », façon Chrome). */
+  alwaysTranslateLanguages: string[]
   // — Système —
   proxyMode: ProxyMode
   /** Règles proxy si proxyMode === 'custom' (ex. « http=host:port »). */
@@ -443,6 +447,7 @@ export interface SettingsPatch {
   spellcheck?: boolean
   spellcheckLanguages?: string[]
   neverTranslateDomains?: string[]
+  alwaysTranslateLanguages?: string[]
   proxyMode?: ProxyMode
   proxyRules?: string
   minimizeOnClose?: boolean

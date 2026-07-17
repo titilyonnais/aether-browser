@@ -62,6 +62,7 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   spellcheck: true,
   spellcheckLanguages: [],
   neverTranslateDomains: [],
+  alwaysTranslateLanguages: [],
   proxyMode: 'system',
   proxyRules: '',
   minimizeOnClose: false,
@@ -169,6 +170,7 @@ export function getSettings(): AppSettings {
     spellcheck: getString('spellcheck'),
     spellcheckLanguages: getString('spellcheckLanguages'),
     neverTranslateDomains: getString('neverTranslateDomains'),
+    alwaysTranslateLanguages: getString('alwaysTranslateLanguages'),
     proxyMode: getString('proxyMode'),
     proxyRules: getString('proxyRules'),
     minimizeOnClose: getString('minimizeOnClose'),
@@ -281,6 +283,12 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
     putValue(
       'neverTranslateDomains',
       Array.from(new Set(patch.neverTranslateDomains.filter((d) => d.trim() !== ''))).slice(0, 200)
+    )
+  }
+  if (patch.alwaysTranslateLanguages !== undefined) {
+    putValue(
+      'alwaysTranslateLanguages',
+      Array.from(new Set(patch.alwaysTranslateLanguages.filter((l) => l.trim() !== ''))).slice(0, 50)
     )
   }
   if (patch.proxyMode !== undefined) putValue('proxyMode', patch.proxyMode)

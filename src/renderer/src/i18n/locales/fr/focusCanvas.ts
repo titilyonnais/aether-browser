@@ -97,12 +97,8 @@ export const focusCanvas: Record<string, string> = {
   'focusCanvas.siteInfo.permissionsHeading': 'Autorisations pour ce site',
 
   // TranslatePopoverCard
-  'focusCanvas.translate.title': 'Traduire cette page',
-  'focusCanvas.translate.detected': 'Langue détectée : {{language}}',
   'focusCanvas.translate.unknownLanguage': 'inconnue',
-  'focusCanvas.translate.targetLabel': 'Vers :',
-  'focusCanvas.translate.translateAction': 'Traduire',
-  'focusCanvas.translate.showOriginal': 'Afficher la page originale',
+  'focusCanvas.translate.alwaysTranslate': 'Toujours traduire les pages rédigées en {{language}}',
   'focusCanvas.translate.menuPickTarget': 'Choisir une autre langue',
   'focusCanvas.translate.menuFixSource': 'La langue détectée est incorrecte',
   'focusCanvas.translate.menuNeverTranslateSite': 'Ne jamais traduire ce site',

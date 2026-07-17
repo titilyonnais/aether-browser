@@ -4,6 +4,13 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.48.0] — 2026-07-17
+
+### Ajouté
+
+- **Popup de traduction repensé** (façon bulle native Chrome/Edge) : la langue détectée et la langue cible sont désormais deux onglets côte à côte — celui qui correspond à l'état affiché est mis en avant, cliquer l'autre bascule directement dessus (avant : bouton « Traduire »/« Original » séparé des noms de langue).
+- **« Toujours traduire les pages rédigées en… »** : nouvelle case à cocher dans ce popup, réellement fonctionnelle — les pages détectées dans une langue cochée sont désormais traduites automatiquement dès leur chargement, sans repasser par le popup.
+
 ## [0.47.2] — 2026-07-17
 
 ### Ajouté

@@ -479,6 +479,7 @@ export class ViewManager {
         void this.extractText(pageId)
       }, 450)
       this.delegate.onVisit(pageId, url, wc.getTitle())
+      void this.autoTranslateIfConfigured(pageId)
     })
 
     // Zoom par défaut réappliqué à chaque page (le facteur se réinitialise
@@ -1112,6 +1113,19 @@ export class ViewManager {
     } catch {
       return ''
     }
+  }
+
+  /** « Toujours traduire les pages rédigées en… » (case à cocher du popup de
+   * traduction, façon Chrome) — traduit silencieusement, sans repasser par le
+   * popup, dès qu'une page dans une de ces langues finit de charger. Gardé
+   * derrière `alwaysTranslateLanguages.length > 0` : sans ça, `detectLanguage`
+   * (un `executeJavaScript`) tournerait à CHAQUE chargement de page pour
+   * (quasi) tout le monde, pour un réglage que peu de gens activeront. */
+  private async autoTranslateIfConfigured(id: PageId): Promise<void> {
+    const langs = getSettings().alwaysTranslateLanguages
+    if (langs.length === 0) return
+    const detected = await this.detectLanguage(id)
+    if (detected && langs.includes(detected)) this.translate(id, 'fr', detected)
   }
 
   // ─── Aperçus & contexte ────────────────────────────────────────────────────
