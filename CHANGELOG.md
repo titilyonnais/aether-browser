@@ -4,6 +4,17 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.50.0] — 2026-07-18
+
+### Ajouté
+
+- **Sous-menus du menu principal en flyout** (« Caster et partager », « Plus d'outils »…) : s'ouvrent désormais à côté du menu, qui reste affiché — au lieu de le remplacer entièrement. Même correctif pour les menus contextuels génériques (favoris, dossiers, espaces…).
+- **Position des outils de développement** (Réglages › Système) : fenêtre à part (comportement historique) ou ancrés à gauche/droite/en bas de la fenêtre ÆTHER.
+
+### Corrigé
+
+- **Troncature de texte qui ne se déclenchait pas malgré le fondu prévu** : la barre d'adresse, les listes déroulantes, l'historique et d'autres endroits gardaient le texte entier au lieu de le tronquer quand la place manquait — un enfant flex refuse par défaut de rétrécir sous la largeur de son contenu, corrigé au niveau des utilitaires CSS partagés (`truncate`/`fade-truncate`) plutôt que fichier par fichier.
+
 ## [0.49.1] — 2026-07-18
 
 ### Corrigé

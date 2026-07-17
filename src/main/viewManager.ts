@@ -728,7 +728,7 @@ export class ViewManager {
       if (input.key === 'F12') {
         event.preventDefault()
         this.teardownStoreShim(pageId, wc)
-        wc.openDevTools({ mode: 'detach' })
+        wc.openDevTools({ mode: getSettings().devtoolsDockMode })
       }
     })
 
@@ -805,8 +805,15 @@ export class ViewManager {
       actions['view-source'] = () => this.delegate.onOpenRequest(pageId, `view-source:${wc.getURL()}`)
       actions.inspect = () => {
         this.teardownStoreShim(pageId, wc)
-        if (isImage) wc.inspectElement(params.x, params.y)
-        else wc.openDevTools({ mode: 'detach' })
+        if (isImage) {
+          // `inspectElement` n'a pas d'option `mode` — ouvrir l'inspecteur au
+          // bon ancrage AVANT de lui demander de cibler l'élément conserve
+          // quand même le réglage choisi (Réglages › Système).
+          wc.openDevTools({ mode: getSettings().devtoolsDockMode })
+          wc.inspectElement(params.x, params.y)
+        } else {
+          wc.openDevTools({ mode: getSettings().devtoolsDockMode })
+        }
       }
 
       const viewBounds = this.bounds.get(pageId)
@@ -1039,7 +1046,7 @@ export class ViewManager {
     // sur le même WebContents — on cède la place aux DevTools si demandées.
     const wc = this.liveContents(id)
     if (wc) this.teardownStoreShim(id, wc)
-    this.liveContents(id)?.openDevTools({ mode: 'detach' })
+    this.liveContents(id)?.openDevTools({ mode: getSettings().devtoolsDockMode })
   }
 
   /** Réapplique le zoom par défaut à toutes les vues vivantes (réglage modifié). */

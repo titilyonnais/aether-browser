@@ -13,9 +13,10 @@
  * `window.aether.app.runMenuCommand` — cette fenêtre popup n'a pas accès aux
  * stores Zustand de la fenêtre principale (process de rendu séparé).
  */
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import type { ShortcutCommand } from '@shared/types'
+import { cn } from '@/lib/utils'
 
 type Panel = 'root' | 'editAndFind' | 'castAndShare' | 'moreTools' | 'zoom' | 'help'
 
@@ -131,8 +132,17 @@ const PANELS: Record<Exclude<Panel, 'root'>, { title: string; rows: Row[] }> = {
   }
 }
 
-function MenuRow({ row, onOpenSubmenu }: { row: Row; onOpenSubmenu: (panel: Exclude<Panel, 'root'>) => void }) {
+function MenuRow({
+  row,
+  openPanel,
+  onOpenSubmenu
+}: {
+  row: Row
+  openPanel: Exclude<Panel, 'root'> | null
+  onOpenSubmenu: (panel: Exclude<Panel, 'root'>) => void
+}) {
   if ('separator' in row) return <div className="my-1 h-px bg-white/[0.06]" />
+  const isOpenSubmenu = row.submenu !== undefined && row.submenu === openPanel
   return (
     <button
       type="button"
@@ -141,7 +151,10 @@ function MenuRow({ row, onOpenSubmenu }: { row: Row; onOpenSubmenu: (panel: Excl
         else if (row.onClick) row.onClick()
         else if (row.action) run(row.action)
       }}
-      className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-ink-dim transition-colors hover:bg-white/[0.07]"
+      className={cn(
+        'flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-ink-dim transition-colors hover:bg-white/[0.07]',
+        isOpenSubmenu && 'bg-white/[0.07]'
+      )}
     >
       <span className="truncate">{row.label}</span>
       {row.submenu ? (
@@ -154,23 +167,39 @@ function MenuRow({ row, onOpenSubmenu }: { row: Row; onOpenSubmenu: (panel: Excl
 }
 
 export function AppMenuPopoverCard() {
-  const [panel, setPanel] = useState<Panel>('root')
+  // Flyout ouvert À CÔTÉ du menu racine (façon Chrome), pas un remplacement
+  // plein-panneau : cliquer un sous-menu ajoute un second panneau juste à sa
+  // droite, le premier reste visible et cliquable. Un seul niveau ici (aucune
+  // ligne de PANELS n'a elle-même de sous-menu) — pas besoin d'une pile.
+  const [openPanel, setOpenPanel] = useState<Exclude<Panel, 'root'> | null>(null)
 
   return (
-    <div className="popover-surface w-80 overflow-hidden rounded-xl p-1.5">
-      {panel !== 'root' && (
-        <button
-          type="button"
-          onClick={() => setPanel('root')}
-          className="mb-1 flex w-full items-center gap-1 rounded-md px-2.5 py-1.5 text-left text-[11.5px] text-ink-faint transition-colors hover:bg-white/[0.07]"
-        >
-          <ChevronLeft size={13} strokeWidth={2} />
-          {PANELS[panel].title}
-        </button>
+    <div className="flex items-start gap-1.5">
+      <div className="popover-surface w-80 overflow-hidden rounded-xl p-1.5">
+        {ROOT.map((row, i) => (
+          <MenuRow
+            key={'separator' in row ? `sep-${i}` : row.label}
+            row={row}
+            openPanel={openPanel}
+            onOpenSubmenu={(p) => setOpenPanel((cur) => (cur === p ? null : p))}
+          />
+        ))}
+      </div>
+      {openPanel && (
+        <div className="popover-surface w-72 overflow-hidden rounded-xl p-1.5">
+          <p className="mb-1 truncate px-2.5 pt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint/70">
+            {PANELS[openPanel].title}
+          </p>
+          {PANELS[openPanel].rows.map((row, i) => (
+            <MenuRow
+              key={'separator' in row ? `sep-${i}` : row.label}
+              row={row}
+              openPanel={null}
+              onOpenSubmenu={() => {}}
+            />
+          ))}
+        </div>
       )}
-      {(panel === 'root' ? ROOT : PANELS[panel].rows).map((row, i) => (
-        <MenuRow key={'separator' in row ? `sep-${i}` : row.label} row={row} onOpenSubmenu={setPanel} />
-      ))}
     </div>
   )
 }

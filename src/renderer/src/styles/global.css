@@ -291,6 +291,23 @@ textarea:focus-visible {
   white-space: nowrap;
   mask-image: linear-gradient(to right, black calc(100% - 16px), transparent 100%);
   -webkit-mask-image: linear-gradient(to right, black calc(100% - 16px), transparent 100%);
+  /* Un enfant flex refuse par défaut de rétrécir sous la largeur de son
+     contenu (min-width: auto) — sans ça, ce fondu ne se déclenchait JAMAIS
+     tant que l'élément vivait dans un conteneur flex (le cas le plus
+     fréquent : barre d'adresse, listes, onglets), quelle que soit la place
+     réellement disponible. */
+  min-width: 0;
+}
+
+/* Même piège pour l'utilitaire `truncate` natif de Tailwind (ellipsis « … ») :
+   ni min-width ni flex-shrink ne sont inclus dans sa définition, alors que
+   c'est presque toujours utilisé sur un enfant flex/grid (listes déroulantes,
+   historique, extensions…) — la moitié de ces usages avaient déjà besoin
+   d'un `min-w-0` explicite à côté pour fonctionner, l'autre moitié restait
+   simplement cassée. Sans effet hors flex/grid : min-width vaut déjà 0 par
+   défaut pour tout le reste. */
+.truncate {
+  min-width: 0;
 }
 
 /* Variantes claires des surfaces « verre » et des liserés — mêmes règles
