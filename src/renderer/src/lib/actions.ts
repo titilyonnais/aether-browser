@@ -768,6 +768,9 @@ export function runCommand(cmd: ShortcutCommand): void {
     case 'private-window':
       void startPrivateBrowsing()
       break
+    case 'new-window':
+      window.aether.app.openNewWindow()
+      break
     case 'fullscreen':
       window.aether.window.toggleFullscreen()
       break

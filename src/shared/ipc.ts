@@ -232,6 +232,9 @@ export const CH = {
    * à la fenêtre principale — celle-ci exécute `runCommand` normalement. */
   appMenuRunCommand: 'app:menu-run-command',
   appSetTitle: 'app:set-title',
+  /** Ouvre une nouvelle fenêtre ÆTHER complète sur le profil actif de la
+   * fenêtre appelante — support multi-fenêtre. */
+  appNewWindow: 'app:new-window',
 
   // Téléchargements
   downloadsList: 'downloads:list',
@@ -550,6 +553,8 @@ export interface AetherApi {
     runMenuCommand(cmd: ShortcutCommand): void
     /** Renomme la fenêtre OS (barre des tâches, Alt+Tab). */
     setTitle(title: string): void
+    /** Ouvre une nouvelle fenêtre ÆTHER complète (même profil que la fenêtre appelante). */
+    openNewWindow(): void
   }
   downloads: {
     list(): Promise<DownloadEntry[]>

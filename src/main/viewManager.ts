@@ -684,6 +684,7 @@ export class ViewManager {
       if (input.key === 'F1') return forward('guide')
       if (input.key === 'F11') return forward('fullscreen')
       if (ctrl && input.shift && key === 'n') return forward('private-window')
+      if (ctrl && !input.shift && key === 'n') return forward('new-window')
       if (ctrl && input.shift && input.key === 'Delete') return forward('clear-data')
       if (ctrl && input.shift && key === 'a') return forward('tab-search')
       if (ctrl && key === 'p') return forward('print')

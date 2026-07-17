@@ -213,7 +213,8 @@ const api: AetherApi = {
     openExternal: (url: string) => ipcRenderer.send(CH.appOpenExternal, url),
     quit: () => ipcRenderer.send(CH.appQuit),
     runMenuCommand: (cmd: ShortcutCommand) => ipcRenderer.send(CH.appMenuRunCommand, cmd),
-    setTitle: (title: string) => ipcRenderer.send(CH.appSetTitle, title)
+    setTitle: (title: string) => ipcRenderer.send(CH.appSetTitle, title),
+    openNewWindow: () => ipcRenderer.send(CH.appNewWindow)
   },
   downloads: {
     list: () => ipcRenderer.invoke(CH.downloadsList),

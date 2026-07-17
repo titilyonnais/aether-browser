@@ -854,6 +854,7 @@ export type ShortcutCommand =
   | 'guide'
   | 'downloads'
   | 'private-window'
+  | 'new-window'
   | 'fullscreen'
   | 'history'
   | 'favorites-manage'

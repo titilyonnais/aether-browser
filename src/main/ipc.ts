@@ -371,13 +371,16 @@ export function attachWindowLifecycleEvents(win: BrowserWindow): void {
 
 /** Ouvre une VRAIE fenêtre ÆTHER secondaire (« Ouvrir dans une nouvelle
  * fenêtre » / navigation privée dédiée) sur le profil donné, avec un onglet
- * `initialUrl` déjà ouvert dans son espace actif — même patron que
- * `CH.pageOpen`, exécuté ici avant même que le renderer de la nouvelle
- * fenêtre ne charge, pour qu'il apparaisse dans son tout premier `stateInitial()`. */
+ * `initialUrl` déjà ouvert dans son espace actif (si fourni) — même patron
+ * que `CH.pageOpen`, exécuté ici avant même que le renderer de la nouvelle
+ * fenêtre ne charge, pour qu'il apparaisse dans son tout premier
+ * `stateInitial()`. Sans `initialUrl` (menu « Nouvelle fenêtre »), la
+ * fenêtre s'ouvre simplement sur les espaces déjà existants du profil —
+ * espaces/pages sont partagés par PROFIL, pas par fenêtre. */
 function createSecondaryContentWindow(
   profileId: ProfileId,
   isPrivate: boolean,
-  initialUrl: string,
+  initialUrl: string | undefined,
   router: AiRouter
 ): BrowserWindow {
   const cascadeOffset = 32 * ((allWindowContexts().length % 6) + 1)
@@ -389,7 +392,7 @@ function createSecondaryContentWindow(
   registerWindowContext({ win, views })
   attachWindowLifecycleEvents(win)
 
-  if (isAllowedUrl(initialUrl)) {
+  if (initialUrl && isAllowedUrl(initialUrl)) {
     const spaces = spacesRepo.listByProfile(profileId)
     const spaceId = getActiveSpaceId(profileId) ?? spaces[0]?.id
     if (spaceId) {
@@ -1438,6 +1441,11 @@ export function registerIpc(router: AiRouter): void {
     // réglage `minimizeOnClose` est activé, rendant ce menu inopérant.
     markQuitting()
     app.quit()
+  })
+
+  ipcMain.on(CH.appNewWindow, (e) => {
+    const { views } = resolveWindowContext(e)
+    createSecondaryContentWindow(activeProfileOf(views), false, undefined, router)
   })
 
   ipcMain.on(CH.appSetTitle, (e, title: string) => {

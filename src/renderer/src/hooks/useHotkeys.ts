@@ -38,6 +38,9 @@ export function useHotkeys(): void {
       if (ctrl && e.shiftKey && key === 'n') {
         e.preventDefault()
         runCommand('private-window')
+      } else if (ctrl && !e.shiftKey && key === 'n') {
+        e.preventDefault()
+        runCommand('new-window')
       } else if (ctrl && e.shiftKey && e.key === 'Delete') {
         e.preventDefault()
         runCommand('clear-data')
