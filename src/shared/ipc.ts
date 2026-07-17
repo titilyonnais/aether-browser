@@ -133,6 +133,10 @@ export const CH = {
   pageUntranslate: 'page:untranslate',
   pageDetectLanguage: 'page:detect-language',
   pagesSetFocusState: 'pages:set-focus-state',
+  /** Poussé par le menu contextuel d'une image (« Créer un QR code pour
+   * cette image ») pour ouvrir l'overlay QR déjà existant sur une URL
+   * arbitraire (pas forcément celle de la page active). */
+  qrCodeShow: 'qr-code:show',
   // Favoris (entité indépendante des pages — voir Favorite dans shared/types)
   favoritesList: 'favorites:list',
   favoritesAdd: 'favorites:add',
@@ -487,6 +491,11 @@ export interface AetherApi {
     }): Promise<NoteItem>
     update(id: string, content: string): Promise<void>
     remove(id: string): Promise<void>
+  }
+  qrCode: {
+    /** Poussé quand le menu contextuel d'une image demande un QR code pour
+     * son URL — pas forcément la page active. */
+    onShow(cb: (target: { url: string; title: string }) => void): Unsubscribe
   }
   history: {
     search(query: string, limit?: number): Promise<Visit[]>

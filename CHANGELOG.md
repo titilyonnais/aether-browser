@@ -4,6 +4,17 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.48.2] — 2026-07-17
+
+### Ajouté
+
+- **Menu contextuel des images** : ÆTHER ne détectait pas du tout le clic droit sur une image — « Ouvrir l'image dans un nouvel onglet », « Enregistrer l'image sous… », « Copier l'image », « Copier l'adresse de l'image », « Créer un QR code pour cette image », et « Inspecter l'élément ».
+- **« Afficher le code source de la page »** dans le menu contextuel d'une page.
+
+### Renommé
+
+- « Ouvrir dans une nouvelle carte » → « Ouvrir dans un nouvel onglet » (menu contextuel d'un lien), pour un vocabulaire plus proche des autres navigateurs.
+
 ## [0.48.1] — 2026-07-17
 
 ### Corrigé

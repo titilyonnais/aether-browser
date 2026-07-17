@@ -113,6 +113,13 @@ export async function initBridge(): Promise<void> {
     useUiStore.getState().openOverlay('settings', { section: 'profils' })
   )
 
+  // Menu contextuel d'une image (« Créer un QR code pour cette image ») —
+  // le main pousse une cible arbitraire, pas forcément la page active.
+  window.aether.qrCode.onShow((target) => {
+    useUiStore.getState().setQrTarget(target)
+    useUiStore.getState().openOverlay('qr-code')
+  })
+
   // Menu contextuel natif des favoris (voir FavoritesBar.tsx) — même relais
   // que pour les profils : le menu vit dans le main, les actions ici.
   window.aether.favorites.onOpenRequested((url) => void openFavoriteUrl(url))

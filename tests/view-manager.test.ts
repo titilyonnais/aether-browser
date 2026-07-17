@@ -118,7 +118,8 @@ const delegate = {
   onZoomChanged: vi.fn(),
   onVisit: vi.fn(),
   onFindResult: vi.fn(),
-  onInstallExtensionRequested: vi.fn()
+  onInstallExtensionRequested: vi.fn(),
+  onCreateQrCode: vi.fn()
 }
 
 beforeEach(() => {

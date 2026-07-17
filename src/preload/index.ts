@@ -175,6 +175,9 @@ const api: AetherApi = {
     update: (id: string, content: string) => ipcRenderer.invoke(CH.noteUpdate, id, content),
     remove: (id: string) => ipcRenderer.invoke(CH.noteRemove, id)
   },
+  qrCode: {
+    onShow: (cb) => on(CH.qrCodeShow, cb)
+  },
   history: {
     search: (query: string, limit?: number) => ipcRenderer.invoke(CH.historySearch, query, limit),
     list: (limit?: number) => ipcRenderer.invoke(CH.historyList, limit),

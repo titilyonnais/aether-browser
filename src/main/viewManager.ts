@@ -230,6 +230,9 @@ export interface ViewManagerDelegate {
   /** Installation proposée depuis le Chrome Web Store (vrai bouton ou bouton de
    * secours ÆTHER) — le délégué doit demander confirmation avant d'installer. */
   onInstallExtensionRequested(pageId: PageId, extensionId: string, name: string, iconUrl: string | null): void
+  /** Menu contextuel d'une image (« Créer un QR code pour cette image ») —
+   * ouvre l'overlay QR déjà existant sur une URL arbitraire. */
+  onCreateQrCode(url: string, title: string): void
 }
 
 /** Taille de lot partagée entre la collecte et l'application (voir
@@ -706,9 +709,35 @@ export class ViewManager {
     wc.on('context-menu', (_e, params) => {
       const rows: ContextMenuRow[] = []
       const actions: Record<string, () => void> = {}
+      const isImage = params.mediaType === 'image' && Boolean(params.srcURL)
+
+      if (isImage) {
+        const imageUrl = params.srcURL
+        rows.push(
+          { kind: 'item', id: 'open-image', label: "Ouvrir l'image dans un nouvel onglet" },
+          { kind: 'item', id: 'save-image', label: "Enregistrer l'image sous…" },
+          { kind: 'item', id: 'copy-image', label: "Copier l'image" },
+          { kind: 'item', id: 'copy-image-address', label: "Copier l'adresse de l'image" },
+          { kind: 'item', id: 'qr-image', label: 'Créer un QR code pour cette image' },
+          { kind: 'separator' }
+        )
+        actions['open-image'] = () => this.delegate.onOpenRequest(pageId, imageUrl)
+        actions['save-image'] = () => wc.downloadURL(imageUrl)
+        actions['copy-image'] = () => wc.copyImageAt(params.x, params.y)
+        actions['copy-image-address'] = () => clipboard.writeText(imageUrl)
+        actions['qr-image'] = () => {
+          let title = imageUrl
+          try {
+            title = new URL(imageUrl).hostname
+          } catch {
+            // URL data:/blob: ou malformée — le titre reste l'URL brute.
+          }
+          this.delegate.onCreateQrCode(imageUrl, title)
+        }
+      }
       if (params.linkURL) {
         rows.push(
-          { kind: 'item', id: 'open-link', label: 'Ouvrir dans une nouvelle carte' },
+          { kind: 'item', id: 'open-link', label: 'Ouvrir dans un nouvel onglet' },
           { kind: 'item', id: 'copy-link', label: "Copier l'adresse du lien" },
           { kind: 'separator' }
         )
@@ -730,15 +759,18 @@ export class ViewManager {
         { kind: 'item', id: 'reload', label: 'Recharger' },
         { kind: 'separator' },
         { kind: 'item', id: 'copy-page-url', label: "Copier l'adresse de la page" },
-        { kind: 'item', id: 'inspect', label: 'Inspecter' }
+        { kind: 'item', id: 'view-source', label: 'Afficher le code source de la page' },
+        { kind: 'item', id: 'inspect', label: isImage ? "Inspecter l'élément" : 'Inspecter' }
       )
       actions.back = () => nav.goBack()
       actions.forward = () => nav.goForward()
       actions.reload = () => wc.reload()
       actions['copy-page-url'] = () => clipboard.writeText(wc.getURL())
+      actions['view-source'] = () => this.delegate.onOpenRequest(pageId, `view-source:${wc.getURL()}`)
       actions.inspect = () => {
         this.teardownStoreShim(pageId, wc)
-        wc.openDevTools({ mode: 'detach' })
+        if (isImage) wc.inspectElement(params.x, params.y)
+        else wc.openDevTools({ mode: 'detach' })
       }
 
       const viewBounds = this.bounds.get(pageId)

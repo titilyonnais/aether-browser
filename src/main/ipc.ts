@@ -1529,6 +1529,9 @@ export function createViewDelegate(
         { kind: 'webstore-confirm', extensionId, name, iconUrl }
       )
     },
+    onCreateQrCode(url, title) {
+      send(CH.qrCodeShow, { url, title })
+    },
     onVisit(pageId, url, title) {
       // La navigation privée ne laisse aucune trace dans l'historique.
       if (activeProfileRecord()?.isPrivate) return
