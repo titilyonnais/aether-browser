@@ -612,6 +612,20 @@ export const embeddingsRepo = {
     return getDb()
       .prepare(`SELECT * FROM embeddings WHERE ref_id IN (${placeholders})`)
       .all(...refIds) as EmbeddingRow[]
+  },
+
+  /** Filet de sécurité (démarrage) : `spacesRepo.remove`/`profilesRepo.remove`/
+   * `pagesRepo.remove` nettoient déjà les embeddings au bon moment (voir leurs
+   * commentaires — `ref_id` n'a aucune contrainte de clé étrangère), mais une
+   * base migrée depuis AVANT ce nettoyage, ou une coupure en plein milieu
+   * d'une suppression, peut encore en laisser. Retourne le nombre supprimé. */
+  removeOrphans(): number {
+    const result = getDb()
+      .prepare(
+        `DELETE FROM embeddings WHERE ref_id NOT IN (SELECT id FROM pages) AND ref_id NOT IN (SELECT id FROM notes)`
+      )
+      .run()
+    return result.changes
   }
 }
 

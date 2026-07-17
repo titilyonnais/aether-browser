@@ -6,7 +6,7 @@
 import { app, Menu, session, type BrowserWindow } from 'electron'
 import { AiRouter } from './ai/router'
 import { closeDatabase, openDatabase } from './db/database'
-import { profilesRepo } from './db/repositories'
+import { embeddingsRepo, profilesRepo } from './db/repositories'
 import { applyFlagsBeforeReady } from './flags'
 import { createViewDelegate, ensureBootstrap, registerIpc } from './ipc'
 import { createMainWindow } from './mainWindow'
@@ -103,6 +103,14 @@ if (!gotLock) {
     // taille/nombre. Différé et fire-and-forget, comme la vérif de mise à
     // jour ci-dessus — travail d'I/O pur, aucune UI n'en dépend.
     setTimeout(() => void cleanupPreviews(), 6000)
+
+    // Filet de sécurité (démarrage) : embeddings dont la page/note n'existe
+    // plus (base migrée depuis avant le nettoyage proactif ajouté dans
+    // spacesRepo/profilesRepo/pagesRepo, ou coupure en plein milieu d'une
+    // suppression) — requête SQLite synchrone mais légère (une table dédiée,
+    // pas de parcours filesystem), pas besoin de la différer autant que les
+    // aperçus JPEG.
+    setTimeout(() => embeddingsRepo.removeOrphans(), 3000)
 
     // Réglage « minimiser au lieu de fermer » — n'intercepte QUE le bouton X/
     // Alt+F4 (pas un vrai « Quitter ÆTHER », qui marque `isQuitting()` avant

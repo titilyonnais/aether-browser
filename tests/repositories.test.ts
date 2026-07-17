@@ -82,6 +82,22 @@ describe('pagesRepo', () => {
   })
 })
 
+describe('embeddingsRepo.removeOrphans', () => {
+  it('supprime un embedding dont la page/note référencée n’existe plus', () => {
+    const p = profilesRepo.create('Test', 210, { icon: '✦', color: '' })
+    const space = spacesRepo.create('Espace', 210, p.id)
+    const page = pagesRepo.create({ spaceId: space.id, url: 'https://a.test', parentId: null, canvas: { x: 0, y: 0, w: 1, h: 1 } })
+    embeddingsRepo.upsert(page.id, 'page', 'test-model', new Float32Array([1]))
+    embeddingsRepo.upsert('id-fantome-sans-page-ni-note', 'page', 'test-model', new Float32Array([1]))
+
+    const removed = embeddingsRepo.removeOrphans()
+
+    expect(removed).toBe(1)
+    expect(embeddingsRepo.forRefs([page.id])).toHaveLength(1)
+    expect(embeddingsRepo.forRefs(['id-fantome-sans-page-ni-note'])).toHaveLength(0)
+  })
+})
+
 describe('favoritesRepo', () => {
   it('crée, retrouve par URL et supprime un favori', () => {
     const p = profilesRepo.create('Test', 210, { icon: '✦', color: '' })

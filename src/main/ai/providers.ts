@@ -41,6 +41,10 @@ async function readLines(
   if (buffer.trim() !== '') onLine(buffer)
 }
 
+/** Levé par `ensureOk` pour une erreur d'authentification (401/403) — jamais
+ * transitoire, retenter avec la MÊME clé ne peut qu'échouer à l'identique. */
+class AuthError extends Error {}
+
 async function ensureOk(res: Response, provider: string): Promise<void> {
   if (res.ok) return
   let detail = ''
@@ -52,14 +56,45 @@ async function ensureOk(res: Response, provider: string): Promise<void> {
     detail = res.statusText
   }
   if (res.status === 401 || res.status === 403) {
-    throw new Error(`${provider} : clé API refusée (${res.status}). Vérifiez-la dans les paramètres.`)
+    throw new AuthError(`${provider} : clé API refusée (${res.status}). Vérifiez-la dans les paramètres.`)
   }
   throw new Error(`${provider} : erreur ${res.status} — ${detail.slice(0, 200)}`)
+}
+
+/** Nouvelle tentative avec back-off exponentiel (3 essais max, 300ms/600ms
+ * entre chacun) — UNIQUEMENT pour des échecs transitoires plausibles (erreur
+ * réseau, timeout, statut serveur) : jamais sur un signal déjà abandonné
+ * (l'utilisateur a annulé) ni sur une clé API refusée (retenter à l'identique
+ * ne peut qu'échouer pareil). Réservé aux appels ATOMIQUES (liste de modèles,
+ * embedding) ou à la seule phase de CONNEXION d'un appel en streaming — une
+ * fois le premier delta réellement émis au renderer, un nouvel essai
+ * dupliquerait/corromprait la réponse déjà partiellement affichée (voir
+ * `AiRouter.chat`, qui applique la même règle entre providers différents). */
+async function withRetry<T>(signal: AbortSignal | undefined, fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (signal?.aborted) throw new Error('Annulé')
+    try {
+      return await fn()
+    } catch (e) {
+      lastErr = e
+      if (e instanceof AuthError) throw e
+      if (attempt < maxAttempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt))
+      }
+    }
+  }
+  throw lastErr
 }
 
 // ─── Ollama (local) ──────────────────────────────────────────────────────────
 
 export async function ollamaListModels(baseUrl: string, timeoutMs = 1500): Promise<string[]> {
+  // PAS de retry ici volontairement : cette sonde tourne en arrière-plan à
+  // chaque `refreshStatus()`, avec un timeout COURT délibéré — Ollama absent/
+  // éteint est l'état le plus fréquent et parfaitement normal (pas une panne
+  // transitoire à retenter), retenter ajouterait plusieurs secondes de
+  // latence perçue pour le cas courant sans aucun bénéfice réel.
   const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/tags`, {
     signal: AbortSignal.timeout(timeoutMs)
   })
@@ -69,17 +104,22 @@ export async function ollamaListModels(baseUrl: string, timeoutMs = 1500): Promi
 }
 
 export async function ollamaChat(baseUrl: string, p: ChatParams): Promise<void> {
-  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: p.signal,
-    body: JSON.stringify({
-      model: p.model,
-      stream: true,
-      messages: [{ role: 'system', content: p.system }, ...p.messages]
+  // Retry sur la seule phase de CONNEXION (avant tout `onDelta`) — une fois
+  // le flux entamé, `readLines` n'est plus retenté (voir `withRetry`).
+  const res = await withRetry(p.signal, async () => {
+    const r = await fetch(`${baseUrl.replace(/\/$/, '')}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: p.signal,
+      body: JSON.stringify({
+        model: p.model,
+        stream: true,
+        messages: [{ role: 'system', content: p.system }, ...p.messages]
+      })
     })
+    await ensureOk(r, 'Ollama')
+    return r
   })
-  await ensureOk(res, 'Ollama')
   await readLines(
     res,
     (line) => {
@@ -102,38 +142,43 @@ export async function ollamaEmbed(
   model: string,
   text: string
 ): Promise<Float32Array> {
-  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/embeddings`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(20_000),
-    body: JSON.stringify({ model, prompt: text })
+  return withRetry(undefined, async () => {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/embeddings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({ model, prompt: text })
+    })
+    await ensureOk(res, 'Ollama')
+    const data = (await res.json()) as { embedding?: number[] }
+    if (!data.embedding?.length) throw new Error('Ollama : embedding vide')
+    return Float32Array.from(data.embedding)
   })
-  await ensureOk(res, 'Ollama')
-  const data = (await res.json()) as { embedding?: number[] }
-  if (!data.embedding?.length) throw new Error('Ollama : embedding vide')
-  return Float32Array.from(data.embedding)
 }
 
 // ─── Anthropic (Claude) ──────────────────────────────────────────────────────
 
 export async function anthropicChat(apiKey: string, p: ChatParams): Promise<void> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
-    },
-    signal: p.signal,
-    body: JSON.stringify({
-      model: p.model,
-      max_tokens: 1536,
-      stream: true,
-      system: p.system,
-      messages: p.messages
+  const res = await withRetry(p.signal, async () => {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      signal: p.signal,
+      body: JSON.stringify({
+        model: p.model,
+        max_tokens: 1536,
+        stream: true,
+        system: p.system,
+        messages: p.messages
+      })
     })
+    await ensureOk(r, 'Claude')
+    return r
   })
-  await ensureOk(res, 'Claude')
   await readLines(
     res,
     (line) => {
@@ -167,20 +212,23 @@ export async function openaiCompatChat(
   providerLabel: string,
   p: ChatParams
 ): Promise<void> {
-  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    signal: p.signal,
-    body: JSON.stringify({
-      model: p.model,
-      stream: true,
-      messages: [{ role: 'system', content: p.system }, ...p.messages]
+  const res = await withRetry(p.signal, async () => {
+    const r = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      signal: p.signal,
+      body: JSON.stringify({
+        model: p.model,
+        stream: true,
+        messages: [{ role: 'system', content: p.system }, ...p.messages]
+      })
     })
+    await ensureOk(r, providerLabel)
+    return r
   })
-  await ensureOk(res, providerLabel)
   await readLines(
     res,
     (line) => {
@@ -207,18 +255,20 @@ export async function openaiEmbed(
   model: string,
   text: string
 ): Promise<Float32Array> {
-  const res = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    signal: AbortSignal.timeout(20_000),
-    body: JSON.stringify({ model, input: text.slice(0, 8000) })
+  return withRetry(undefined, async () => {
+    const res = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({ model, input: text.slice(0, 8000) })
+    })
+    await ensureOk(res, 'OpenAI')
+    const data = (await res.json()) as { data?: { embedding: number[] }[] }
+    const vec = data.data?.[0]?.embedding
+    if (!vec?.length) throw new Error('OpenAI : embedding vide')
+    return Float32Array.from(vec)
   })
-  await ensureOk(res, 'OpenAI')
-  const data = (await res.json()) as { data?: { embedding: number[] }[] }
-  const vec = data.data?.[0]?.embedding
-  if (!vec?.length) throw new Error('OpenAI : embedding vide')
-  return Float32Array.from(vec)
 }

@@ -27,6 +27,7 @@ npm run dev        # lance ÆTHER en développement (HMR)
 | `npm run dev`       | Développement avec rechargement à chaud            |
 | `npm run build`     | Build de production (`out/`)                       |
 | `npm run typecheck` | Vérification TypeScript stricte (main + renderer)  |
+| `npm test`          | Suite de tests (Vitest) — voir [CONTRIBUTING.md](CONTRIBUTING.md) |
 | `npm run gen:icon`  | (Re)génère l'icône d'app (`build/icon.png` + `.ico`) |
 | `npm run dist`      | Installateur Windows NSIS (`release/`)             |
 | `npm run release`   | Build + publie une release GitHub (mises à jour auto) |

@@ -178,7 +178,7 @@ export const settings: Record<string, string> = {
   // Section Performance
   'settings.performance.memorySaverTitle': 'Économiseur de mémoire',
   'settings.performance.memorySaverHint':
-    'Nombre de pages gardées actives en mémoire. Les autres deviennent des cartes légères, rechargées au clic.',
+    'Nombre de pages gardées actives en mémoire. Les autres deviennent des cartes légères, rechargées au clic. La valeur initiale s’adapte à la RAM de votre machine ; ce curseur la remplace définitivement une fois touché.',
   'settings.performance.pagesCount': '{{count}} pages',
   'settings.performance.engineTitle': 'Moteur',
   'settings.performance.engineHint': 'Réglages avancés du moteur Chromium — un redémarrage peut être nécessaire.',

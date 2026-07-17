@@ -4,6 +4,19 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.47.1] — 2026-07-17
+
+### Ajouté
+
+- **Documentation** : `ARCHITECTURE.md` (décisions structurantes), `SCHEMA.md` (tables SQLite + historique des migrations), `CONTRIBUTING.md` (installation, tests, conventions).
+- **Résistance réseau des appels IA** : nouvelle tentative (jusqu'à 3, délai croissant) sur un échec réseau/serveur transitoire — jamais sur une clé refusée (401/403, retenter à l'identique échouerait pareil) ni une fois qu'une réponse a commencé à s'afficher (éviterait de dupliquer une réponse déjà partiellement montrée).
+- **Nettoyage des embeddings orphelins au démarrage** : filet de sécurité en complément du nettoyage proactif ajouté en v0.46.1 (bases migrées depuis avant ce nettoyage, ou coupure en plein milieu d'une suppression).
+
+### Optimisé
+
+- **Nombre de pages gardées en mémoire** : la valeur initiale (avant tout réglage manuel) s'adapte désormais à la RAM de la machine plutôt qu'une valeur fixe identique pour tous.
+- **`ollamaBaseUrl`** : validé (schéma `http(s):` uniquement) avant d'être enregistré, pour éviter qu'une valeur malformée ne refasse surface de façon imprévisible dans un appel réseau plus tard.
+
 ## [0.47.0] — 2026-07-17
 
 ### Ajouté

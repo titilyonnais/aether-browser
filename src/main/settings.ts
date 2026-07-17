@@ -5,8 +5,23 @@
  * des drapeaux `has*Key`.
  */
 import { safeStorage } from 'electron'
+import { totalmem } from 'node:os'
 import type { ApiProviderKind, AppSettings, FocusState, NewTabWidgets, SettingsPatch, WindowState } from '@shared/types'
 import { kvRepo } from './db/repositories'
+
+/** Valeur INITIALE (l'utilisateur peut toujours ajuster le curseur ensuite,
+ * cf. Réglages › Performance — ce choix explicite est alors mémorisé et ne
+ * repasse plus jamais par ce calcul) — plus généreuse sur une machine avec
+ * beaucoup de RAM, plus prudente sur une machine modeste, plutôt qu'une
+ * valeur fixe identique pour tout le monde. Bornes alignées sur le curseur
+ * existant (2-12, `applySettingsPatch`). */
+function defaultMaxLivePages(): number {
+  const gb = totalmem() / 1024 ** 3
+  if (gb < 8) return 4
+  if (gb < 16) return 6
+  if (gb < 32) return 8
+  return 10
+}
 
 const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKey'> = {
   aiProvider: 'auto',
@@ -43,7 +58,7 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   allowNotifications: false,
   doNotTrack: false,
   httpsOnly: false,
-  maxLivePages: 6,
+  maxLivePages: defaultMaxLivePages(),
   spellcheck: true,
   spellcheckLanguages: [],
   neverTranslateDomains: [],
@@ -167,9 +182,26 @@ export function getSettings(): AppSettings {
   }
 }
 
+/** N'accepte que `http(s):` — un `ollamaBaseUrl` malformé ou à schéma
+ * inattendu (`file:`, `javascript:`…) stocké tel quel referait surface plus
+ * tard dans un `fetch()` bas niveau (providers.ts) avec un comportement
+ * imprévisible. Pas de restriction réseau privé/local en plus : un Ollama
+ * auto-hébergé sur une autre machine du LAN (ou distante) est un usage
+ * légitime, pas seulement `127.0.0.1`. */
+function isValidOllamaBaseUrl(value: string): boolean {
+  try {
+    return /^https?:$/.test(new URL(value).protocol)
+  } catch {
+    return false
+  }
+}
+
 export function applySettingsPatch(patch: SettingsPatch): AppSettings {
   if (patch.aiProvider !== undefined) putValue('aiProvider', patch.aiProvider)
-  if (patch.ollamaBaseUrl !== undefined) putValue('ollamaBaseUrl', patch.ollamaBaseUrl.trim())
+  if (patch.ollamaBaseUrl !== undefined) {
+    const trimmed = patch.ollamaBaseUrl.trim()
+    if (isValidOllamaBaseUrl(trimmed)) putValue('ollamaBaseUrl', trimmed)
+  }
   if (patch.ollamaModel !== undefined) putValue('ollamaModel', patch.ollamaModel)
   if (patch.ollamaEmbedModel !== undefined) putValue('ollamaEmbedModel', patch.ollamaEmbedModel)
   if (patch.anthropicModel !== undefined) putValue('anthropicModel', patch.anthropicModel.trim())
