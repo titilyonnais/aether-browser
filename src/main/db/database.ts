@@ -64,11 +64,22 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `
 
-export function openDatabase(): Database.Database {
+/**
+ * `pathOverride` existe UNIQUEMENT pour les tests (`tests/`, ex. `:memory:`)
+ * — permet d'ouvrir une base sans dépendre d'`app.getPath()` (indisponible
+ * hors du process Electron réel). Tout appelant applicatif l'omet.
+ */
+export function openDatabase(pathOverride?: string): Database.Database {
   if (db) return db
-  const dir = app.getPath('userData')
-  mkdirSync(dir, { recursive: true })
-  db = new Database(join(dir, 'aether.db'))
+  let dbPath: string
+  if (pathOverride) {
+    dbPath = pathOverride
+  } else {
+    const dir = app.getPath('userData')
+    mkdirSync(dir, { recursive: true })
+    dbPath = join(dir, 'aether.db')
+  }
+  db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
   // `synchronous = FULL` (défaut) fait un fsync bloquant à CHAQUE commit —
   // avec le journal WAL déjà actif, `NORMAL` reste sans risque de corruption

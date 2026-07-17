@@ -82,6 +82,17 @@ import {
   runContextMenuAction,
   showContextMenuPopover
 } from './popoverWindow'
+import {
+  boundsSchema,
+  canvasRectSchema,
+  canvasViewSchema,
+  chatRequestSchema,
+  favoritesOverflowEntriesSchema,
+  idArraySchema,
+  localRectSchema,
+  openPageOptionsSchema,
+  safeValidate
+} from './ipcSchemas'
 import { cleanupPreviews } from './previews'
 import { markQuitting } from './quitState'
 import { chooseDirectory, clearBrowsingData } from './sessionActions'
@@ -540,7 +551,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   // la fenêtre principale (`*Requested`), qui exécute la même logique que les
   // boutons du menu (rechargement complet du workspace, stores…), impossible
   // à reproduire depuis ce process ou depuis un popup sans store partagé.
-  ipcMain.on(CH.profileShowMenu, (_e, anchor: LocalRect) => {
+  ipcMain.on(CH.profileShowMenu, (_e, rawAnchor: LocalRect) => {
+    const anchor = safeValidate(localRectSchema, rawAnchor, 'profile:show-menu')
+    if (!anchor) return
     const winBounds = win.getBounds()
     const x = Math.round(winBounds.x + anchor.x)
     const y = Math.round(winBounds.y + anchor.y + anchor.height + 6)
@@ -607,7 +620,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   })
 
   ipcMain.on(CH.spaceUpdateCanvas, (_e, id: SpaceId, view: CanvasView) => {
-    spacesRepo.updateCanvas(id, view)
+    const parsed = safeValidate(canvasViewSchema, view, 'space:update-canvas')
+    if (parsed) spacesRepo.updateCanvas(id, parsed)
   })
 
   const duplicateSpace = (id: SpaceId): Space | null => {
@@ -624,7 +638,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   ipcMain.handle(CH.spaceDuplicate, (_e, id: SpaceId) => duplicateSpace(id))
 
-  ipcMain.on(CH.spaceShowContextMenu, (_e, id: SpaceId, anchor: LocalRect) => {
+  ipcMain.on(CH.spaceShowContextMenu, (_e, id: SpaceId, rawAnchor: LocalRect) => {
+    const anchor = safeValidate(localRectSchema, rawAnchor, 'space:show-context-menu')
+    if (!anchor) return
     const space = spacesRepo.get(id)
     if (!space || spacesRepo.profileOf(id) !== activeProfile()) return
     const spaceCount = spacesRepo.listByProfile(activeProfile()).length
@@ -689,7 +705,8 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
 
   // ─── Pages ─────────────────────────────────────────────────────────────────
 
-  ipcMain.handle(CH.pageOpen, (_e, opts: OpenPageOptions): PageMeta => {
+  ipcMain.handle(CH.pageOpen, (_e, raw: OpenPageOptions): PageMeta => {
+    const opts = openPageOptionsSchema.parse(raw)
     if (!isAllowedUrl(opts.url)) throw new Error(`URL refusée : ${opts.url.slice(0, 80)}`)
     const canvas: CanvasRect = opts.canvasPos
       ? { x: opts.canvasPos.x, y: opts.canvasPos.y, ...DEFAULT_CARD }
@@ -720,17 +737,20 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   ipcMain.on(CH.pageDevtools, (_e, id: PageId) => views.openDevtools(id))
 
   ipcMain.on(CH.pageSetVisible, (_e, ids: PageId[]) => {
-    views.setVisible(Array.isArray(ids) ? ids.slice(0, 2) : [])
+    const parsed = safeValidate(idArraySchema, Array.isArray(ids) ? ids.slice(0, 2) : [], 'page:set-visible')
+    views.setVisible(parsed ?? [])
   })
 
   ipcMain.on(CH.pageSetBounds, (_e, id: PageId, bounds: Bounds) => {
-    views.setBounds(id, bounds)
+    const parsed = safeValidate(boundsSchema, bounds, 'page:set-bounds')
+    if (parsed) views.setBounds(id, parsed)
   })
 
   ipcMain.on(CH.pageOverlay, (_e, open: boolean) => views.setOverlay(Boolean(open)))
 
   ipcMain.on(CH.pageUpdateCanvas, (_e, id: PageId, rect: CanvasRect) => {
-    pagesRepo.updateCanvas(id, rect)
+    const parsed = safeValidate(canvasRectSchema, rect, 'page:update-canvas')
+    if (parsed) pagesRepo.updateCanvas(id, parsed)
   })
 
   ipcMain.on(CH.pageRequestPreview, (_e, id: PageId) => {
@@ -760,7 +780,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
     return row ? buildPageMeta(views, row) : null
   })
 
-  ipcMain.on(CH.pageShowContextMenu, (_e, id: PageId, anchor: LocalRect) => {
+  ipcMain.on(CH.pageShowContextMenu, (_e, id: PageId, rawAnchor: LocalRect) => {
+    const anchor = safeValidate(localRectSchema, rawAnchor, 'page:show-context-menu')
+    if (!anchor) return
     const row = pagesRepo.get(id)
     if (!row) return
     const siblings = pagesRepo.listBySpace(row.space_id)
@@ -895,11 +917,13 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   })
 
   ipcMain.handle(CH.favoritesReorder, (_e, orderedIds: string[]) => {
-    favoritesRepo.reorder(activeProfile(), Array.isArray(orderedIds) ? orderedIds : [])
+    favoritesRepo.reorder(activeProfile(), idArraySchema.parse(Array.isArray(orderedIds) ? orderedIds : []))
     sendFavorites()
   })
 
-  ipcMain.on(CH.favoriteShowContextMenu, (e, id: string, anchor: LocalRect) => {
+  ipcMain.on(CH.favoriteShowContextMenu, (e, id: string, rawAnchor: LocalRect) => {
+    const anchor = safeValidate(localRectSchema, rawAnchor, 'favorite:show-context-menu')
+    if (!anchor) return
     const row = favoritesRepo.get(id)
     if (!row) return
     const folders = favoriteFoldersRepo.listByProfile(activeProfile())
@@ -1024,7 +1048,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   // Pas de saisie de texte possible dans un menu natif : « Renommer » relaie
   // la demande à la fenêtre principale (favoriteFolderRenameRequested), qui
   // demande le nouveau nom puis appelle favoriteFoldersRename normalement.
-  ipcMain.on(CH.favoriteFoldersShowContextMenu, (_e, id: string, anchor: LocalRect) => {
+  ipcMain.on(CH.favoriteFoldersShowContextMenu, (_e, id: string, rawAnchor: LocalRect) => {
+    const anchor = safeValidate(localRectSchema, rawAnchor, 'favorite-folders:show-context-menu')
+    if (!anchor) return
     const folder = favoriteFoldersRepo.listByProfile(activeProfile()).find((f) => f.id === id)
     if (!folder) return
     showContextMenuPopover(
@@ -1052,8 +1078,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   // WebContentsView de la page active, qui compose toujours au-dessus du DOM
   // quel que soit le z-index — les clics ne l'atteignaient jamais). La
   // fenêtre principale n'envoie que des ids : le main réhydrate les détails.
-  ipcMain.on(CH.favoritesShowOverflowMenu, (_e, entries: FavoritesOverflowEntry[]) => {
-    if (!Array.isArray(entries) || entries.length === 0) return
+  ipcMain.on(CH.favoritesShowOverflowMenu, (_e, raw: FavoritesOverflowEntry[]) => {
+    const entries = safeValidate(favoritesOverflowEntriesSchema, raw, 'favorites:show-overflow-menu')
+    if (!entries || entries.length === 0) return
     const point = screen.getCursorScreenPoint()
     const template: Electron.MenuItemConstructorOptions[] = entries
       .map((entry): Electron.MenuItemConstructorOptions | null => {
@@ -1121,7 +1148,9 @@ export function registerIpc({ win, views, router }: IpcDeps): void {
   ipcMain.handle(CH.aiStatus, () => router.getStatus())
   ipcMain.handle(CH.aiRefreshStatus, () => router.refreshStatus())
 
-  ipcMain.on(CH.aiChat, (_e, req: ChatRequest) => {
+  ipcMain.on(CH.aiChat, (_e, raw: ChatRequest) => {
+    const req = safeValidate(chatRequestSchema, raw, 'ai:chat')
+    if (!req) return
     const system = buildMuseSystem(req.context)
     router
       .chat(req.requestId, system, req.messages, (delta) => {

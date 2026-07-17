@@ -4,6 +4,13 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.47.0] — 2026-07-17
+
+### Ajouté
+
+- **Suite de tests** (Vitest, 25 tests) : dépôts SQLite de bout en bout (migrations jusqu'à v10, CRUD, cascade embeddings), routeur IA (repli entre providers, abandon en vol), ViewManager (création paresseuse des vues, LRU, éviction mémoire), schémas de validation IPC. `npm test` — voir CONTRIBUTING.md pour la subtilité de compilation native (`better-sqlite3`) entre Node et Electron.
+- **Validation des payloads IPC complexes** (Zod) : les canaux qui reçoivent des objets structurés côté renderer (géométrie de fenêtre/canvas, requêtes IA, options d'ouverture de page, entrées de menu de favoris) sont désormais validés avant traitement — une valeur malformée (NaN/Infini, champ manquant, type inattendu) est rejetée proprement au lieu de risquer de faire planter le process principal ou de corrompre un état.
+
 ## [0.46.2] — 2026-07-17
 
 ### Ajouté
