@@ -54,6 +54,9 @@ const QrCodeOverlay = lazy(() =>
 const RenameWindowOverlay = lazy(() =>
   import('@/components/search/RenameWindowOverlay').then((m) => ({ default: m.RenameWindowOverlay }))
 )
+const CreateProfileOverlay = lazy(() =>
+  import('@/components/chrome/CreateProfileOverlay').then((m) => ({ default: m.CreateProfileOverlay }))
+)
 const Onboarding = lazy(() => import('@/components/onboarding/Onboarding').then((m) => ({ default: m.Onboarding })))
 const CoachMarks = lazy(() => import('@/components/guide/CoachMarks').then((m) => ({ default: m.CoachMarks })))
 
@@ -208,6 +211,7 @@ export default function App() {
           <TaskManagerOverlay />
           <QrCodeOverlay />
           <RenameWindowOverlay />
+          <CreateProfileOverlay />
           <Onboarding />
           <CoachMarks />
         </Suspense>

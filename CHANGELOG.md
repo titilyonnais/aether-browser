@@ -4,6 +4,18 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.51.0] — 2026-07-18
+
+### Modifié
+
+- **Navigation privée** ouvre désormais une vraie fenêtre séparée (façon Chrome/Edge) au lieu de basculer la fenêtre courante.
+- **Changer de profil** (menu avatar, Réglages › Profils) ouvre une fenêtre dédiée à ce profil — ou ramène au premier plan celle déjà ouverte dessus s'il y en a une — au lieu de basculer la fenêtre courante.
+
+### Ajouté
+
+- **Vraie interface de création de profil** : nom et avatar (icône, couleur ou image importée) se choisissent avant même que le profil n'existe, au lieu d'un profil instantané au nom générique.
+- Liste des profils désormais synchronisée en temps réel entre toutes les fenêtres ouvertes.
+
 ## [0.50.0] — 2026-07-18
 
 ### Ajouté

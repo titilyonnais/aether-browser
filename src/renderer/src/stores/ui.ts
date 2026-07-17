@@ -19,6 +19,7 @@ export type OverlayKind =
   | 'task-manager'
   | 'qr-code'
   | 'rename-window'
+  | 'create-profile'
   | null
 
 interface Toast {

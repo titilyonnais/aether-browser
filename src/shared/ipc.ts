@@ -86,6 +86,12 @@ export const CH = {
   // Poussé aux AUTRES fenêtres (pas celle qui a demandé la suppression) quand
   // leur profil actif vient d'être supprimé depuis ailleurs — support multi-fenêtre.
   profileForceSwitched: 'profile:force-switched',
+  /** Poussé à TOUTES les fenêtres à chaque changement de la liste des profils
+   * (créé/renommé/avatar changé/supprimé) — plusieurs fenêtres peuvent
+   * modifier cette liste indépendamment (support multi-fenêtre), une simple
+   * mise à jour locale de la fenêtre à l'origine du changement ne suffit pas
+   * à tenir les autres à jour. */
+  profilesUpdated: 'profile:list-updated',
 
   // Espaces
   spaceCreate: 'space:create',
@@ -301,18 +307,27 @@ export interface AetherApi {
   }
   profiles: {
     list(): Promise<Profile[]>
-    create(name: string): Promise<Profile>
-    /** Crée et bascule immédiatement vers un profil de navigation privée éphémère. */
-    createPrivate(): Promise<{ profile: Profile; workspace: Workspace }>
+    /** Crée le profil et ouvre une VRAIE fenêtre ÆTHER dédiée dessus — la
+     * fenêtre appelante ne change jamais d'état. */
+    create(name: string, avatar?: { icon?: string; color?: string; imagePath?: string }): Promise<Profile>
+    /** Ouvre une VRAIE fenêtre ÆTHER dédiée en navigation privée — la fenêtre
+     * appelante ne change jamais d'état. */
+    createPrivate(): Promise<{ profile: Profile }>
     rename(id: ProfileId, name: string): Promise<void>
     /** Supprime un profil ; si c'était l'actif, `switched` porte le nouveau workspace. */
     remove(
       id: ProfileId
     ): Promise<{ profiles: Profile[]; switched: { activeProfileId: ProfileId; workspace: Workspace } | null }>
-    /** Bascule de profil : retourne le workspace du profil ciblé (ou null si inchangé). */
-    switch(id: ProfileId): Promise<Workspace | null>
+    /** Ouvre une nouvelle fenêtre sur ce profil, ou focalise une fenêtre déjà
+     * ouverte dessus s'il y en a une — ne change JAMAIS l'état de la fenêtre
+     * appelante (façon Chrome : changer de profil ouvre une fenêtre séparée). */
+    switch(id: ProfileId): void
     setAvatarIcon(id: ProfileId, icon: string, color: string): Promise<Profile>
     setAvatarImage(id: ProfileId): Promise<Profile | null>
+    /** Choisit une image d'avatar SANS profil existant (formulaire de
+     * création) — copiée dans le dossier userData, retourne son nom de
+     * fichier stocké (ou `null` si l'utilisateur annule). */
+    chooseAvatarImage(): Promise<string | null>
     clearAvatar(id: ProfileId): Promise<Profile>
     /** Affiche le menu natif de bascule de profil, ancré sous le bouton avatar
      * (une `WebContentsView` de page compose toujours au-dessus du DOM — un
@@ -325,6 +340,9 @@ export interface AetherApi {
     /** Cette fenêtre affichait un profil supprimé depuis une AUTRE fenêtre —
      * bascule forcée vers le workspace de remplacement (support multi-fenêtre). */
     onForceSwitched(cb: (payload: { activeProfileId: ProfileId; workspace: Workspace }) => void): Unsubscribe
+    /** La liste des profils a changé depuis N'IMPORTE QUELLE fenêtre (créé,
+     * renommé, avatar changé, supprimé) — support multi-fenêtre. */
+    onUpdated(cb: (profiles: Profile[]) => void): Unsubscribe
   }
   spaces: {
     create(name: string): Promise<Space>

@@ -48,21 +48,23 @@ const api: AetherApi = {
   },
   profiles: {
     list: () => ipcRenderer.invoke(CH.profileList),
-    create: (name: string) => ipcRenderer.invoke(CH.profileCreate, name),
+    create: (name: string, avatar) => ipcRenderer.invoke(CH.profileCreate, name, avatar),
     createPrivate: () => ipcRenderer.invoke(CH.profileCreatePrivate),
     rename: (id: string, name: string) => ipcRenderer.invoke(CH.profileRename, id, name),
     remove: (id: string) => ipcRenderer.invoke(CH.profileRemove, id),
-    switch: (id: string) => ipcRenderer.invoke(CH.profileSwitch, id),
+    switch: (id: string) => ipcRenderer.send(CH.profileSwitch, id),
     setAvatarIcon: (id: ProfileId, icon: string, color: string) =>
       ipcRenderer.invoke(CH.profileSetAvatarIcon, id, icon, color),
     setAvatarImage: (id: ProfileId) => ipcRenderer.invoke(CH.profileSetAvatarImage, id),
+    chooseAvatarImage: () => ipcRenderer.invoke(CH.profileChooseAvatarImage),
     clearAvatar: (id: ProfileId) => ipcRenderer.invoke(CH.profileClearAvatar, id),
     showMenu: (anchor: LocalRect) => ipcRenderer.send(CH.profileShowMenu, anchor),
     onSwitchRequested: (cb) => on(CH.profileSwitchRequested, cb),
     onCreateRequested: (cb) => on(CH.profileCreateRequested, cb),
     onStartPrivateRequested: (cb) => on(CH.profileStartPrivateRequested, cb),
     onManageRequested: (cb) => on(CH.profileManageRequested, cb),
-    onForceSwitched: (cb) => on(CH.profileForceSwitched, cb)
+    onForceSwitched: (cb) => on(CH.profileForceSwitched, cb),
+    onUpdated: (cb) => on(CH.profilesUpdated, cb)
   },
   spaces: {
     create: (name: string) => ipcRenderer.invoke(CH.spaceCreate, name),

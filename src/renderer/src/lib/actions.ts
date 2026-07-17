@@ -107,7 +107,7 @@ export async function initBridge(): Promise<void> {
   // le menu lui-même vit dans le process main, ces actions restent ici pour
   // profiter du rechargement complet du workspace déjà en place.
   window.aether.profiles.onSwitchRequested((id) => void switchProfile(id))
-  window.aether.profiles.onCreateRequested(() => void createProfile('Nouveau profil'))
+  window.aether.profiles.onCreateRequested(() => useUiStore.getState().openOverlay('create-profile'))
   window.aether.profiles.onStartPrivateRequested(() => void startPrivateBrowsing())
   window.aether.profiles.onManageRequested(() =>
     useUiStore.getState().openOverlay('settings', { section: 'profils' })
@@ -118,6 +118,9 @@ export async function initBridge(): Promise<void> {
   window.aether.profiles.onForceSwitched(({ activeProfileId, workspace }) =>
     loadWorkspace(activeProfileId, workspace)
   )
+  // La liste des profils a changé depuis N'IMPORTE QUELLE fenêtre (créé,
+  // renommé, avatar, supprimé) — support multi-fenêtre.
+  window.aether.profiles.onUpdated((profiles) => useProfilesStore.getState().setProfiles(profiles))
 
   // Menu contextuel d'une image (« Créer un QR code pour cette image ») —
   // le main pousse une cible arbitraire, pas forcément la page active.
@@ -539,25 +542,21 @@ function loadWorkspace(activeProfileId: ProfileId, ws: Workspace): void {
   scheduleAffinityRefresh()
 }
 
-export async function switchProfile(id: ProfileId): Promise<void> {
+/** Ouvre une fenêtre séparée sur ce profil (ou focalise celle déjà ouverte
+ * dessus s'il y en a une) — façon Chrome/Edge, la fenêtre appelante ne
+ * change jamais d'état. */
+export function switchProfile(id: ProfileId): void {
   if (id === useProfilesStore.getState().activeProfileId) return
-  const ws = await window.aether.profiles.switch(id)
-  if (ws) {
-    loadWorkspace(id, ws)
-    // Rafraîchit la liste : si on quitte un profil de navigation privée, le
-    // main vient de le supprimer (jamais persisté au-delà de sa durée de
-    // vie) — sans ce refetch, l'entrée resterait visible dans le store local.
-    const profiles = await window.aether.profiles.list()
-    useProfilesStore.getState().setProfiles(profiles)
-    const name = profiles.find((p) => p.id === id)?.name ?? 'Profil'
-    useUiStore.getState().toast(tShell('shell.toast.profileSwitched', { name }))
-  }
+  window.aether.profiles.switch(id)
 }
 
-export async function createProfile(name: string): Promise<void> {
-  const profile = await window.aether.profiles.create(name)
+export async function createProfile(
+  name: string,
+  avatar?: { icon?: string; color?: string; imagePath?: string }
+): Promise<void> {
+  const profile = await window.aether.profiles.create(name, avatar)
   useProfilesStore.getState().upsert(profile)
-  await switchProfile(profile.id)
+  switchProfile(profile.id)
 }
 
 export async function renameProfile(id: ProfileId, name: string): Promise<void> {
@@ -572,11 +571,12 @@ export async function removeProfile(id: ProfileId): Promise<void> {
   useUiStore.getState().toast(tShell('shell.toast.profileRemoved'))
 }
 
-/** Ouvre une navigation privée : profil éphémère, session en mémoire, aucune trace. */
+/** Ouvre une navigation privée : profil éphémère, session en mémoire, aucune
+ * trace — dans une VRAIE fenêtre à part (façon Chrome/Edge), cette fenêtre-ci
+ * reste inchangée. */
 export async function startPrivateBrowsing(): Promise<void> {
-  const { profile, workspace } = await window.aether.profiles.createPrivate()
+  const { profile } = await window.aether.profiles.createPrivate()
   useProfilesStore.getState().upsert(profile)
-  loadWorkspace(profile.id, workspace)
   useUiStore.getState().toast(tShell('shell.toast.privateBrowsing'))
 }
 

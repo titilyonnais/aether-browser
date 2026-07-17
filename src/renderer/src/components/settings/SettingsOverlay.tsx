@@ -57,7 +57,6 @@ import { ProfileAvatar } from '@/components/ui/ProfileAvatar'
 import { useT } from '@/i18n/useT'
 import {
   clearProfileAvatar,
-  createProfile,
   openUrl,
   removeProfile,
   renameProfile,
@@ -733,7 +732,7 @@ function ProfilesSection() {
         </div>
         <button
           type="button"
-          onClick={() => void createProfile(t('settings.profiles.newProfileName'))}
+          onClick={() => useUiStore.getState().openOverlay('create-profile')}
           className="mt-2 flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.03] px-4 py-1.5 text-[12px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink"
         >
           <Plus size={13} strokeWidth={1.8} />

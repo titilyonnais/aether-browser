@@ -74,6 +74,16 @@ export const overlays: Record<string, string> = {
   'overlays.renameWindow.cancel': 'Annuler',
   'overlays.renameWindow.confirm': 'Renommer',
 
+  // Créer un profil
+  'overlays.createProfile.title': 'Nouveau profil',
+  'overlays.createProfile.namePlaceholder': 'Nom du profil',
+  'overlays.createProfile.avatarLabel': 'Avatar',
+  'overlays.createProfile.avatarNone': 'Aucun',
+  'overlays.createProfile.avatarImage': 'Image',
+  'overlays.createProfile.chooseImage': 'Choisir une image…',
+  'overlays.createProfile.cancel': 'Annuler',
+  'overlays.createProfile.confirm': 'Créer',
+
   // Barre d'Intention
   'overlays.intention.commandSummarize': 'Résumer cette page',
   'overlays.intention.commandCompare': 'Comparer deux choses',

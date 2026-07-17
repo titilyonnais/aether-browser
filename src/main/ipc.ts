@@ -453,10 +453,24 @@ function createSecondaryContentWindow(
     // filet que `switchToProfile`/`profileRemove` ci-dessous).
     if (isPrivate && windowContextsForProfile(profileId).length === 0) {
       profilesRepo.remove(profileId)
+      broadcastProfiles()
     }
   })
 
   return win
+}
+
+/** Crée un profil de navigation privée éphémère et ouvre une VRAIE fenêtre
+ * dédiée dessus — jamais la fenêtre appelante, qui doit rester sur ce
+ * qu'elle affichait (façon Chrome/Edge : « Nouvelle fenêtre de navigation
+ * privée » n'affecte jamais la fenêtre courante). Partagé entre le menu
+ * principal (`CH.profileCreatePrivate`) et le menu contextuel d'un lien
+ * (`onOpenInNewWindow`, ci-dessous). */
+function createPrivateWindow(router: AiRouter, initialUrl?: string): { win: BrowserWindow; profile: Profile } {
+  const profile = profilesRepo.create('Navigation privée', 262, { icon: '🕶', color: '#20202c' }, { isPrivate: true })
+  spacesRepo.create('Espace privé', 262, profile.id)
+  const win = createSecondaryContentWindow(profile.id, true, initialUrl, router)
+  return { win, profile }
 }
 
 /** Position libre pour une nouvelle carte (cascade simple, écartée du parent). */
@@ -540,6 +554,13 @@ function broadcastToProfile(profileId: ProfileId, channel: string, ...args: unkn
   for (const ctx of windowContextsForProfile(profileId)) sendTo(ctx.win, channel, ...args)
 }
 
+/** Prévient TOUTES les fenêtres (pas seulement celle à l'origine du
+ * changement) que la liste des profils a changé — support multi-fenêtre. */
+function broadcastProfiles(): void {
+  const list = profilesRepo.list()
+  for (const ctx of allWindowContexts()) sendTo(ctx.win, CH.profilesUpdated, list)
+}
+
 /** Point d'ancrage ÉCRAN de l'icône puzzle (barre de titre, coin haut-droit),
  * PAR FENÊTRE — capturé à chaque ouverture de la liste des extensions,
  * réutilisé pour positionner la VRAIE bulle d'une extension TOUJOURS au même
@@ -611,34 +632,41 @@ export function registerIpc(router: AiRouter): void {
 
   ipcMain.handle(CH.profileList, () => profilesRepo.list())
 
-  ipcMain.handle(CH.profileCreate, (_e, name: string): Profile => {
-    const count = profilesRepo.count()
-    const profile = profilesRepo.create(
-      (name || 'Nouveau profil').slice(0, 40),
-      SPACE_HUES[count % SPACE_HUES.length],
-      { icon: PROFILE_ICONS[count % PROFILE_ICONS.length], color: '' }
-    )
-    // Un profil naît avec un espace, jamais vide.
-    spacesRepo.create('Exploration', SPACE_HUES[0], profile.id)
-    return profile
-  })
+  ipcMain.handle(
+    CH.profileCreate,
+    (_e, name: string, avatar?: { icon?: string; color?: string; imagePath?: string }): Profile => {
+      const count = profilesRepo.count()
+      const profile = profilesRepo.create(
+        (name || 'Nouveau profil').slice(0, 40),
+        SPACE_HUES[count % SPACE_HUES.length],
+        { icon: avatar?.icon || PROFILE_ICONS[count % PROFILE_ICONS.length], color: avatar?.color || '' }
+      )
+      if (avatar?.imagePath) profilesRepo.setAvatar(profile.id, { kind: 'image', image: avatar.imagePath })
+      // Un profil naît avec un espace, jamais vide.
+      spacesRepo.create('Exploration', SPACE_HUES[0], profile.id)
+      broadcastProfiles()
+      return avatar?.imagePath ? (profilesRepo.get(profile.id) as Profile) : profile
+    }
+  )
 
-  ipcMain.handle(CH.profileCreatePrivate, async (e): Promise<{ profile: Profile; workspace: Workspace }> => {
-    const { views } = resolveWindowContext(e)
-    const profile = profilesRepo.create('Navigation privée', 262, { icon: '🕶', color: '#20202c' }, { isPrivate: true })
-    spacesRepo.create('Espace privé', 262, profile.id)
-    const workspace = await switchToProfile(views, profile.id)
-    return { profile, workspace }
+  ipcMain.handle(CH.profileCreatePrivate, (): { profile: Profile } => {
+    // Ouvre une VRAIE fenêtre dédiée (façon Chrome) — la fenêtre appelante ne
+    // bascule plus jamais elle-même sur ce profil éphémère.
+    const { profile } = createPrivateWindow(router)
+    broadcastProfiles()
+    return { profile }
   })
 
   ipcMain.handle(CH.profileRename, (_e, id: ProfileId, name: string) => {
     profilesRepo.rename(id, (name || 'Profil').slice(0, 40))
+    broadcastProfiles()
   })
 
   ipcMain.handle(CH.profileSetAvatarIcon, (_e, id: ProfileId, icon: string, color: string): Profile => {
     const current = profilesRepo.get(id)
     if (current?.avatarImage) deleteAvatarImage(current.avatarImage)
     profilesRepo.setAvatar(id, { kind: 'icon', icon: icon.slice(0, 8), color })
+    broadcastProfiles()
     return profilesRepo.get(id) as Profile
   })
 
@@ -649,6 +677,7 @@ export function registerIpc(router: AiRouter): void {
     const current = profilesRepo.get(id)
     if (current?.avatarImage) deleteAvatarImage(current.avatarImage)
     profilesRepo.setAvatar(id, { kind: 'image', image: filename })
+    broadcastProfiles()
     return profilesRepo.get(id) as Profile
   })
 
@@ -658,6 +687,7 @@ export function registerIpc(router: AiRouter): void {
     const current = profilesRepo.get(id)
     if (current?.avatarImage) deleteAvatarImage(current.avatarImage)
     profilesRepo.setAvatar(id, { kind: 'none' })
+    broadcastProfiles()
     return profilesRepo.get(id) as Profile
   })
 
@@ -692,14 +722,25 @@ export function registerIpc(router: AiRouter): void {
       // (ex. suppression depuis Réglages › Profils en étant ailleurs), rien
       // à switcher pour elle — `wasActive` reste informatif seulement.
       void wasActive
+      broadcastProfiles()
       return { profiles, switched }
     }
   )
 
-  ipcMain.handle(CH.profileSwitch, async (e, id: ProfileId): Promise<Workspace | null> => {
-    const { views } = resolveWindowContext(e)
-    if (!profilesRepo.get(id) || id === activeProfileOf(views)) return null
-    return switchToProfile(views, id)
+  // Changer de profil ouvre une fenêtre séparée (façon Chrome/Edge) — ne
+  // touche JAMAIS à l'état de la fenêtre appelante. Si une fenêtre affiche
+  // déjà ce profil, on la ramène au premier plan plutôt que d'en ouvrir une
+  // seconde en double.
+  ipcMain.on(CH.profileSwitch, (_e, id: ProfileId) => {
+    const profile = profilesRepo.get(id)
+    if (!profile) return
+    const existing = windowContextsForProfile(id)[0]
+    if (existing) {
+      if (existing.win.isMinimized()) existing.win.restore()
+      existing.win.focus()
+      return
+    }
+    createSecondaryContentWindow(id, profile.isPrivate, undefined, router)
   })
 
   // Menu natif (pas un popup DOM/popover — un clic sur l'avatar peut se
@@ -1767,13 +1808,8 @@ export function createViewDelegate(
       send(CH.qrCodeShow, { url, title })
     },
     onOpenInNewWindow(url, isPrivate) {
-      if (isPrivate) {
-        const profile = profilesRepo.create('Navigation privée', 262, { icon: '🕶', color: '#20202c' }, { isPrivate: true })
-        spacesRepo.create('Espace privé', 262, profile.id)
-        createSecondaryContentWindow(profile.id, true, url, router)
-      } else {
-        createSecondaryContentWindow(activeProfileOf(getViews()), false, url, router)
-      }
+      if (isPrivate) createPrivateWindow(router, url)
+      else createSecondaryContentWindow(activeProfileOf(getViews()), false, url, router)
     },
     onVisit(pageId, url, title) {
       const views = getViews()
