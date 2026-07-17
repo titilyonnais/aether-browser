@@ -91,3 +91,55 @@ export function createMainWindow(): BrowserWindow {
 
   return win
 }
+
+/** Fenêtre ÆTHER secondaire (« Ouvrir dans une nouvelle fenêtre », navigation
+ * privée dédiée…) — même coquille que `createMainWindow`, mais SANS
+ * restauration/sauvegarde de géométrie : cette clé de réglage ne décrit
+ * qu'UNE fenêtre, la disputer entre plusieurs ferait tantôt l'une tantôt
+ * l'autre gagner au prochain lancement. Légèrement décalée pour ne pas
+ * apparaître pile au-dessus d'une fenêtre déjà ouverte. */
+export function createChildWindow(cascadeOffset: number): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 1280,
+    height: 820,
+    minWidth: 1024,
+    minHeight: 640,
+    frame: false,
+    show: false,
+    backgroundColor: '#060608',
+    title: 'ÆTHER',
+    icon: windowIcon(),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webviewTag: false,
+      spellcheck: false
+    }
+  })
+
+  win.once('ready-to-show', () => {
+    const [x, y] = win.getPosition()
+    win.setPosition(x + cascadeOffset, y + cascadeOffset)
+    win.show()
+  })
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  if (process.env['ELECTRON_RENDERER_URL']) {
+    win.webContents.on('before-input-event', (_e, input) => {
+      if (input.type === 'keyDown' && input.key === 'F12' && input.shift) {
+        win.webContents.openDevTools({ mode: 'detach' })
+      }
+    })
+    void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  } else {
+    void win.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+
+  return win
+}

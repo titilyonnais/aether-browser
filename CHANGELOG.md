@@ -4,6 +4,15 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.49.0] — 2026-07-17
+
+### Ajouté
+
+- **Support multi-fenêtre natif** : ÆTHER peut désormais ouvrir de vraies fenêtres supplémentaires, avec la même parité de fonctionnalités que la fenêtre principale (espaces/pages/favoris/notes partagés par profil, chacune avec son propre état d'agrandissement/plein écran).
+- **« Nouvelle fenêtre »** (Ctrl+N, menu principal, sous « Nouvel onglet ») : ouvre une nouvelle fenêtre ÆTHER sur le profil actif.
+- **« Ouvrir dans une nouvelle fenêtre » / « …en navigation privée »** dans le menu contextuel d'un lien.
+- Fermer une fenêtre secondaire ne ferme plus toute l'application — seule la dernière fenêtre restante applique le réglage « minimiser au lieu de fermer ».
+
 ## [0.48.2] — 2026-07-17
 
 ### Ajouté

@@ -8,7 +8,7 @@ import { AiRouter } from './ai/router'
 import { closeDatabase, openDatabase } from './db/database'
 import { embeddingsRepo, profilesRepo } from './db/repositories'
 import { applyFlagsBeforeReady } from './flags'
-import { createViewDelegate, ensureBootstrap, registerIpc } from './ipc'
+import { attachWindowLifecycleEvents, createViewDelegate, ensureBootstrap, registerIpc } from './ipc'
 import { createMainWindow } from './mainWindow'
 import { cleanupPreviews } from './previews'
 import { installAetherProtocol, registerAetherScheme } from './protocol'
@@ -16,6 +16,7 @@ import { isQuitting } from './quitState'
 import { getSettings } from './settings'
 import { checkForUpdates, initUpdater } from './updater'
 import { ViewManager } from './viewManager'
+import { allWindowContexts, registerWindowContext } from './windowRegistry'
 
 // Filet de sécurité pour une classe d'erreur bien identifiée : un canal IPC
 // « one-way » (`ipcMain.on`, fire-and-forget — contrairement à `.handle()`,
@@ -85,8 +86,13 @@ if (!gotLock) {
     views = new ViewManager(mainWindow, delegate)
     // Les nouvelles vues naîtront dans la partition (session isolée) du profil actif.
     views.setActiveProfile(activeProfileId, profilesRepo.get(activeProfileId)?.isPrivate ?? false)
+    // Registre multi-fenêtre (windowRegistry.ts) : `ipc.ts` résout désormais
+    // le contexte {win, views} par évènement via `resolveWindowContext`,
+    // plutôt que de fermer sur cette unique fenêtre.
+    registerWindowContext({ win: mainWindow, views })
+    attachWindowLifecycleEvents(mainWindow)
 
-    registerIpc({ win: mainWindow, views, router })
+    registerIpc(router)
 
     // Sonde IA en arrière-plan (Ollama local, clés configurées).
     void router.refreshStatus()
@@ -114,9 +120,11 @@ if (!gotLock) {
 
     // Réglage « minimiser au lieu de fermer » — n'intercepte QUE le bouton X/
     // Alt+F4 (pas un vrai « Quitter ÆTHER », qui marque `isQuitting()` avant
-    // d'appeler `app.quit()`, cf. CH.appQuit dans ipc.ts).
+    // d'appeler `app.quit()`, cf. CH.appQuit dans ipc.ts). Uniquement si c'est
+    // la DERNIÈRE fenêtre ÆTHER encore ouverte — sinon fermer celle-ci doit
+    // juste la fermer, comme n'importe quelle fenêtre secondaire.
     mainWindow.on('close', (event) => {
-      if (!isQuitting() && getSettings().minimizeOnClose) {
+      if (!isQuitting() && getSettings().minimizeOnClose && allWindowContexts().length <= 1) {
         event.preventDefault()
         mainWindow?.minimize()
       }

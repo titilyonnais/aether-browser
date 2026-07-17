@@ -233,6 +233,9 @@ export interface ViewManagerDelegate {
   /** Menu contextuel d'une image (« Créer un QR code pour cette image ») —
    * ouvre l'overlay QR déjà existant sur une URL arbitraire. */
   onCreateQrCode(url: string, title: string): void
+  /** Menu contextuel d'un lien (« Ouvrir dans une nouvelle fenêtre » / « …en
+   * navigation privée ») — ouvre une VRAIE fenêtre ÆTHER séparée sur `url`. */
+  onOpenInNewWindow(url: string, isPrivate: boolean): void
 }
 
 /** Taille de lot partagée entre la collecte et l'application (voir
@@ -375,7 +378,7 @@ export class ViewManager {
     this.lru.push(pageId)
   }
 
-  // ─── Profil actif ────────────────────────────────────────────────────────
+  // ─── Profil actif (état PROPRE à cette fenêtre — chaque ViewManager a le sien) ─
 
   /** Fixe le profil dont la partition (session isolée) sert aux nouvelles vues. */
   setActiveProfile(profileId: ProfileId, isPrivate: boolean): void {
@@ -384,8 +387,34 @@ export class ViewManager {
     ensurePartitionHardened(webPartitionForProfile(profileId, isPrivate), profileId, this.win)
   }
 
+  getActiveProfileId(): ProfileId {
+    return this.activeProfileId
+  }
+
+  isActiveProfilePrivate(): boolean {
+    return this.activeProfilePrivate
+  }
+
   activePartition(): string {
     return webPartitionForProfile(this.activeProfileId, this.activeProfilePrivate)
+  }
+
+  // ─── Espace actif (idem — par fenêtre, pas par profil) ──────────────────────
+  // Avant le support multi-fenêtre, « l'espace actif » d'un profil était une
+  // clé partagée en base (`state.activeSpaceId.<profileId>`) — correct pour
+  // UNE fenêtre, mais deux fenêtres sur le MÊME profil se disputeraient cette
+  // même valeur si elle restait globale. Chaque ViewManager garde désormais
+  // la sienne ; la valeur en base ne sert plus qu'à SEMER un défaut au moment
+  // où une fenêtre s'ouvre sur ce profil (voir `setActiveSpaceId` plus bas).
+
+  private activeSpaceId: SpaceId | null = null
+
+  getActiveSpaceId(): SpaceId | null {
+    return this.activeSpaceId
+  }
+
+  setActiveSpaceId(id: SpaceId): void {
+    this.activeSpaceId = id
   }
 
   // ─── Cycle de vie des vues ─────────────────────────────────────────────────
@@ -655,6 +684,7 @@ export class ViewManager {
       if (input.key === 'F1') return forward('guide')
       if (input.key === 'F11') return forward('fullscreen')
       if (ctrl && input.shift && key === 'n') return forward('private-window')
+      if (ctrl && !input.shift && key === 'n') return forward('new-window')
       if (ctrl && input.shift && input.key === 'Delete') return forward('clear-data')
       if (ctrl && input.shift && key === 'a') return forward('tab-search')
       if (ctrl && key === 'p') return forward('print')
@@ -738,10 +768,14 @@ export class ViewManager {
       if (params.linkURL) {
         rows.push(
           { kind: 'item', id: 'open-link', label: 'Ouvrir dans un nouvel onglet' },
+          { kind: 'item', id: 'open-link-new-window', label: 'Ouvrir dans une nouvelle fenêtre' },
+          { kind: 'item', id: 'open-link-new-window-private', label: 'Ouvrir dans une nouvelle fenêtre en navigation privée' },
           { kind: 'item', id: 'copy-link', label: "Copier l'adresse du lien" },
           { kind: 'separator' }
         )
         actions['open-link'] = () => this.delegate.onOpenRequest(pageId, params.linkURL)
+        actions['open-link-new-window'] = () => this.delegate.onOpenInNewWindow(params.linkURL, false)
+        actions['open-link-new-window-private'] = () => this.delegate.onOpenInNewWindow(params.linkURL, true)
         actions['copy-link'] = () => clipboard.writeText(params.linkURL)
       }
       if (params.selectionText) {

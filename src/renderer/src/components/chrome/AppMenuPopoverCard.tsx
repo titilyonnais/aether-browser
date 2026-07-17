@@ -40,6 +40,7 @@ function run(cmd: ShortcutCommand): void {
 
 const ROOT: Row[] = [
   { label: 'Nouvel onglet', accelerator: 'Ctrl+K', action: 'intention' },
+  { label: 'Nouvelle fenêtre', accelerator: 'Ctrl+N', action: 'new-window' },
   { label: 'Navigation privée', accelerator: 'Ctrl+Maj+N', action: 'private-window' },
   { separator: true },
   { label: 'Favoris et listes', action: 'favorites-manage' },

@@ -10,6 +10,11 @@
  * fenêtre enfant distincte, elle, compose au-dessus de tout sans jamais
  * toucher aux bornes de la page — zéro artefact visuel, la page reste 100 %
  * vivante et intacte en dessous.
+ *
+ * UNE INSTANCE de popup PAR FENÊTRE PROPRIÉTAIRE (`parent`) — avant le
+ * support multi-fenêtre, un unique popup partagé par tout le process aurait
+ * fait qu'ouvrir un menu contextuel dans une fenêtre referme/déplace celui
+ * d'une AUTRE fenêtre restée ouverte ailleurs.
  */
 import { BrowserWindow, screen, type BrowserWindow as BW, type Rectangle, type WebContents } from 'electron'
 import { join } from 'node:path'
@@ -18,42 +23,49 @@ import type { ContextMenuRow, LocalRect, PopoverContent } from '@shared/types'
 import { disableNativeWindowTransitions } from './dwm'
 import { fadeWindowIn, fadeWindowOut } from './windowFade'
 
-let popup: BW | null = null
-let ready = false
-/** En attente que le contenu remonte sa taille réelle (`resizePopoverWindow`,
- * via le ResizeObserver du renderer) avant d'afficher la fenêtre. */
-let pendingShow = false
-/** Filet de sécurité si le contenu ne remonte jamais sa taille (ex. page vide). */
-let fallbackShowTimer: ReturnType<typeof setTimeout> | null = null
-/** Anti-rebond appliqué à TOUT redimensionnement, pas seulement au premier
- * affichage — voir le commentaire dans `resizePopoverWindow`. Un contenu qui
- * charge ses données de façon asynchrone (favoris d'un dossier, infos de
- * site…) mesure d'abord un état de chargement PUIS se redessine plus grand
- * une fois les vraies données arrivées, déclenchant un DEUXIÈME
- * redimensionnement. Limiter l'anti-rebond au seul premier affichage
- * (ancienne version) ne protégeait PAS le cas — plus fréquent — où la fenêtre
- * est déjà visible et que son contenu change (survol rapide d'un onglet à un
- * autre, changement de sous-menu…) : ce redimensionnement-là appliquait les
- * nouvelles bornes immédiatement, sans filet, d'où un « sursaut » visible
- * perçu comme si la bulle s'ouvrait deux fois. Un seul anti-rebond, appliqué
- * systématiquement, couvre les deux cas. */
-let boundsDebounceTimer: ReturnType<typeof setTimeout> | null = null
+interface PopoverState {
+  popup: BW | null
+  ready: boolean
+  /** En attente que le contenu remonte sa taille réelle (`resizePopoverWindow`,
+   * via le ResizeObserver du renderer) avant d'afficher la fenêtre. */
+  pendingShow: boolean
+  /** Filet de sécurité si le contenu ne remonte jamais sa taille (ex. page vide). */
+  fallbackShowTimer: ReturnType<typeof setTimeout> | null
+  /** Anti-rebond appliqué à TOUT redimensionnement, pas seulement au premier
+   * affichage — voir le commentaire dans `resizePopoverWindow`. */
+  boundsDebounceTimer: ReturnType<typeof setTimeout> | null
+  /** Action réelle associée à chaque id de la dernière bulle de menu
+   * contextuel ouverte DANS CETTE fenêtre (voir ContextMenuPopoverCard.tsx). */
+  contextMenuActions: Record<string, () => void>
+}
 
-function clearFallbackShow(): void {
-  if (fallbackShowTimer) {
-    clearTimeout(fallbackShowTimer)
-    fallbackShowTimer = null
+const states = new Map<number, PopoverState>()
+
+function stateFor(owner: BW): PopoverState {
+  let s = states.get(owner.id)
+  if (!s) {
+    s = { popup: null, ready: false, pendingShow: false, fallbackShowTimer: null, boundsDebounceTimer: null, contextMenuActions: {} }
+    states.set(owner.id, s)
+    owner.on('closed', () => states.delete(owner.id))
+  }
+  return s
+}
+
+function clearFallbackShow(s: PopoverState): void {
+  if (s.fallbackShowTimer) {
+    clearTimeout(s.fallbackShowTimer)
+    s.fallbackShowTimer = null
   }
 }
 
-function clearBoundsDebounce(): void {
-  if (boundsDebounceTimer) {
-    clearTimeout(boundsDebounceTimer)
-    boundsDebounceTimer = null
+function clearBoundsDebounce(s: PopoverState): void {
+  if (s.boundsDebounceTimer) {
+    clearTimeout(s.boundsDebounceTimer)
+    s.boundsDebounceTimer = null
   }
 }
 
-function createPopup(parent: BW): BW {
+function createPopup(parent: BW, s: PopoverState): BW {
   const win = new BrowserWindow({
     parent,
     frame: false,
@@ -76,9 +88,9 @@ function createPopup(parent: BW): BW {
   })
   disableNativeWindowTransitions(win)
 
-  ready = false
+  s.ready = false
   win.webContents.once('did-finish-load', () => {
-    ready = true
+    s.ready = true
   })
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -89,21 +101,22 @@ function createPopup(parent: BW): BW {
   }
 
   win.on('closed', () => {
-    if (popup === win) popup = null
+    if (s.popup === win) s.popup = null
   })
 
   return win
 }
 
-function ensurePopup(parent: BW): BW {
-  if (popup && !popup.isDestroyed()) return popup
-  popup = createPopup(parent)
-  return popup
+function ensurePopup(parent: BW): { win: BW; s: PopoverState } {
+  const s = stateFor(parent)
+  if (s.popup && !s.popup.isDestroyed()) return { win: s.popup, s }
+  s.popup = createPopup(parent, s)
+  return { win: s.popup, s }
 }
 
 /** Ouvre (ou déplace) le popup aux bornes écran données et lui pousse son contenu. */
 export function openPopover(parent: BW, bounds: Rectangle, content: PopoverContent): void {
-  const win = ensurePopup(parent)
+  const { win, s } = ensurePopup(parent)
   win.setBounds(sanitizeToDisplay(bounds))
 
   const push = (): void => {
@@ -111,7 +124,7 @@ export function openPopover(parent: BW, bounds: Rectangle, content: PopoverConte
   }
 
   const wasVisible = win.isVisible()
-  if (ready) push()
+  if (s.ready) push()
   else win.webContents.once('did-finish-load', push)
 
   // On attend le vrai signal que le contenu a fini de se peindre —
@@ -131,38 +144,42 @@ export function openPopover(parent: BW, bounds: Rectangle, content: PopoverConte
   // ex. page vide) — 500ms laisse largement le temps au vrai signal de
   // gagner la course dans l'immense majorité des cas.
   if (!wasVisible) {
-    pendingShow = true
-    clearFallbackShow()
-    fallbackShowTimer = setTimeout(() => {
-      fallbackShowTimer = null
-      if (pendingShow && !win.isDestroyed()) {
-        pendingShow = false
+    s.pendingShow = true
+    clearFallbackShow(s)
+    s.fallbackShowTimer = setTimeout(() => {
+      s.fallbackShowTimer = null
+      if (s.pendingShow && !win.isDestroyed()) {
+        s.pendingShow = false
         fadeWindowIn(win)
       }
     }, 500)
   }
 }
 
-/** Relaie un évènement au popup s'il existe et est ouvert — pour les données
- * qu'il affiche et qui peuvent changer PENDANT qu'il reste ouvert (ex. la
- * liste des favoris d'un dossier, après une action ailleurs dans l'appli).
- * `send()` (main/ipc.ts) ne cible que la fenêtre principale, jamais ce popup. */
+/** Relaie un évènement à TOUS les popovers actuellement ouverts (une par
+ * fenêtre propriétaire, en pratique presque toujours 0 ou 1 à la fois) — pour
+ * les données qu'ils affichent et qui peuvent changer PENDANT qu'ils restent
+ * ouverts (ex. la liste des favoris d'un dossier, après une action ailleurs
+ * dans l'appli). `send()` (main/ipc.ts) ne cible que la fenêtre principale,
+ * jamais un popover. */
 export function broadcastToPopover(channel: string, ...args: unknown[]): void {
-  if (popup && !popup.isDestroyed()) popup.webContents.send(channel, ...args)
+  for (const s of states.values()) {
+    if (s.popup && !s.popup.isDestroyed()) s.popup.webContents.send(channel, ...args)
+  }
 }
 
-/** Vrai si `wc` est le webContents de CE popup — pour distinguer un appel
- * IPC venant de la fenêtre principale de celui d'un composant qui tourne
- * DANS le popup lui-même (ex. FavoritesFolderPopoverCard), qui n'a pas de
- * coordonnées locales exploitables pour ancrer une AUTRE bulle par-dessus. */
+/** Vrai si `wc` est le webContents d'UN popover (peu importe sa fenêtre
+ * propriétaire) — pour distinguer un appel IPC venant de la fenêtre
+ * principale de celui d'un composant qui tourne DANS un popover lui-même
+ * (ex. FavoritesFolderPopoverCard), qui n'a pas de coordonnées locales
+ * exploitables pour ancrer une AUTRE bulle par-dessus. */
 export function isPopoverWebContents(wc: WebContents): boolean {
-  return popup !== null && !popup.isDestroyed() && popup.webContents === wc
+  for (const s of states.values()) {
+    if (s.popup && !s.popup.isDestroyed() && s.popup.webContents === wc) return true
+  }
+  return false
 }
 
-/** Action réelle associée à chaque id de la dernière bulle de menu contextuel
- * ouverte (voir ContextMenuPopoverCard.tsx) — un seul menu contextuel peut
- * être ouvert à la fois, la map est simplement remplacée à chaque appel. */
-let contextMenuActions: Record<string, () => void> = {}
 const CONTEXT_MENU_WIDTH = 240
 const CONTEXT_MENU_DEFAULT_HEIGHT = 160
 
@@ -177,7 +194,7 @@ export function showContextMenuPopover(
   actions: Record<string, () => void>,
   title?: string
 ): void {
-  contextMenuActions = actions
+  stateFor(win).contextMenuActions = actions
   const winBounds = win.getBounds()
   openPopover(
     win,
@@ -186,18 +203,39 @@ export function showContextMenuPopover(
   )
 }
 
-/** Exécute l'action de la ligne `id` du menu contextuel actuellement ouvert,
- * puis referme la bulle — appelé par le handler IPC `CH.contextMenuAction`. */
-export function runContextMenuAction(id: string): void {
-  contextMenuActions[String(id)]?.()
-  hidePopoverWindow()
+/** Exécute l'action de la ligne `id` du menu contextuel actuellement ouvert
+ * DANS LA FENÊTRE propriétaire de `sourceWc` (le webContents du popover qui a
+ * émis `CH.contextMenuAction` — on remonte à sa fenêtre parente, puis à
+ * l'état de CETTE fenêtre, pas un état global partagé), puis referme la
+ * bulle — appelé par le handler IPC `CH.contextMenuAction`. */
+export function runContextMenuAction(sourceWc: WebContents, id: string): void {
+  const popoverWin = BrowserWindow.fromWebContents(sourceWc)
+  const owner = popoverWin?.getParentWindow()
+  if (owner) {
+    stateFor(owner).contextMenuActions[String(id)]?.()
+    hidePopoverWindow(owner)
+  }
 }
 
-export function hidePopoverWindow(): void {
-  pendingShow = false
-  clearFallbackShow()
-  clearBoundsDebounce()
-  if (popup && !popup.isDestroyed()) fadeWindowOut(popup)
+export function hidePopoverWindow(owner?: BW): void {
+  if (owner) {
+    const s = states.get(owner.id)
+    if (!s) return
+    s.pendingShow = false
+    clearFallbackShow(s)
+    clearBoundsDebounce(s)
+    if (s.popup && !s.popup.isDestroyed()) fadeWindowOut(s.popup)
+    return
+  }
+  // Pas de fenêtre précisée (ex. `CH.popoverHide`, appelé depuis un contexte
+  // qui ne connaît que son propre popover) — ferme tous les popovers ouverts,
+  // en pratique 0 ou 1 à la fois.
+  for (const s of states.values()) {
+    s.pendingShow = false
+    clearFallbackShow(s)
+    clearBoundsDebounce(s)
+    if (s.popup && !s.popup.isDestroyed()) fadeWindowOut(s.popup)
+  }
 }
 
 /** Ajuste la taille (position ancrée en haut-gauche) au contenu réel — c'est
@@ -207,18 +245,25 @@ export function hidePopoverWindow(): void {
  * peut redimensionner plusieurs fois de suite (état de chargement, puis
  * vraies données) que la fenêtre soit en train d'apparaître OU déjà visible
  * (contenu qui change pendant qu'elle reste ouverte) — appliquer les bornes
- * immédiatement dans ce second cas provoquait le même sursaut visible. */
-export function resizePopoverWindow(width: number, height: number): void {
-  if (!popup || popup.isDestroyed()) return
-  clearBoundsDebounce()
-  boundsDebounceTimer = setTimeout(() => {
-    boundsDebounceTimer = null
-    if (!popup || popup.isDestroyed()) return
+ * immédiatement dans ce second cas provoquait le même sursaut visible.
+ * `sourceWc` : le webContents du popover LUI-MÊME (qui a mesuré sa propre
+ * taille) — on remonte à sa fenêtre parente pour trouver le bon état. */
+export function resizePopoverWindow(sourceWc: WebContents, width: number, height: number): void {
+  const popoverWin = BrowserWindow.fromWebContents(sourceWc)
+  const owner = popoverWin?.getParentWindow()
+  if (!owner) return
+  const s = states.get(owner.id)
+  if (!s || !s.popup || s.popup.isDestroyed()) return
+  const popup = s.popup
+  clearBoundsDebounce(s)
+  s.boundsDebounceTimer = setTimeout(() => {
+    s.boundsDebounceTimer = null
+    if (popup.isDestroyed()) return
     const current = popup.getBounds()
     popup.setBounds(sanitizeToDisplay({ ...current, width: Math.max(1, width), height: Math.max(1, height) }))
-    if (pendingShow) {
-      pendingShow = false
-      clearFallbackShow()
+    if (s.pendingShow) {
+      s.pendingShow = false
+      clearFallbackShow(s)
       fadeWindowIn(popup)
     }
   }, 60)
