@@ -119,15 +119,7 @@ const PANELS: Record<Exclude<Panel, 'root'>, { title: string; rows: Row[] }> = {
     rows: [
       { label: 'À propos d’ÆTHER', action: 'about' },
       { label: 'Centre d’aide', accelerator: 'F1', action: 'guide' },
-      {
-        label: 'Signaler un problème…',
-        onClick: () => {
-          window.aether.app.openExternal(
-            `mailto:titilyonnais.yt@gmail.com?subject=${encodeURIComponent('Signalement ÆTHER')}`
-          )
-          closePopover()
-        }
-      }
+      { label: 'Signaler un problème…', action: 'report-problem' }
     ]
   }
 }

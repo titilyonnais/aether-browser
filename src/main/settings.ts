@@ -23,7 +23,7 @@ function defaultMaxLivePages(): number {
   return 10
 }
 
-const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKey'> = {
+const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKey' | 'hasSmtpConfig'> = {
   aiProvider: 'auto',
   ollamaBaseUrl: 'http://127.0.0.1:11434',
   ollamaModel: '',
@@ -35,6 +35,7 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   theme: 'dark',
   accent: 'glacier',
   accentCustom: '',
+  backgroundImage: null,
   showFavoritesBar: false,
   groupFavoritesBySpace: true,
   wideAddressBar: false,
@@ -81,23 +82,17 @@ const SECRET_KEYS: Record<ApiProviderKind, string> = {
 
 // ─── Secrets ─────────────────────────────────────────────────────────────────
 
-function storeSecret(provider: ApiProviderKind, value: string | null): void {
-  const key = SECRET_KEYS[provider]
-  if (value === null || value.trim() === '') {
-    kvRepo.remove(key)
-    return
-  }
+/** Chiffrement générique (DPAPI via `safeStorage`, repli brut si indisponible)
+ * — utilisé aussi bien pour les clés IA que pour la config SMTP ci-dessous. */
+function encryptValue(value: string): string {
   if (safeStorage.isEncryptionAvailable()) {
-    kvRepo.set(key, 'enc:' + safeStorage.encryptString(value.trim()).toString('base64'))
-  } else {
-    // Repli très rare (DPAPI indisponible) — stockage brut signalé par préfixe.
-    kvRepo.set(key, 'raw:' + Buffer.from(value.trim(), 'utf8').toString('base64'))
+    return 'enc:' + safeStorage.encryptString(value).toString('base64')
   }
+  // Repli très rare (DPAPI indisponible) — stockage brut signalé par préfixe.
+  return 'raw:' + Buffer.from(value, 'utf8').toString('base64')
 }
 
-export function readSecret(provider: ApiProviderKind): string | null {
-  const stored = kvRepo.get(SECRET_KEYS[provider])
-  if (!stored) return null
+function decryptValue(stored: string): string | null {
   try {
     if (stored.startsWith('enc:')) {
       return safeStorage.decryptString(Buffer.from(stored.slice(4), 'base64'))
@@ -111,8 +106,75 @@ export function readSecret(provider: ApiProviderKind): string | null {
   return null
 }
 
+function storeSecret(provider: ApiProviderKind, value: string | null): void {
+  const key = SECRET_KEYS[provider]
+  if (value === null || value.trim() === '') {
+    kvRepo.remove(key)
+    return
+  }
+  kvRepo.set(key, encryptValue(value.trim()))
+}
+
+export function readSecret(provider: ApiProviderKind): string | null {
+  const stored = kvRepo.get(SECRET_KEYS[provider])
+  return stored ? decryptValue(stored) : null
+}
+
 export function hasSecret(provider: ApiProviderKind): boolean {
   return kvRepo.get(SECRET_KEYS[provider]) !== null
+}
+
+// ─── SMTP (rapport de bug) ────────────────────────────────────────────────────
+// Config du relais SMTP utilisé pour "Signaler un problème" — appartient au
+// DÉVELOPPEUR (moi), jamais à l'utilisateur final : pas d'UI Réglages, juste
+// une graine ponctuelle depuis des variables d'environnement au premier
+// lancement qui en dispose (voir `seedSmtpConfigFromEnv`, main/index.ts).
+// Chiffré via le même mécanisme que les clés IA, jamais exposé par IPC.
+
+export interface SmtpConfig {
+  host: string
+  port: number
+  user: string
+  pass: string
+}
+
+const SMTP_KEY = 'secret.smtp'
+
+export function storeSmtpConfig(config: SmtpConfig): void {
+  kvRepo.set(SMTP_KEY, encryptValue(JSON.stringify(config)))
+}
+
+export function readSmtpConfig(): SmtpConfig | null {
+  const stored = kvRepo.get(SMTP_KEY)
+  if (!stored) return null
+  const decrypted = decryptValue(stored)
+  if (!decrypted) return null
+  try {
+    return JSON.parse(decrypted) as SmtpConfig
+  } catch {
+    return null
+  }
+}
+
+export function hasSmtpConfig(): boolean {
+  return kvRepo.get(SMTP_KEY) !== null
+}
+
+/** Graine ponctuelle : si `AETHER_SMTP_HOST`/`_PORT`/`_USER`/`_PASS` sont
+ * posées dans l'environnement ET qu'aucune config n'est encore stockée, les
+ * chiffre une fois dans la DB locale. Sert UNE SEULE FOIS après un `npm run
+ * dev`/lancement avec ces variables posées (ex. dans un `.env.local` local,
+ * jamais committé) — la DB les retient ensuite, plus besoin de les reposer. */
+export function seedSmtpConfigFromEnv(): void {
+  if (hasSmtpConfig()) return
+  const host = process.env['AETHER_SMTP_HOST']
+  const port = process.env['AETHER_SMTP_PORT']
+  const user = process.env['AETHER_SMTP_USER']
+  const pass = process.env['AETHER_SMTP_PASS']
+  if (!host || !port || !user || !pass) return
+  const portNum = Number(port)
+  if (!Number.isFinite(portNum)) return
+  storeSmtpConfig({ host, port: portNum, user, pass })
 }
 
 // ─── Réglages ────────────────────────────────────────────────────────────────
@@ -144,6 +206,7 @@ export function getSettings(): AppSettings {
     theme: getString('theme'),
     accent: getString('accent'),
     accentCustom: getString('accentCustom'),
+    backgroundImage: getString('backgroundImage'),
     showFavoritesBar: getString('showFavoritesBar'),
     groupFavoritesBySpace: getString('groupFavoritesBySpace'),
     wideAddressBar: getString('wideAddressBar'),
@@ -182,7 +245,8 @@ export function getSettings(): AppSettings {
     onboarded: getString('onboarded'),
     hasAnthropicKey: hasSecret('anthropic'),
     hasOpenaiKey: hasSecret('openai'),
-    hasXaiKey: hasSecret('xai')
+    hasXaiKey: hasSecret('xai'),
+    hasSmtpConfig: hasSmtpConfig()
   }
 }
 
@@ -215,6 +279,7 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
   if (patch.theme !== undefined) putValue('theme', patch.theme)
   if (patch.accent !== undefined) putValue('accent', patch.accent)
   if (patch.accentCustom !== undefined) putValue('accentCustom', patch.accentCustom)
+  if (patch.backgroundImage !== undefined) putValue('backgroundImage', patch.backgroundImage)
   if (patch.showFavoritesBar !== undefined) putValue('showFavoritesBar', patch.showFavoritesBar)
   if (patch.groupFavoritesBySpace !== undefined) {
     putValue('groupFavoritesBySpace', patch.groupFavoritesBySpace)

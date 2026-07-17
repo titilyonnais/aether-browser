@@ -5,7 +5,7 @@
  */
 import { app, dialog, type BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { copyFileSync, mkdirSync, unlinkSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { extname, join } from 'node:path'
 
 export function avatarsDir(): string {
@@ -39,5 +39,29 @@ export function deleteAvatarImage(filename: string): void {
     unlinkSync(join(avatarsDir(), filename))
   } catch {
     // Déjà absent — sans conséquence.
+  }
+}
+
+const MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif'
+}
+
+/** Relit un fichier déjà importé (avatar OU fond d'écran, même dossier géré)
+ * en `data:` URI — utilisé pour l'extraction de couleur dominante côté
+ * renderer (un `<img>` chargé depuis une `data:` URI ne pollue JAMAIS le
+ * canvas contrairement à une image cross-origin via `aether://`, quel que
+ * soit le réglage CORS du protocole personnalisé). */
+export function avatarImageDataUrl(filename: string): string | null {
+  const mime = MIME_BY_EXT[extname(filename).toLowerCase()]
+  if (!mime) return null
+  try {
+    const buf = readFileSync(join(avatarsDir(), filename))
+    return `data:${mime};base64,${buf.toString('base64')}`
+  } catch {
+    return null
   }
 }

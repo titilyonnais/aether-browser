@@ -74,6 +74,17 @@ export const overlays: Record<string, string> = {
   'overlays.renameWindow.cancel': 'Annuler',
   'overlays.renameWindow.confirm': 'Renommer',
 
+  // Signaler un problème
+  'overlays.reportProblem.title': 'Signaler un problème',
+  'overlays.reportProblem.titlePlaceholder': 'Titre du problème',
+  'overlays.reportProblem.descriptionPlaceholder': 'Décrivez ce qui ne fonctionne pas comme prévu…',
+  'overlays.reportProblem.cancel': 'Annuler',
+  'overlays.reportProblem.send': 'Envoyer',
+  'overlays.reportProblem.sending': 'Envoi…',
+  'overlays.reportProblem.sent': 'Rapport envoyé, merci !',
+  'overlays.reportProblem.errorFallback':
+    "L'envoi automatique n'est pas disponible pour l'instant — ouverture de votre client mail à la place.",
+
   // Créer un profil
   'overlays.createProfile.title': 'Nouveau profil',
   'overlays.createProfile.namePlaceholder': 'Nom du profil',

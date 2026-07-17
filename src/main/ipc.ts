@@ -7,6 +7,7 @@ import { app, clipboard, dialog, ipcMain, Menu, screen, shell, type BrowserWindo
 import { existsSync } from 'node:fs'
 import { CH } from '@shared/ipc'
 import type {
+  AppSettings,
   Bounds,
   BrowsingDataKind,
   CanvasRect,
@@ -43,7 +44,7 @@ import type {
 import { computeAffinities, queuePageEmbedding } from './ai/embeddings'
 import { classifyIntent } from './ai/intent'
 import type { AiRouter } from './ai/router'
-import { chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
+import { avatarImageDataUrl, chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
 import { getCertInfo } from './certificates'
 import { getNewTabNews, getNewTabWeather, getSearchSuggestions, searchNewTabCities } from './newtab'
 import {
@@ -74,6 +75,7 @@ import {
 import { openExtensionPopup, resizeExtensionPopup } from './extensionPopupWindow'
 import { readFlags, relaunchApp, writeFlags } from './flags'
 import { createChildWindow } from './mainWindow'
+import { sendBugReport } from './mailer'
 import {
   broadcastToPopover,
   hidePopoverWindow,
@@ -1450,9 +1452,9 @@ export function registerIpc(router: AiRouter): void {
 
   ipcMain.handle(CH.settingsSet, (e, patch: SettingsPatch) => {
     const { views } = resolveWindowContext(e)
-    const previousZoom = getSettings().defaultZoom
+    const before = getSettings()
     const next = applySettingsPatch(patch)
-    applySideEffects(views, patch, previousZoom)
+    applySideEffects(views, patch, before)
     void router.refreshStatus()
     return next
   })
@@ -1532,6 +1534,19 @@ export function registerIpc(router: AiRouter): void {
     const { views } = resolveWindowContext(e)
     createSecondaryContentWindow(activeProfileOf(views), false, undefined, router)
   })
+
+  ipcMain.handle(CH.reportSend, (_e, subject: string, body: string) =>
+    sendBugReport(String(subject ?? '').slice(0, 200), String(body ?? '').slice(0, 10_000))
+  )
+
+  ipcMain.handle(CH.backgroundChooseImage, async (e): Promise<{ filename: string; dataUrl: string } | null> => {
+    const filename = await chooseAndSaveAvatarImage(resolveWindowContext(e).win)
+    if (!filename) return null
+    const dataUrl = avatarImageDataUrl(filename)
+    return dataUrl ? { filename, dataUrl } : null
+  })
+
+  ipcMain.handle(CH.backgroundImageDataUrl, (_e, filename: string) => avatarImageDataUrl(String(filename ?? '')))
 
   ipcMain.on(CH.appSetTitle, (e, title: string) => {
     resolveWindowContext(e).win.setTitle(String(title ?? '').trim().slice(0, 80) || 'ÆTHER')
@@ -1711,8 +1726,8 @@ export function registerIpc(router: AiRouter): void {
 }
 
 /** Effets de bord d'un changement de réglages (zoom, proxy appliqués à chaud). */
-function applySideEffects(views: ViewManager, patch: SettingsPatch, previousZoom: number): void {
-  if (patch.defaultZoom !== undefined && patch.defaultZoom !== previousZoom) {
+function applySideEffects(views: ViewManager, patch: SettingsPatch, before: AppSettings): void {
+  if (patch.defaultZoom !== undefined && patch.defaultZoom !== before.defaultZoom) {
     views.applyZoomToAll()
   }
   if (patch.proxyMode !== undefined || patch.proxyRules !== undefined) {
@@ -1722,6 +1737,16 @@ function applySideEffects(views: ViewManager, patch: SettingsPatch, previousZoom
   if (patch.spellcheckLanguages !== undefined) {
     const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
     applySpellcheckLanguages(webPartitionForProfile(activeProfileOf(views), isPrivate))
+  }
+  // Un fond d'écran personnalisé remplacé (ou retiré) laisse un fichier
+  // orphelin dans le dossier géré (avatarsDir) — même filet que pour la
+  // suppression/changement d'avatar de profil.
+  if (
+    patch.backgroundImage !== undefined &&
+    before.backgroundImage?.kind === 'custom' &&
+    before.backgroundImage.value !== patch.backgroundImage?.value
+  ) {
+    deleteAvatarImage(before.backgroundImage.value)
   }
 }
 

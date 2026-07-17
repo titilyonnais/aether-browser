@@ -883,6 +883,9 @@ export function runCommand(cmd: ShortcutCommand): void {
     case 'about':
       ui.openOverlay('settings', { section: 'apropos' })
       break
+    case 'report-problem':
+      ui.openOverlay('report-problem')
+      break
     case 'translate-page': {
       const page = getActivePage()
       if (!page) break

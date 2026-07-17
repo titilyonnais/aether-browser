@@ -20,6 +20,7 @@ export type OverlayKind =
   | 'qr-code'
   | 'rename-window'
   | 'create-profile'
+  | 'report-problem'
   | null
 
 interface Toast {

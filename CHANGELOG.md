@@ -4,6 +4,13 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.52.0] — 2026-07-18
+
+### Ajouté
+
+- **Fond d'écran** (Réglages › Apparence) : quelques dégradés prédéfinis, ou une image importée depuis le PC — visible derrière les pages (bande de titre, marges du canvas). Bouton « Utiliser la couleur de l'image » pour appliquer automatiquement sa couleur dominante comme accent (façon Windows).
+- **« Signaler un problème »** : vraie interface (titre + description) au lieu d'un simple lien `mailto:` — envoi automatique par SMTP si configuré, sinon repli sur le client mail. Les identifiants SMTP (miens, pas ceux d'un utilisateur final) sont chiffrés localement (même mécanisme que les clés IA), jamais exposés au renderer ni à aucun autre utilisateur de l'appli.
+
 ## [0.51.0] — 2026-07-18
 
 ### Modifié

@@ -1,0 +1,117 @@
+/**
+ * « Signaler un problème » — titre + description envoyés par email au
+ * développeur, sans que l'utilisateur ait jamais accès aux identifiants SMTP
+ * (ils ne quittent jamais le process main, voir main/mailer.ts). Si l'envoi
+ * automatique n'est pas configuré/échoue, repli sur l'ancien lien `mailto:`.
+ */
+import { AnimatePresence, motion } from 'framer-motion'
+import { useEffect, useRef, useState } from 'react'
+import { useT } from '@/i18n/useT'
+import { useSettingsStore } from '@/stores/settings'
+import { useUiStore } from '@/stores/ui'
+
+const FALLBACK_MAILTO = 'titilyonnais.yt@gmail.com'
+
+export function ReportProblemOverlay() {
+  const open = useUiStore((s) => s.overlay === 'report-problem')
+  return <AnimatePresence>{open && <ReportProblemPanel />}</AnimatePresence>
+}
+
+function ReportProblemPanel() {
+  const t = useT()
+  const hasSmtpConfig = useSettingsStore((s) => s.settings?.hasSmtpConfig ?? false)
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
+  const titleRef = useRef<HTMLInputElement | null>(null)
+  const close = (): void => useUiStore.getState().closeOverlay()
+
+  useEffect(() => {
+    titleRef.current?.focus()
+  }, [])
+
+  const openMailto = (): void => {
+    const subject = encodeURIComponent(title.trim() || 'Signalement ÆTHER')
+    const body = encodeURIComponent(description.trim())
+    window.aether.app.openExternal(`mailto:${FALLBACK_MAILTO}?subject=${subject}&body=${body}`)
+    close()
+  }
+
+  const send = async (): Promise<void> => {
+    if (!title.trim() && !description.trim()) return
+    if (!hasSmtpConfig) {
+      useUiStore.getState().toast(t('overlays.reportProblem.errorFallback'))
+      openMailto()
+      return
+    }
+    setStatus('sending')
+    const result = await window.aether.app.sendReport(title.trim() || 'Signalement ÆTHER', description.trim())
+    if (result.ok) {
+      setStatus('sent')
+      useUiStore.getState().toast(t('overlays.reportProblem.sent'))
+      setTimeout(close, 900)
+    } else {
+      setStatus('idle')
+      useUiStore.getState().toast(t('overlays.reportProblem.errorFallback'))
+      openMailto()
+    }
+  }
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={close}
+        className="fixed inset-0 z-40 bg-void/55 backdrop-blur-[7px]"
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 16, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.99 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+        className="glass-strong fixed left-1/2 top-1/2 z-50 w-[min(480px,90vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl p-5"
+        onKeyDown={(e) => e.key === 'Escape' && close()}
+      >
+        <p className="mb-3 font-display text-[15px] italic text-ink">{t('overlays.reportProblem.title')}</p>
+
+        <input
+          ref={titleRef}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={t('overlays.reportProblem.titlePlaceholder')}
+          maxLength={200}
+          className="mb-2.5 h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[13px] text-ink outline-none placeholder:text-ink-faint focus:border-glacier/40"
+        />
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder={t('overlays.reportProblem.descriptionPlaceholder')}
+          maxLength={10_000}
+          rows={6}
+          className="w-full resize-none rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-faint focus:border-glacier/40"
+        />
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-full border border-white/[0.08] px-3.5 py-1.5 text-[12px] text-ink-faint hover:text-ink-dim"
+          >
+            {t('overlays.reportProblem.cancel')}
+          </button>
+          <button
+            type="button"
+            disabled={status === 'sending'}
+            onClick={() => void send()}
+            className="rounded-full border border-glacier/30 bg-glacier/[0.08] px-3.5 py-1.5 text-[12px] text-glacier hover:bg-glacier/[0.14] disabled:opacity-50"
+          >
+            {status === 'sending' ? t('overlays.reportProblem.sending') : t('overlays.reportProblem.send')}
+          </button>
+        </div>
+      </motion.div>
+    </>
+  )
+}

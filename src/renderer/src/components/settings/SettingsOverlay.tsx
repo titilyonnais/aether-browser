@@ -47,6 +47,7 @@ import type {
   ExtensionInfo,
   Profile,
   SearchEngineId,
+  SettingsPatch,
   ThemeMode,
   UpdateStatus
 } from '@shared/types'
@@ -64,6 +65,8 @@ import {
   setProfileAvatarImage,
   switchProfile
 } from '@/lib/actions'
+import { BACKGROUND_PRESETS, backgroundPresetCss } from '@/lib/backgroundPresets'
+import { extractDominantColor } from '@/lib/dominantColor'
 import { cn, formatBytes } from '@/lib/utils'
 import { useMuseStore } from '@/stores/muse'
 import { usePagesStore } from '@/stores/pages'
@@ -847,6 +850,101 @@ const ACCENTS: { id: Exclude<AccentId, 'custom'>; labelKey: string; color: strin
   { id: 'glacier', labelKey: 'settings.appearance.accentSauge', color: '#a8c99a' }
 ] as const
 
+/** Galerie de fonds d'écran (dégradés prédéfinis + image importée) et
+ * extraction de couleur dominante (façon Windows). */
+function BackgroundBlock({
+  settings,
+  patch
+}: {
+  settings: AppSettings
+  patch: (p: SettingsPatch) => Promise<void>
+}) {
+  const t = useT()
+  const [pendingDataUrl, setPendingDataUrl] = useState<string | null>(null)
+  const [extracting, setExtracting] = useState(false)
+  const bg = settings.backgroundImage
+
+  const chooseImage = async (): Promise<void> => {
+    const result = await window.aether.app.chooseBackgroundImage()
+    if (!result) return
+    setPendingDataUrl(result.dataUrl)
+    await patch({ backgroundImage: { kind: 'custom', value: result.filename } })
+  }
+
+  const useImageColor = async (): Promise<void> => {
+    if (!bg || bg.kind !== 'custom') return
+    setExtracting(true)
+    try {
+      const dataUrl = pendingDataUrl ?? (await window.aether.app.backgroundImageDataUrl(bg.value))
+      const hex = dataUrl ? await extractDominantColor(dataUrl) : null
+      if (hex) await patch({ accent: 'custom', accentCustom: hex })
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  return (
+    <Block title={t('settings.appearance.backgroundTitle')} hint={t('settings.appearance.backgroundHint')}>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <button
+          type="button"
+          title={t('settings.appearance.backgroundNone')}
+          onClick={() => void patch({ backgroundImage: null })}
+          className={cn(
+            'grid h-11 w-11 place-items-center rounded-xl border text-ink-faint transition-colors',
+            !bg ? 'border-glacier/50 ring-2 ring-offset-2 ring-offset-abyss' : 'border-white/[0.1] hover:border-white/[0.2]'
+          )}
+        >
+          <X size={14} strokeWidth={1.8} />
+        </button>
+        {BACKGROUND_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            title={preset.label}
+            onClick={() => void patch({ backgroundImage: { kind: 'preset', value: preset.id } })}
+            className={cn(
+              'h-11 w-11 rounded-xl transition-transform hover:scale-105',
+              bg?.kind === 'preset' && bg.value === preset.id ? 'ring-2 ring-offset-2 ring-offset-abyss ring-glacier/60' : ''
+            )}
+            style={{ background: backgroundPresetCss(preset.id) ?? undefined }}
+          />
+        ))}
+        <label
+          title={t('settings.appearance.backgroundCustom')}
+          className={cn(
+            'relative grid h-11 w-11 cursor-pointer place-items-center overflow-hidden rounded-xl border-2 border-dashed transition-colors',
+            bg?.kind === 'custom' ? 'border-glacier/60' : 'border-white/20 hover:border-white/40'
+          )}
+        >
+          {bg?.kind === 'custom' ? (
+            <img src={`aether://avatars/${bg.value}`} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <ImageIcon size={14} strokeWidth={1.7} className="text-ink-faint" />
+          )}
+          <button
+            type="button"
+            onClick={() => void chooseImage()}
+            className="absolute inset-0 cursor-pointer"
+            aria-label={t('settings.appearance.backgroundCustom')}
+          />
+        </label>
+      </div>
+      {bg?.kind === 'custom' && (
+        <button
+          type="button"
+          disabled={extracting}
+          onClick={() => void useImageColor()}
+          className="mt-3 flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-3.5 py-1.5 text-[11.5px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink disabled:opacity-50"
+        >
+          <Wand2 size={12} strokeWidth={1.7} />
+          {extracting ? t('settings.appearance.extractingColor') : t('settings.appearance.useImageColor')}
+        </button>
+      )}
+    </Block>
+  )
+}
+
 const THEME_OPTIONS: { id: ThemeMode; labelKey: string }[] = [
   { id: 'dark', labelKey: 'settings.appearance.themeDark' },
   { id: 'light', labelKey: 'settings.appearance.themeLight' },
@@ -945,6 +1043,8 @@ function AppearanceSection() {
           </label>
         </div>
       </Block>
+
+      <BackgroundBlock settings={settings} patch={patch} />
 
       <Block title={t('settings.appearance.favoritesBarTitle')} hint={t('settings.appearance.favoritesBarHint')}>
         <div className="space-y-1">

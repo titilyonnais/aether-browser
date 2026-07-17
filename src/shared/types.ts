@@ -315,6 +315,10 @@ export interface AppSettings {
   hasAnthropicKey: boolean
   hasOpenaiKey: boolean
   hasXaiKey: boolean
+  /** Relais SMTP configuré (développeur uniquement, jamais via une UI
+   * Réglages) — permet à l'overlay « Signaler un problème » de proposer un
+   * repli `mailto:` si l'envoi automatique n'est pas disponible. */
+  hasSmtpConfig: boolean
   /** Id d'un moteur intégré (SearchEngineId) ou d'un CustomSearchEngine. */
   searchEngine: string
   // — Apparence —
@@ -322,6 +326,11 @@ export interface AppSettings {
   accent: AccentId
   /** Couleur hexadécimale personnalisée, utilisée quand accent === 'custom'. */
   accentCustom: string
+  /** Fond d'écran de l'appli — `'preset'` référence un dégradé intégré (id
+   * dans BACKGROUND_PRESETS, renderer), `'custom'` un fichier importé (nom
+   * stocké dans le même dossier géré que les avatars, servi via
+   * `aether://avatars/<fichier>`). */
+  backgroundImage: { kind: 'preset' | 'custom'; value: string } | null
   /** Barre de favoris sous la barre de titre. */
   showFavoritesBar: boolean
   /** Regrouper les favoris par espace (pastille de couleur) dans la barre. */
@@ -425,6 +434,7 @@ export interface SettingsPatch {
   theme?: ThemeMode
   accent?: AccentId
   accentCustom?: string
+  backgroundImage?: { kind: 'preset' | 'custom'; value: string } | null
   showFavoritesBar?: boolean
   groupFavoritesBySpace?: boolean
   wideAddressBar?: boolean
@@ -862,6 +872,7 @@ export type ShortcutCommand =
   | 'downloads'
   | 'private-window'
   | 'new-window'
+  | 'report-problem'
   | 'fullscreen'
   | 'history'
   | 'favorites-manage'

@@ -241,6 +241,9 @@ export const CH = {
   /** Ouvre une nouvelle fenêtre ÆTHER complète sur le profil actif de la
    * fenêtre appelante — support multi-fenêtre. */
   appNewWindow: 'app:new-window',
+  reportSend: 'report:send',
+  backgroundChooseImage: 'background:choose-image',
+  backgroundImageDataUrl: 'background:image-data-url',
 
   // Téléchargements
   downloadsList: 'downloads:list',
@@ -573,6 +576,19 @@ export interface AetherApi {
     setTitle(title: string): void
     /** Ouvre une nouvelle fenêtre ÆTHER complète (même profil que la fenêtre appelante). */
     openNewWindow(): void
+    /** Envoie un rapport de bug par SMTP (identifiants côté main uniquement,
+     * jamais exposés ici) — échoue proprement si aucun relais n'est configuré. */
+    sendReport(subject: string, body: string): Promise<{ ok: boolean; error?: string }>
+    /** Choisit une image de fond d'écran personnalisée — copiée dans le
+     * dossier géré (même mécanisme que les avatars), retourne son nom de
+     * fichier stocké ET une `data:` URI (pour l'extraction de couleur
+     * dominante côté renderer, sans jamais passer par `aether://` qui
+     * pollue le canvas). */
+    chooseBackgroundImage(): Promise<{ filename: string; dataUrl: string } | null>
+    /** Relit un fond d'écran personnalisé DÉJÀ choisi (fichier déjà stocké)
+     * en `data:` URI, pour l'extraction de couleur dominante sans devoir le
+     * réimporter. */
+    backgroundImageDataUrl(filename: string): Promise<string | null>
   }
   downloads: {
     list(): Promise<DownloadEntry[]>

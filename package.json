@@ -1,6 +1,6 @@
 {
   "name": "aether-browser",
-  "version": "0.51.0",
+  "version": "0.52.0",
   "description": "ÆTHER — un espace de pensée et d'action augmenté pour le web",
   "main": "out/main/index.js",
   "author": "ÆTHER",
@@ -29,6 +29,7 @@
     "better-sqlite3": "^12.11.1",
     "electron-updater": "^6.8.9",
     "koffi": "^3.1.1",
+    "nodemailer": "^9.0.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -39,6 +40,7 @@
     "@tailwindcss/vite": "^4.3.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
+    "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
