@@ -7,13 +7,14 @@
  * d'abord, proxy, téléchargements) est appliqué paresseusement, une fois
  * par partition.
  */
-import { app, session, type BrowserWindow, type DownloadItem, type Session } from 'electron'
+import { app, session, type DownloadItem, type Session } from 'electron'
 import { basename, join } from 'node:path'
 import { CH } from '@shared/ipc'
 import type { ProfileId, SitePermissionKind } from '@shared/types'
 import { installCertificateObserver } from './certificates'
 import { downloadsRepo, sitePermissionsRepo } from './db/repositories'
 import { getSettings } from './settings'
+import { windowContextsForProfile } from './windowRegistry'
 
 export function webPartitionForProfile(profileId: ProfileId, isPrivate: boolean): string {
   return isPrivate ? `aether-private-${profileId}` : `persist:aether-web-${profileId}`
@@ -97,11 +98,7 @@ export function applyProxy(partition: string): void {
 }
 
 /** Garantit qu'une partition est durcie (idempotent). Retourne la session. */
-export function ensurePartitionHardened(
-  partition: string,
-  profileId: ProfileId,
-  win: BrowserWindow
-): Session {
+export function ensurePartitionHardened(partition: string, profileId: ProfileId): Session {
   const webSession = session.fromPartition(partition)
   if (hardened.has(partition)) return webSession
   hardened.add(partition)
@@ -166,9 +163,15 @@ export function ensurePartitionHardened(
     })
     liveDownloads.set(id, item)
 
+    // Une partition est durcie/enregistrée UNE SEULE fois (`hardened`, plus
+    // haut) — si plusieurs fenêtres partagent ce profil, ce `will-download`
+    // (posé par la toute première d'entre elles à démarrer) doit prévenir
+    // TOUTES les fenêtres qui affichent actuellement ce profil, pas
+    // seulement celle qui l'a initialisé.
     const notify = (): void => {
-      if (win.isDestroyed()) return
-      win.webContents.send(CH.downloadUpdated, id)
+      for (const ctx of windowContextsForProfile(profileId)) {
+        if (!ctx.win.isDestroyed()) ctx.win.webContents.send(CH.downloadUpdated, id)
+      }
     }
     notify()
 

@@ -230,6 +230,41 @@ function buildWorkspace(views: ViewManager, profileId: ProfileId): Workspace {
   return { spaces, pages, notes, favorites, favoriteFolders, activeSpaceId, focusBySpace }
 }
 
+/** Vrai une seule fois, à la toute première résolution de `CH.stateInitial`
+ * dans ce process (la fenêtre principale au lancement) — jamais réappliqué
+ * pour une fenêtre secondaire ouverte en cours de session, qui ne doit
+ * jamais fermer les onglets d'un espace déjà en cours d'usage ailleurs. */
+let appLaunchCleanupDone = false
+
+/** Réglage « toujours neuve » (`startupTabs === 'newtab'`) : ferme les pages
+ * de l'espace actif ET recrée un nouvel onglet vierge AVANT de répondre à
+ * `CH.stateInitial`, pour que le tout premier rendu du renderer affiche déjà
+ * ce nouvel onglet — évite le flash d'état vide (VoidState) que produisait
+ * la même logique exécutée après coup côté renderer (`initBridge`). */
+function applyStartupTabsCleanup(views: ViewManager, profileId: ProfileId): void {
+  if (appLaunchCleanupDone) return
+  appLaunchCleanupDone = true
+  const settings = getSettings()
+  if (!settings.onboarded || settings.startupTabs !== 'newtab') return
+
+  const spaces = spacesRepo.listByProfile(profileId)
+  const activeSpaceId = getActiveSpaceId(profileId) ?? spaces[0]?.id
+  if (!activeSpaceId) return
+
+  for (const page of pagesRepo.listBySpace(activeSpaceId)) {
+    views.closePage(page.id)
+    pagesRepo.remove(page.id)
+  }
+  const row = pagesRepo.create({
+    spaceId: activeSpaceId,
+    url: 'aether://newtab',
+    parentId: null,
+    canvas: placeCard(activeSpaceId, null)
+  })
+  views.ensureLive(row)
+  setFocusState(activeSpaceId, { slots: [row.id], orientation: 'h', ratio: 0.5, activeSlot: 0 })
+}
+
 /** Bascule CETTE fenêtre vers un profil : ferme ses vues, change de
  * partition, recharge ses extensions. */
 async function switchToProfile(views: ViewManager, id: ProfileId): Promise<Workspace> {
@@ -555,6 +590,7 @@ export function registerIpc(router: AiRouter): void {
     // à une fenêtre secondaire, ex. une navigation privée dédiée).
     const activeProfileId = views.getActiveProfileId()
     await loadExtensionsForProfile(activeProfileId, views.activePartition())
+    applyStartupTabsCleanup(views, activeProfileId)
     return {
       profiles: profilesRepo.list(),
       activeProfileId,
@@ -738,6 +774,14 @@ export function registerIpc(router: AiRouter): void {
 
   ipcMain.on(CH.spaceSetActive, (e, id: SpaceId) => {
     const { views } = resolveWindowContext(e)
+    // Les deux DOIVENT être mis à jour ensemble : `views.setActiveSpaceId`
+    // (en mémoire, propre à CETTE fenêtre) est aussi lu en PRIORITÉ par
+    // `buildWorkspace` (`views.getActiveSpaceId() ?? getActiveSpaceId(profileId)`)
+    // — l'oublier laissait `buildWorkspace` retomber sur un espace PÉRIMÉ
+    // (celui actif au dernier appel, ex. au lancement de la fenêtre) dès
+    // qu'il tournait à nouveau pour cette fenêtre (changement de profil…),
+    // au lieu de l'espace réellement actif au moment du changement.
+    views.setActiveSpaceId(id)
     setActiveSpaceId(activeProfileOf(views), id)
   })
 
@@ -1603,7 +1647,17 @@ export function registerIpc(router: AiRouter): void {
     openPopover(win, computePopoverBounds(win, req), content)
   })
 
-  ipcMain.on(CH.popoverHide, (e) => hidePopoverWindow(resolveWindowContext(e).win))
+  ipcMain.on(CH.popoverHide, (e) => {
+    const { win } = resolveWindowContext(e)
+    hidePopoverWindow(win)
+    // Sans ce signal, tout bouton dont l'état ouvert/fermé dépend de
+    // `popover:onClosed` (menu principal, extensions, favoris, traduction…)
+    // reste bloqué sur "ouvert" quand la fermeture vient du CONTENU du popup
+    // lui-même (ex. cliquer une action du menu) plutôt que d'un clic extérieur
+    // ou d'`onPageFocused` — même bug déjà corrigé une fois pour les extensions
+    // (voir CH.extensionsOpenPopup ci-dessus), généralisé ici pour TOUS les popups.
+    sendTo(win, CH.popoverClosed)
+  })
 
   ipcMain.on(CH.popoverResize, (e, size: { width: number; height: number }) => {
     resizePopoverWindow(e.sender, size.width, size.height)

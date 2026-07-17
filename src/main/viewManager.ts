@@ -11,11 +11,13 @@
  * restent de simples cartes (métadonnées + aperçu) réhydratées à la demande.
  */
 import { app, dialog, WebContentsView, clipboard, shell, type BrowserWindow, type WebContents } from 'electron'
-import { writeFile } from 'node:fs/promises'
+import { stat, writeFile } from 'node:fs/promises'
+import { basename } from 'node:path'
+import { CH } from '@shared/ipc'
 import { resolveInternalRoute } from '@shared/intent'
 import type { Bounds, ContextMenuRow, PageContext, PageId, ProfileId, ShortcutCommand, SpaceId } from '@shared/types'
 import { getSettings } from './settings'
-import { pagesRepo, type PageRow } from './db/repositories'
+import { downloadsRepo, pagesRepo, type PageRow } from './db/repositories'
 import { hidePopoverWindow, showContextMenuPopover } from './popoverWindow'
 import { capturePreview, deletePreview } from './previews'
 import { ensurePartitionHardened, webPartitionForProfile } from './webSession'
@@ -384,7 +386,7 @@ export class ViewManager {
   setActiveProfile(profileId: ProfileId, isPrivate: boolean): void {
     this.activeProfileId = profileId
     this.activeProfilePrivate = isPrivate
-    ensurePartitionHardened(webPartitionForProfile(profileId, isPrivate), profileId, this.win)
+    ensurePartitionHardened(webPartitionForProfile(profileId, isPrivate), profileId)
   }
 
   getActiveProfileId(): ProfileId {
@@ -428,7 +430,7 @@ export class ViewManager {
     }
 
     const partition = this.activePartition()
-    ensurePartitionHardened(partition, this.activeProfileId, this.win)
+    ensurePartitionHardened(partition, this.activeProfileId)
     const view = new WebContentsView({
       webPreferences: {
         partition,
@@ -1073,6 +1075,25 @@ export class ViewManager {
     this.liveContents(id)?.cut()
   }
 
+  /** Enregistre le fichier écrit manuellement (« Enregistrer sous… », capture
+   * d'écran) dans le même journal que les téléchargements normaux
+   * (`session.on('will-download')`, webSession.ts) — ces deux flux écrivent
+   * le fichier eux-mêmes et ne déclenchent jamais cet évènement Electron,
+   * donc `downloadsRepo` ne les voyait jusqu'ici jamais passer. Créé déjà
+   * « completed » (contrairement au flux normal, l'écriture est déjà finie
+   * au moment de l'appel). */
+  private async recordManualDownload(filePath: string, url: string): Promise<void> {
+    const totalBytes = (await stat(filePath).catch(() => null))?.size ?? 0
+    const id = downloadsRepo.create(this.getActiveProfileId(), {
+      filename: basename(filePath),
+      path: filePath,
+      url,
+      totalBytes
+    })
+    downloadsRepo.finish(id, 'completed', filePath)
+    if (!this.win.isDestroyed()) this.win.webContents.send(CH.downloadUpdated, id)
+  }
+
   /** Enregistre la page (HTML complet) via un sélecteur d'emplacement natif. */
   async savePage(id: PageId): Promise<void> {
     const wc = this.liveContents(id)
@@ -1085,12 +1106,14 @@ export class ViewManager {
     })
     if (canceled || !filePath) return
     await wc.savePage(filePath, 'HTMLComplete')
+    await this.recordManualDownload(filePath, row.url)
   }
 
   /** Capture la vue actuelle de la page et propose de l'enregistrer en PNG. */
   async captureScreenshot(id: PageId): Promise<void> {
     const wc = this.liveContents(id)
     if (!wc) return
+    const row = pagesRepo.get(id)
     const image = await wc.capturePage()
     const { canceled, filePath } = await dialog.showSaveDialog(this.win, {
       defaultPath: 'capture.png',
@@ -1098,6 +1121,7 @@ export class ViewManager {
     })
     if (canceled || !filePath) return
     await writeFile(filePath, image.toPNG())
+    await this.recordManualDownload(filePath, row?.url ?? '')
   }
 
   /** Recherche dans la page (barre locale, Ctrl+F) — résultat via l'événement `found-in-page`. */

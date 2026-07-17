@@ -390,6 +390,18 @@ function DownloadsButton() {
 
   const speeds = useDownloadSpeed(entries)
 
+  // Aucun téléchargement en cours : aperçu des derniers terminés (façon
+  // Chrome) plutôt qu'un message vide générique — les 6 plus récents des
+  // dernières 24h seulement (pas tout l'historique, ce n'est qu'un aperçu).
+  const recentCompleted =
+    activeCount === 0
+      ? entries
+          .filter(
+            (d) => d.state === 'completed' && d.completedAt !== null && d.completedAt > Date.now() - 24 * 60 * 60 * 1000
+          )
+          .slice(0, 6)
+      : []
+
   // Infobulle custom (pas de `title` natif) : une valeur qui change à chaque
   // tick de progression fait scintiller/réinitialiser le tooltip natif du
   // navigateur au lieu de rester stable au survol.
@@ -448,7 +460,16 @@ function DownloadsButton() {
       {showTooltip && (
         <div className="popover-surface absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-xl p-1.5">
           {activeCount === 0 ? (
-            <p className="px-2 py-1.5 text-[11.5px] text-ink-faint">{t('shell.titlebar.downloadsEmpty')}</p>
+            recentCompleted.length > 0 ? (
+              recentCompleted.map((d) => (
+                <div key={d.id} className="px-2 py-1.5">
+                  <p className="truncate text-[11.5px] text-ink">{d.filename}</p>
+                  <p className="truncate text-[10px] text-ink-faint">{formatBytes(d.totalBytes)}</p>
+                </div>
+              ))
+            ) : (
+              <p className="px-2 py-1.5 text-[11.5px] text-ink-faint">{t('shell.titlebar.downloadsEmpty')}</p>
+            )
           ) : (
             active.map((d) => {
               const remaining = remainingSeconds(d, speeds.get(d.id) ?? 0)

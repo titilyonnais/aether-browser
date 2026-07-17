@@ -206,27 +206,14 @@ export async function initBridge(): Promise<void> {
       void openUrl('aether://newtab', { target: 'focus' })
     }
   } else {
-    // 'newtab' — vraiment repartir de zéro à chaque démarrage, façon Chrome :
-    // les pages de l'espace actif à la fermeture précédente sont RÉELLEMENT
-    // fermées (pas juste retirées de la vue Focus), sans quoi elles restaient
-    // des cartes permanentes dans la bande de pages — vécu par l'utilisateur
-    // comme « les mêmes onglets qui rouvrent quand même ». Seul l'espace actif
-    // AU LANCEMENT est concerné, jamais les autres espaces (pas de perte de
-    // travail sur un espace que l'utilisateur ne regarde même pas au moment où
-    // il ferme ÆTHER).
-    const activeSpaceId = useSpacesStore.getState().activeSpaceId
-    const stalePageIds = activeSpaceId
-      ? Object.values(usePagesStore.getState().pages)
-          .filter((p) => p.spaceId === activeSpaceId)
-          .map((p) => p.id)
-      : []
-    // `closePage` rouvre lui-même un nouvel onglet dès que l'espace actif se
-    // retrouve totalement vide (filet déjà en place, cf. plus bas dans ce
-    // fichier) — inutile de le refaire ici SAUF s'il n'y avait déjà rien à fermer.
-    for (const id of stalePageIds) await closePage(id)
-    if (stalePageIds.length === 0) {
-      void openUrl('aether://newtab', { target: 'focus' })
-    }
+    // 'newtab' — vraiment repartir de zéro à chaque démarrage, façon Chrome.
+    // Le nettoyage (fermeture des pages de l'espace actif au lancement
+    // précédent + recréation d'un nouvel onglet vierge) est désormais fait
+    // CÔTÉ MAIN avant même de répondre à `state:initial`
+    // (`applyStartupTabsCleanup`, main/ipc.ts) — `initial.pages`/`focusBySpace`
+    // arrivent donc déjà propres ici, évitant le flash d'état vide qu'aurait
+    // produit ce même nettoyage exécuté après ce premier rendu.
+    pages.hydrateFocus(initial.focusBySpace)
   }
 
   scheduleAffinityRefresh()
@@ -299,6 +286,23 @@ export async function openUrl(
   const spaceId = useSpacesStore.getState().activeSpaceId
   if (!spaceId) return null
   const target = opts.target ?? 'focus'
+
+  // Rechercher depuis un nouvel onglet vierge doit se comporter comme Chrome :
+  // la même carte navigue vers le résultat, elle n'est pas remplacée par une
+  // nouvelle — sans quoi la carte newtab reste orpheline ET la nouvelle carte
+  // n'a aucun historique, rendant la flèche Retour inutilisable après une
+  // recherche. Ne s'applique qu'à un newtab jamais navigué, en mode focus —
+  // une recherche depuis une page déjà chargée garde le comportement normal
+  // (nouvelle carte, façon canvas spatial).
+  if (target === 'focus') {
+    const activePage = getActivePage()
+    if (activePage?.url === 'aether://newtab') {
+      window.aether.pages.navigate(activePage.id, url)
+      scheduleAffinityRefresh()
+      return activePage
+    }
+  }
+
   try {
     const meta = await window.aether.pages.open({
       url,

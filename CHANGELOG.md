@@ -4,6 +4,21 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.49.1] — 2026-07-18
+
+### Corrigé
+
+- **Téléchargements manuels non journalisés** : « Enregistrer la page sous… » et la capture d'écran écrivaient le fichier sans jamais l'ajouter au panneau Téléchargements.
+- **Bouton du menu principal (⋯) bloqué « ouvert »** après une action (ex. « Enregistrer la page sous… ») : il fallait cliquer deux fois pour le rouvrir — le popup ne prévenait jamais son bouton d'origine de sa propre fermeture.
+- **Retour arrière grisé après une recherche depuis le nouvel onglet** : la recherche ouvrait une nouvelle carte au lieu de naviguer la carte newtab existante, qui n'avait donc aucun historique.
+- **Notifications de téléchargement mal ciblées en multi-fenêtre** : elles ne partaient toujours que vers la toute première fenêtre à avoir ouvert le profil, jamais les autres fenêtres partageant ce même profil.
+- **Espace actif parfois périmé après changement de profil** : l'état en mémoire d'une fenêtre pouvait rester bloqué sur un ancien espace au lieu du dernier réellement sélectionné.
+
+### Ajouté
+
+- **Nouvel onglet déjà ouvert au lancement** (réglage « Ouvrir cette page — toujours neuve ») : le nettoyage des onglets périmés se fait désormais avant le tout premier rendu, plus de flash d'état vide.
+- **Aperçu des téléchargements récents au survol** de son icône : quand aucun téléchargement n'est en cours, affiche les 6 derniers terminés des dernières 24h au lieu d'un message vide.
+
 ## [0.49.0] — 2026-07-17
 
 ### Ajouté
