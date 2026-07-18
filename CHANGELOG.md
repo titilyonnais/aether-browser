@@ -4,6 +4,14 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.52.4] — 2026-07-18
+
+### Corrigé
+
+- **Sous-menu du menu principal qui scintillait** à l'ouverture : la fenêtre popup (transparente) se redimensionnait alors qu'elle était déjà affichée, provoquant une recomposition visible sur Windows. Le popup réserve désormais une largeur fixe dès le premier affichage — ouvrir/fermer un sous-menu ne redimensionne plus jamais la fenêtre native, juste une transition d'opacité.
+- **Sous-menu toujours calé en haut du menu** au lieu du niveau de la ligne cliquée (ex. « Aide », loin dans la liste) : il s'aligne maintenant sur la ligne exacte qui l'a ouvert.
+- **Retiré le réglage d'ancrage des DevTools** (gauche/droite/bas) : confirmé sans effet — limitation d'Electron (l'ancrage n'existe que pour le contenu propre d'une vraie fenêtre, pas pour une `WebContentsView` attachée comme le sont les pages d'ÆTHER), pas quelque chose de réparable côté appli. Les DevTools s'ouvrent en fenêtre détachée, comme avant ce réglage.
+
 ## [0.52.3] — 2026-07-18
 
 ### Corrigé

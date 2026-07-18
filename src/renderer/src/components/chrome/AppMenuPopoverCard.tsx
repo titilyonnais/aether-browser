@@ -14,7 +14,7 @@
  * stores Zustand de la fenêtre principale (process de rendu séparé).
  */
 import { ChevronLeft } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ShortcutCommand } from '@shared/types'
 import { cn } from '@/lib/utils'
 
@@ -131,15 +131,15 @@ function MenuRow({
 }: {
   row: Row
   openPanel: Exclude<Panel, 'root'> | null
-  onOpenSubmenu: (panel: Exclude<Panel, 'root'>) => void
+  onOpenSubmenu: (panel: Exclude<Panel, 'root'>, rowEl: HTMLButtonElement) => void
 }) {
   if ('separator' in row) return <div className="my-1 h-px bg-white/[0.06]" />
   const isOpenSubmenu = row.submenu !== undefined && row.submenu === openPanel
   return (
     <button
       type="button"
-      onClick={() => {
-        if (row.submenu) onOpenSubmenu(row.submenu)
+      onClick={(e) => {
+        if (row.submenu) onOpenSubmenu(row.submenu, e.currentTarget)
         else if (row.onClick) row.onClick()
         else if (row.action) run(row.action)
       }}
@@ -164,6 +164,17 @@ export function AppMenuPopoverCard() {
   // droite, le premier reste visible et cliquable. Un seul niveau ici (aucune
   // ligne de PANELS n'a elle-même de sous-menu) — pas besoin d'une pile.
   const [openPanel, setOpenPanel] = useState<Exclude<Panel, 'root'> | null>(null)
+  // Aligné verticalement sur la LIGNE cliquée ("Aide" est loin dans la
+  // liste) — sans ça le flyout partait toujours du haut du menu.
+  const [flyoutOffsetY, setFlyoutOffsetY] = useState(0)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
+  const handleOpenSubmenu = (panel: Exclude<Panel, 'root'>, rowEl: HTMLButtonElement): void => {
+    if (rootRef.current) {
+      setFlyoutOffsetY(rowEl.getBoundingClientRect().top - rootRef.current.getBoundingClientRect().top)
+    }
+    setOpenPanel((cur) => (cur === panel ? null : panel))
+  }
 
   return (
     // `row-reverse` : ce popup est ouvert ancré à son bord DROIT (sous le
@@ -173,31 +184,52 @@ export function AppMenuPopoverCard() {
     // s'ajoute en grandissant vers la gauche, où il y a de la place, plutôt
     // que vers la droite où il pousserait hors écran près du bouton.
     <div className="flex flex-row-reverse items-start gap-1.5">
-      <div className="popover-surface w-80 overflow-hidden rounded-xl p-1.5">
+      <div ref={rootRef} className="popover-surface w-80 overflow-hidden rounded-xl p-1.5">
         {ROOT.map((row, i) => (
           <MenuRow
             key={'separator' in row ? `sep-${i}` : row.label}
             row={row}
             openPanel={openPanel}
-            onOpenSubmenu={(p) => setOpenPanel((cur) => (cur === p ? null : p))}
+            onOpenSubmenu={handleOpenSubmenu}
           />
         ))}
       </div>
-      {openPanel && (
-        <div className="popover-surface w-72 overflow-hidden rounded-xl p-1.5">
-          <p className="mb-1 truncate px-2.5 pt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint/70">
-            {PANELS[openPanel].title}
-          </p>
-          {PANELS[openPanel].rows.map((row, i) => (
-            <MenuRow
-              key={'separator' in row ? `sep-${i}` : row.label}
-              row={row}
-              openPanel={null}
-              onOpenSubmenu={() => {}}
-            />
-          ))}
-        </div>
-      )}
+      {/* Toujours monté, largeur FIXE, même fermé (juste rendu invisible) —
+          le popup natif ne doit jamais changer de largeur à l'ouverture/
+          fermeture d'un sous-menu : une fenêtre transparente qui se
+          redimensionne alors qu'elle est déjà affichée scintille
+          visiblement sur Windows (recomposition DWM de toute la surface).
+          Là où un simple montage/démontage conditionnel forçait ce
+          redimensionnement à chaque clic, un `opacity`/`pointer-events`
+          n'en déclenche aucun : la largeur mesurée par le ResizeObserver
+          (PopoverRoot.tsx) reste constante dès le tout premier affichage. */}
+      <div
+        // `inert` (pas seulement `pointer-events-none`) : sans lui, les boutons
+        // du flyout resteraient atteignables au clavier (Tab) alors même
+        // qu'ils sont invisibles.
+        inert={!openPanel}
+        className={cn(
+          'w-72 shrink-0 overflow-hidden rounded-xl transition-opacity duration-100',
+          openPanel ? 'popover-surface p-1.5 opacity-100' : 'pointer-events-none opacity-0'
+        )}
+        style={{ marginTop: flyoutOffsetY }}
+      >
+        {openPanel && (
+          <>
+            <p className="mb-1 truncate px-2.5 pt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint/70">
+              {PANELS[openPanel].title}
+            </p>
+            {PANELS[openPanel].rows.map((row, i) => (
+              <MenuRow
+                key={'separator' in row ? `sep-${i}` : row.label}
+                row={row}
+                openPanel={null}
+                onOpenSubmenu={() => {}}
+              />
+            ))}
+          </>
+        )}
+      </div>
     </div>
   )
 }

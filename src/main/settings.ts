@@ -67,7 +67,6 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   proxyMode: 'system',
   proxyRules: '',
   minimizeOnClose: false,
-  devtoolsDockMode: 'detach',
   downloadDir: '',
   askDownloadLocation: true,
   autoCheckForUpdates: true,
@@ -238,7 +237,6 @@ export function getSettings(): AppSettings {
     proxyMode: getString('proxyMode'),
     proxyRules: getString('proxyRules'),
     minimizeOnClose: getString('minimizeOnClose'),
-    devtoolsDockMode: getString('devtoolsDockMode'),
     downloadDir: getString('downloadDir'),
     askDownloadLocation: getString('askDownloadLocation'),
     autoCheckForUpdates: getString('autoCheckForUpdates'),
@@ -361,7 +359,6 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
   if (patch.proxyMode !== undefined) putValue('proxyMode', patch.proxyMode)
   if (patch.proxyRules !== undefined) putValue('proxyRules', patch.proxyRules.trim())
   if (patch.minimizeOnClose !== undefined) putValue('minimizeOnClose', patch.minimizeOnClose)
-  if (patch.devtoolsDockMode !== undefined) putValue('devtoolsDockMode', patch.devtoolsDockMode)
   if (patch.downloadDir !== undefined) putValue('downloadDir', patch.downloadDir)
   if (patch.askDownloadLocation !== undefined) putValue('askDownloadLocation', patch.askDownloadLocation)
   if (patch.autoCheckForUpdates !== undefined) putValue('autoCheckForUpdates', patch.autoCheckForUpdates)

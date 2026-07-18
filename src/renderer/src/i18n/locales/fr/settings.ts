@@ -222,12 +222,6 @@ export const settings: Record<string, string> = {
   'settings.system.proxySystem': 'Proxy du système',
   'settings.system.proxyDirect': 'Aucun proxy (direct)',
   'settings.system.proxyCustom': 'Proxy personnalisé',
-  'settings.system.devtoolsTitle': 'Outils de développement',
-  'settings.system.devtoolsHint': "Où s'ouvrent les outils de développement d'une page (F12, Inspecter).",
-  'settings.system.devtoolsDetach': 'Fenêtre à part',
-  'settings.system.devtoolsLeft': 'Ancrés à gauche',
-  'settings.system.devtoolsRight': 'Ancrés à droite',
-  'settings.system.devtoolsBottom': 'Ancrés en bas',
 
   // Section Réinitialiser
   'settings.reset.title': 'Réinitialiser les réglages',

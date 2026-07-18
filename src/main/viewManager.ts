@@ -728,7 +728,7 @@ export class ViewManager {
       if (input.key === 'F12') {
         event.preventDefault()
         this.teardownStoreShim(pageId, wc)
-        this.openDevToolsWithDockMode(wc)
+        this.openDevToolsFresh(wc)
       }
     })
 
@@ -809,10 +809,10 @@ export class ViewManager {
           // `inspectElement` n'a pas d'option `mode` — ouvrir l'inspecteur au
           // bon ancrage AVANT de lui demander de cibler l'élément conserve
           // quand même le réglage choisi (Réglages › Système).
-          this.openDevToolsWithDockMode(wc)
+          this.openDevToolsFresh(wc)
           wc.inspectElement(params.x, params.y)
         } else {
-          this.openDevToolsWithDockMode(wc)
+          this.openDevToolsFresh(wc)
         }
       }
 
@@ -988,16 +988,18 @@ export class ViewManager {
     void wc.executeJavaScript(WEBSTORE_HOOK_SCRIPT).catch(() => {})
   }
 
-  /** Ouvre les DevTools avec le réglage d'ancrage actuel (Réglages › Système).
-   * Referme d'abord toute session déjà ouverte pour CETTE page : Electron
-   * ignore silencieusement `mode` si des DevTools sont déjà attachées à ce
-   * `WebContents` (l'appel se contente alors de la ramener au premier plan,
-   * dans son état d'ancrage déjà en cours) — sans ça, changer le réglage
-   * n'avait jamais d'effet une fois les DevTools ouvertes une première fois
-   * dans la session. */
-  private openDevToolsWithDockMode(wc: WebContents): void {
+  /** Ouvre les DevTools en fenêtre détachée — TOUJOURS : les pages d'ÆTHER
+   * sont des `WebContentsView` attachées à l'unique fenêtre principale, pas
+   * des `BrowserWindow` indépendantes. Or l'ancrage gauche/droite/bas
+   * d'Electron n'embarque les DevTools QUE dans le vrai chrome d'une fenêtre
+   * propriétaire — testé et confirmé sans effet ici (réglage essayé puis
+   * retiré, cf. CHANGELOG) : une limitation de la plateforme, pas un bug
+   * réparable côté appli. Referme d'abord toute session déjà ouverte pour
+   * CETTE page (sinon un second appel se contente de la ramener au premier
+   * plan sans repartir propre). */
+  private openDevToolsFresh(wc: WebContents): void {
     if (wc.isDevToolsOpened()) wc.closeDevTools()
-    wc.openDevTools({ mode: getSettings().devtoolsDockMode })
+    wc.openDevTools({ mode: 'detach' })
   }
 
   private teardownStoreShim(pageId: PageId, wc: WebContents): void {
@@ -1059,7 +1061,7 @@ export class ViewManager {
     const wc = this.liveContents(id)
     if (!wc) return
     this.teardownStoreShim(id, wc)
-    this.openDevToolsWithDockMode(wc)
+    this.openDevToolsFresh(wc)
   }
 
   /** Réapplique le zoom par défaut à toutes les vues vivantes (réglage modifié). */
