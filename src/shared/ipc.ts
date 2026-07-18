@@ -242,6 +242,7 @@ export const CH = {
    * fenêtre appelante — support multi-fenêtre. */
   appNewWindow: 'app:new-window',
   reportSend: 'report:send',
+  reportChooseAttachments: 'report:choose-attachments',
   backgroundChooseImage: 'background:choose-image',
   backgroundImageDataUrl: 'background:image-data-url',
 
@@ -577,8 +578,12 @@ export interface AetherApi {
     /** Ouvre une nouvelle fenêtre ÆTHER complète (même profil que la fenêtre appelante). */
     openNewWindow(): void
     /** Envoie un rapport de bug par SMTP (identifiants côté main uniquement,
-     * jamais exposés ici) — échoue proprement si aucun relais n'est configuré. */
-    sendReport(subject: string, body: string): Promise<{ ok: boolean; error?: string }>
+     * jamais exposés ici) — échoue proprement si aucun relais n'est configuré.
+     * `attachmentPaths` : chemins déjà choisis via `chooseReportAttachments`. */
+    sendReport(subject: string, body: string, attachmentPaths?: string[]): Promise<{ ok: boolean; error?: string }>
+    /** Sélecteur de fichiers natif (multi-sélection) pour joindre des pièces
+     * au rapport de bug — retourne les chemins choisis. */
+    chooseReportAttachments(): Promise<{ path: string; name: string; size: number }[]>
     /** Choisit une image de fond d'écran personnalisée — copiée dans le
      * dossier géré (même mécanisme que les avatars), retourne son nom de
      * fichier stocké ET une `data:` URI (pour l'extraction de couleur

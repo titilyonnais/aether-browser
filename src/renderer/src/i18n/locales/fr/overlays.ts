@@ -78,6 +78,7 @@ export const overlays: Record<string, string> = {
   'overlays.reportProblem.title': 'Signaler un problème',
   'overlays.reportProblem.titlePlaceholder': 'Titre du problème',
   'overlays.reportProblem.descriptionPlaceholder': 'Décrivez ce qui ne fonctionne pas comme prévu…',
+  'overlays.reportProblem.attach': 'Joindre des fichiers…',
   'overlays.reportProblem.cancel': 'Annuler',
   'overlays.reportProblem.send': 'Envoyer',
   'overlays.reportProblem.sending': 'Envoi…',

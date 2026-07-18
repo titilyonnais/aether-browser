@@ -4,7 +4,8 @@
  * Chaque handler valide ses entrées — le renderer est considéré non fiable.
  */
 import { app, clipboard, dialog, ipcMain, Menu, screen, shell, type BrowserWindow } from 'electron'
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
+import { basename } from 'node:path'
 import { CH } from '@shared/ipc'
 import type {
   AppSettings,
@@ -1535,8 +1536,33 @@ export function registerIpc(router: AiRouter): void {
     createSecondaryContentWindow(activeProfileOf(views), false, undefined, router)
   })
 
-  ipcMain.handle(CH.reportSend, (_e, subject: string, body: string) =>
-    sendBugReport(String(subject ?? '').slice(0, 200), String(body ?? '').slice(0, 10_000))
+  ipcMain.handle(CH.reportSend, (_e, subject: string, body: string, attachmentPaths?: string[]) =>
+    sendBugReport(
+      String(subject ?? '').slice(0, 200),
+      String(body ?? '').slice(0, 10_000),
+      Array.isArray(attachmentPaths) ? attachmentPaths.slice(0, 10).map(String) : []
+    )
+  )
+
+  ipcMain.handle(
+    CH.reportChooseAttachments,
+    async (e): Promise<{ path: string; name: string; size: number }[]> => {
+      const { win } = resolveWindowContext(e)
+      const result = await dialog.showOpenDialog(win, {
+        title: 'Joindre des fichiers',
+        properties: ['openFile', 'multiSelections']
+      })
+      if (result.canceled) return []
+      return result.filePaths.map((path) => {
+        let size = 0
+        try {
+          size = statSync(path).size
+        } catch {
+          // Fichier devenu inaccessible entre la sélection et cette lecture — sans conséquence, `size` reste 0.
+        }
+        return { path, name: basename(path), size }
+      })
+    }
   )
 
   ipcMain.handle(CH.backgroundChooseImage, async (e): Promise<{ filename: string; dataUrl: string } | null> => {
@@ -1700,7 +1726,9 @@ export function registerIpc(router: AiRouter): void {
         topY: winBounds.y + req.anchor.y + req.anchor.height + POPOVER_GAP
       })
     }
-    openPopover(win, computePopoverBounds(win, req), content)
+    const pinnedRightEdge =
+      req.placement === 'below-right' ? win.getBounds().x + req.anchor.x + req.anchor.width : null
+    openPopover(win, computePopoverBounds(win, req), content, pinnedRightEdge)
   })
 
   ipcMain.on(CH.popoverHide, (e) => {

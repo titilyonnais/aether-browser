@@ -37,6 +37,15 @@ interface PopoverState {
   /** Action réelle associée à chaque id de la dernière bulle de menu
    * contextuel ouverte DANS CETTE fenêtre (voir ContextMenuPopoverCard.tsx). */
   contextMenuActions: Record<string, () => void>
+  /** Bord DROIT (écran) auquel ce popover reste collé, s'il a été ouvert avec
+   * `placement: 'below-right'` (ex. menu principal, sous le bouton "⋯" en
+   * haut-droit) — `null` sinon. Un sous-menu qui élargit le popup (flyout,
+   * voir AppMenuPopoverCard.tsx) doit grandir vers la GAUCHE en gardant ce
+   * bord fixe, jamais recalculer `x` depuis la largeur courante : sans ça,
+   * grandir vers la droite pousse hors écran près du bouton, et
+   * `sanitizeToDisplay` rattrape en décalant TOUT le popup (donc le menu
+   * racine, déjà affiché) vers la gauche au lieu de garder sa position. */
+  pinnedRightEdge: number | null
 }
 
 const states = new Map<number, PopoverState>()
@@ -44,7 +53,15 @@ const states = new Map<number, PopoverState>()
 function stateFor(owner: BW): PopoverState {
   let s = states.get(owner.id)
   if (!s) {
-    s = { popup: null, ready: false, pendingShow: false, fallbackShowTimer: null, boundsDebounceTimer: null, contextMenuActions: {} }
+    s = {
+      popup: null,
+      ready: false,
+      pendingShow: false,
+      fallbackShowTimer: null,
+      boundsDebounceTimer: null,
+      contextMenuActions: {},
+      pinnedRightEdge: null
+    }
     states.set(owner.id, s)
     owner.on('closed', () => states.delete(owner.id))
   }
@@ -114,9 +131,18 @@ function ensurePopup(parent: BW): { win: BW; s: PopoverState } {
   return { win: s.popup, s }
 }
 
-/** Ouvre (ou déplace) le popup aux bornes écran données et lui pousse son contenu. */
-export function openPopover(parent: BW, bounds: Rectangle, content: PopoverContent): void {
+/** Ouvre (ou déplace) le popup aux bornes écran données et lui pousse son
+ * contenu. `pinnedRightEdge` (bord droit écran fixe, popovers ouverts en
+ * `placement: 'below-right'`) est mémorisé pour que `resizePopoverWindow`
+ * puisse y grandir sans jamais déplacer ce bord. */
+export function openPopover(
+  parent: BW,
+  bounds: Rectangle,
+  content: PopoverContent,
+  pinnedRightEdge: number | null = null
+): void {
   const { win, s } = ensurePopup(parent)
+  s.pinnedRightEdge = pinnedRightEdge
   win.setBounds(sanitizeToDisplay(bounds))
 
   const push = (): void => {
@@ -260,7 +286,15 @@ export function resizePopoverWindow(sourceWc: WebContents, width: number, height
     s.boundsDebounceTimer = null
     if (popup.isDestroyed()) return
     const current = popup.getBounds()
-    popup.setBounds(sanitizeToDisplay({ ...current, width: Math.max(1, width), height: Math.max(1, height) }))
+    const w = Math.max(1, width)
+    const h = Math.max(1, height)
+    // Bord droit fixe (menu principal) : recalcule toujours `x` depuis ce
+    // bord plutôt que de garder `current.x` — sans ça, un flyout qui élargit
+    // le popup pousse son bord droit hors écran, et `sanitizeToDisplay`
+    // rattrape en décalant tout le popup (donc le panneau déjà affiché)
+    // vers la gauche au lieu de grandir en gardant sa position d'origine.
+    const x = s.pinnedRightEdge !== null ? s.pinnedRightEdge - w : current.x
+    popup.setBounds(sanitizeToDisplay({ ...current, x, width: w, height: h }))
     if (s.pendingShow) {
       s.pendingShow = false
       clearFallbackShow(s)

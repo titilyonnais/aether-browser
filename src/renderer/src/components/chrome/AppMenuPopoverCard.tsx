@@ -13,7 +13,7 @@
  * `window.aether.app.runMenuCommand` — cette fenêtre popup n'a pas accès aux
  * stores Zustand de la fenêtre principale (process de rendu séparé).
  */
-import { ChevronRight } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import { useState } from 'react'
 import type { ShortcutCommand } from '@shared/types'
 import { cn } from '@/lib/utils'
@@ -150,7 +150,7 @@ function MenuRow({
     >
       <span className="truncate">{row.label}</span>
       {row.submenu ? (
-        <ChevronRight size={13} strokeWidth={1.8} className="ml-2 shrink-0 text-ink-faint" />
+        <ChevronLeft size={13} strokeWidth={1.8} className="ml-2 shrink-0 text-ink-faint" />
       ) : row.accelerator ? (
         <span className="ml-3 shrink-0 font-mono text-[10.5px] text-ink-faint">{row.accelerator}</span>
       ) : null}
@@ -166,7 +166,13 @@ export function AppMenuPopoverCard() {
   const [openPanel, setOpenPanel] = useState<Exclude<Panel, 'root'> | null>(null)
 
   return (
-    <div className="flex items-start gap-1.5">
+    // `row-reverse` : ce popup est ouvert ancré à son bord DROIT (sous le
+    // bouton "⋯", voir `placement: 'below-right'` dans TitleBar.tsx et
+    // `pinnedRightEdge` dans popoverWindow.ts) — le panneau racine doit donc
+    // rester le panneau le plus à DROITE (jamais bouger) et un flyout
+    // s'ajoute en grandissant vers la gauche, où il y a de la place, plutôt
+    // que vers la droite où il pousserait hors écran près du bouton.
+    <div className="flex flex-row-reverse items-start gap-1.5">
       <div className="popover-surface w-80 overflow-hidden rounded-xl p-1.5">
         {ROOT.map((row, i) => (
           <MenuRow
