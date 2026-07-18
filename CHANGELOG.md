@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.52.1] — 2026-07-18
+
+### Corrigé
+
+- **« Rechercher dans la page » restait bloqué à 0/0** en tapant : chaque frappe relançait une nouvelle recherche qui annulait la précédente avant que Chromium n'ait eu le temps de rapporter le moindre résultat — seul Entrée (qui continue la recherche en cours au lieu d'en relancer une) laissait un résultat passer. Court anti-rebond (150 ms) sur la saisie, toujours perçu comme instantané.
+
 ## [0.52.0] — 2026-07-18
 
 ### Ajouté

@@ -14,10 +14,22 @@ export function FindBar({ pageId }: { pageId: PageId }) {
   const [query, setQuery] = useState('')
   const [result, setResult] = useState<{ matches: number; active: number }>({ matches: 0, active: 0 })
   const inputRef = useRef<HTMLInputElement | null>(null)
+  // Chaque frappe annule/relance `findInPage` avec `findNext: false` (nouvelle
+  // session — texte différent à chaque caractère). Sans anti-rebond, taper
+  // vite envoie une rafale de sessions qui s'annulent les unes les autres
+  // avant que Chromium n'ait fini de rapporter le moindre résultat — le
+  // compteur restait bloqué à 0/0 en continu, et seul un Entrée (`findNext:
+  // true`, qui NE relance PAS de nouvelle session mais continue la dernière
+  // encore en cours) laissait enfin un résultat arriver. Un court délai
+  // laisse chaque recherche vraiment se terminer avant la suivante.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
     inputRef.current?.select()
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -28,6 +40,7 @@ export function FindBar({ pageId }: { pageId: PageId }) {
   }, [pageId])
 
   const close = (): void => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
     window.aether.pages.stopFindInPage(pageId, 'clearSelection')
     useUiStore.getState().closeFindBar()
   }
@@ -47,9 +60,13 @@ export function FindBar({ pageId }: { pageId: PageId }) {
         ref={inputRef}
         value={query}
         onChange={(e) => {
-          setQuery(e.target.value)
-          if (e.target.value.trim()) {
-            window.aether.pages.findInPage(pageId, e.target.value, { forward: true, findNext: false })
+          const value = e.target.value
+          setQuery(value)
+          if (debounceRef.current) clearTimeout(debounceRef.current)
+          if (value.trim()) {
+            debounceRef.current = setTimeout(() => {
+              window.aether.pages.findInPage(pageId, value, { forward: true, findNext: false })
+            }, 150)
           } else {
             window.aether.pages.stopFindInPage(pageId, 'clearSelection')
             setResult({ matches: 0, active: 0 })
@@ -61,6 +78,7 @@ export function FindBar({ pageId }: { pageId: PageId }) {
             close()
           } else if (e.key === 'Enter') {
             e.preventDefault()
+            if (debounceRef.current) clearTimeout(debounceRef.current)
             search(!e.shiftKey, true)
           }
         }}
