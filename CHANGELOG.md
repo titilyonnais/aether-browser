@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.52.3] — 2026-07-18
+
+### Corrigé
+
+- **Ancrage des DevTools sans effet** (toujours en fenêtre détachée quel que soit le réglage) : Electron ignore le réglage d'ancrage demandé si des DevTools sont déjà ouvertes sur la page — elles se contentaient de reprendre le premier plan dans leur état déjà en cours au lieu du nouveau. Ferme désormais toute session déjà ouverte avant de rouvrir avec le réglage actuel. **Non vérifié visuellement** — à confirmer.
+
 ## [0.52.2] — 2026-07-18
 
 ### Corrigé
