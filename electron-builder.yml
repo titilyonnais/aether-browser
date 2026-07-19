@@ -34,12 +34,26 @@ win:
   executableName: Aether
   icon: build/icon.ico
 nsis:
-  # Emplacement d'installation TOUJOURS le même (pas de choix de dossier) — condition
-  # nécessaire pour qu'une mise à jour se pose par-dessus l'existant au lieu de créer
-  # une installation en double à côté (vécu avec `allowToChangeInstallationDirectory`,
-  # qui laissait un dossier différent à chaque installation manuelle).
-  oneClick: true
+  # Installeur « assisté » (assistant classique : Bienvenue → CGU → Installer →
+  # Terminer), PAS le mode « un clic » d'origine qui installait directement
+  # sans la moindre interaction. `allowToChangeInstallationDirectory: false` et
+  # `allowElevation: false` gardent malgré tout un parcours COURT et PRÉVISIBLE
+  # (pas de page « choisir le dossier », pas de page « pour moi / tout le
+  # monde ») : l'emplacement d'installation reste TOUJOURS le même — condition
+  # nécessaire pour qu'une mise à jour se pose par-dessus l'existant au lieu de
+  # créer une installation en double à côté (vécu avec
+  # `allowToChangeInstallationDirectory`, qui laissait un dossier différent à
+  # chaque installation manuelle).
+  oneClick: false
+  allowToChangeInstallationDirectory: false
+  allowElevation: false
   perMachine: false
+  # Page personnalisée « Aether est déjà installé → Réparer/Supprimer » (façon
+  # iTunes) — voir build/installer.nsh. Remplace la page de bienvenue standard
+  # UNIQUEMENT quand une installation existante est détectée (registre) ; sans
+  # ça, relancer l'installeur écrasait silencieusement l'existant sans prévenir.
+  include: build/installer.nsh
+  license: build/license.txt
   artifactName: ${productName}-Setup-${version}.${ext}
   shortcutName: Aether
   installerIcon: build/icon.ico

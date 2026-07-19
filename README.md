@@ -60,8 +60,9 @@ Publication manuelle possible aussi, depuis un poste de développement :
 
 Les postes déjà installés détecteront la nouvelle version au prochain lancement (ou
 immédiatement via « Rechercher les mises à jour »). L'installeur utilise toujours le
-même emplacement (`oneClick`) — indispensable pour qu'une mise à jour se pose par-dessus
-l'installation existante au lieu d'en créer une seconde à côté.
+même emplacement (`allowToChangeInstallationDirectory: false`) — indispensable pour
+qu'une mise à jour se pose par-dessus l'installation existante au lieu d'en créer une
+seconde à côté.
 
 ## Chromium, pas Chrome
 

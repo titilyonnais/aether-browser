@@ -4,6 +4,17 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.56.0] — 2026-07-20
+
+### Ajouté
+
+- **Installeur Windows façon assistant classique** — remplace l'ancien mode « un clic » qui installait directement sans la moindre interaction. Nouveau parcours : Bienvenue → Conditions de licence (MIT) → Installation → Fin, avec lancement optionnel d'Aether à la fin. L'emplacement d'installation reste fixe (comme avant) pour ne jamais casser la pose des mises à jour par-dessus l'existant.
+- **Détection d'une installation déjà présente** (façon iTunes) — relancer l'installeur alors qu'Aether est déjà installé affiche désormais un choix explicite Réparer (réinstalle les fichiers manquants ou endommagés) ou Supprimer (lance le vrai désinstalleur), au lieu d'écraser silencieusement l'installation existante sans prévenir.
+
+### Note
+
+- Le message SmartScreen (« Windows a protégé votre ordinateur ») au premier lancement de l'installeur n'est **pas** corrigé par ce lot — aucune configuration ne le fait disparaître sans un certificat de signature de code réel (achat + vérification d'identité). Piste explorée pour une prochaine fois : SignPath Foundation offre des certificats gratuits aux projets open source qui remplissent leurs critères (licence OSI, dépôt public, CI active) — ÆTHER (MIT, GitHub public) semble éligible, mais la démarche de candidature revient à l'utilisateur.
+
 ## [0.55.0] — 2026-07-19
 
 ### Ajouté
