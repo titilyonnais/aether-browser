@@ -6,7 +6,7 @@
  * popover en overlay HTML y serait invisible là où il chevauche la page.
  */
 import { Lock, Unlock } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { PageId } from '@shared/types'
 import { cn } from '@/lib/utils'
 
@@ -39,20 +39,23 @@ export function SiteInfoPopover({ pageId, url }: SiteInfoPopoverProps) {
     setOpen(true)
   }
 
+  // pointerdown + stopPropagation : voir AppMenuButton (TitleBar.tsx) — évite la
+  // course avec le handler `pointerdown` global d'App.tsx qui masque le popup à
+  // l'appui, ce qui faisait rouvrir le popup au relâchement du clic.
+  const toggle = (e: ReactPointerEvent): void => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    if (open) close()
+    else show()
+  }
+
   useEffect(() => {
     if (!open) return
-    const onDown = (e: PointerEvent): void => {
-      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) close()
-    }
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') close()
     }
-    window.addEventListener('pointerdown', onDown)
     window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('pointerdown', onDown)
-      window.removeEventListener('keydown', onKey)
-    }
+    return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -73,7 +76,7 @@ export function SiteInfoPopover({ pageId, url }: SiteInfoPopoverProps) {
       ref={buttonRef}
       type="button"
       title={!isHttpFamily ? 'Informations du site' : isHttps ? 'Connexion sécurisée' : 'Non sécurisé'}
-      onClick={() => (open ? close() : show())}
+      onPointerDown={toggle}
       className={cn(
         'grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/[0.05]',
         !isHttpFamily ? 'text-ink-faint' : isHttps ? 'text-emerald-300/80' : 'text-amber-300/80'

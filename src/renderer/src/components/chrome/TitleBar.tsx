@@ -16,7 +16,7 @@ import {
   Sparkles,
   X
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { DownloadState, UpdateStatus } from '@shared/types'
 import { Favicon } from '@/components/ui/Favicon'
 import { IconButton } from '@/components/ui/IconButton'
@@ -274,7 +274,14 @@ function UpdateReadyButton() {
       ref={buttonRef}
       type="button"
       title="Mise à jour prête"
-      onClick={() => (open ? close() : show())}
+      // pointerdown + stopPropagation : voir AppMenuButton (évite la course avec
+      // le handler `pointerdown` global d'App.tsx qui masque le popup à l'appui).
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        e.stopPropagation()
+        if (open) close()
+        else show()
+      }}
       className={cn(
         'no-drag relative grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors duration-150',
         open ? 'bg-white/[0.06] text-glacier' : 'text-emerald-300 hover:bg-white/[0.05]'
@@ -346,7 +353,14 @@ function ExtensionsButton() {
       ref={buttonRef}
       type="button"
       title="Extensions"
-      onClick={() => (open ? close() : show())}
+      // pointerdown + stopPropagation : voir AppMenuButton (évite la course avec
+      // le handler `pointerdown` global d'App.tsx qui masque le popup à l'appui).
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        e.stopPropagation()
+        if (open) close()
+        else show()
+      }}
       className={cn(
         'no-drag grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors duration-150',
         open ? 'bg-white/[0.06] text-glacier' : 'text-ink-faint hover:bg-white/[0.05] hover:text-ink-dim'
@@ -500,24 +514,13 @@ function AppMenuButton() {
   const t = useT()
   const [open, setOpen] = useState(false)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
-  // Horodatage de la dernière FERMETURE — garde anti-réouverture immédiate.
-  // Course possible : un signal asynchrone (`popover:onClosed`, ou un rebond de
-  // focus provoqué par le redimensionnement natif du popup) repasse `open` à
-  // `false` ENTRE le `pointerdown` et le `click` du bouton, si bien que le
-  // `onClick` lit `open === false` et RÉOUVRE aussitôt (`show()`), laissant en
-  // prime le bouton bloqué en surbrillance. On ignore donc tout `show()` qui
-  // suivrait une fermeture de moins de 250ms — un vrai second clic délibéré est
-  // toujours plus lent que ça.
-  const closedAt = useRef(0)
 
   const close = (): void => {
-    closedAt.current = Date.now()
     setOpen(false)
     window.aether.popover.hide()
   }
 
   const show = (): void => {
-    if (Date.now() - closedAt.current < 250) return
     const el = buttonRef.current
     if (!el) return
     const r = el.getBoundingClientRect()
@@ -529,20 +532,34 @@ function AppMenuButton() {
     setOpen(true)
   }
 
+  // Bascule sur `pointerdown` (pas `click`) + `stopPropagation` — CORRECTIF
+  // CENTRAL du bug « le menu ne se ferme pas / se rouvre tout seul ». App.tsx
+  // pose un écouteur `pointerdown` GLOBAL sur `window` qui appelle
+  // `popover.hide()` à CHAQUE clic dans la chrome (pour fermer les menus
+  // contextuels tire-et-oublie). En cliquant ce bouton pour FERMER : ce
+  // pointerdown global masquait le popup (→ `popover:onClosed` → `open=false`),
+  // puis le `click` (relâchement) lisait `open===false` et RÉOUVRAIT via
+  // `show()`. Chaque clic = masqué à l'appui, réaffiché au relâchement : le menu
+  // scintillait sans jamais se fermer, et le bouton restait `open` (surligné).
+  // En basculant sur `pointerdown` on décide AU MÊME instant que le handler
+  // global, et `stopPropagation()` empêche ce dernier de s'exécuter pour ce
+  // clic précis — plus de course. (Un clic AILLEURS n'est pas stoppé : le
+  // handler global d'App.tsx ferme alors normalement, et `onClosed`
+  // resynchronise `open`.)
+  const toggle = (e: ReactPointerEvent): void => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    if (open) close()
+    else show()
+  }
+
   useEffect(() => {
     if (!open) return
-    const onDown = (e: PointerEvent): void => {
-      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) close()
-    }
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') close()
     }
-    window.addEventListener('pointerdown', onDown)
     window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('pointerdown', onDown)
-      window.removeEventListener('keydown', onKey)
-    }
+    return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -553,15 +570,12 @@ function AppMenuButton() {
       ref={buttonRef}
       type="button"
       title={t('shell.titlebar.menu')}
-      onClick={() => (open ? close() : show())}
+      onPointerDown={toggle}
       className={cn(
         'no-drag grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors duration-150',
         // État OUVERT nettement plus marqué que le simple survol : avant, l'écart
         // (bg-white/6% ouvert vs 5% au survol) était imperceptible, si bien qu'un
-        // bouton FERMÉ mais survolé paraissait « sélectionné » — l'utilisateur
-        // croyait le menu encore ouvert et recliquait, ce qui le RÉOUVRAIT. Le
-        // fond nettement plus clair + le texte plein distinguent sans ambiguïté
-        // « menu ouvert » de « simple survol ».
+        // bouton FERMÉ mais survolé paraissait « sélectionné ».
         open
           ? 'bg-white/[0.14] text-ink'
           : 'text-ink-faint hover:bg-white/[0.05] hover:text-ink-dim'

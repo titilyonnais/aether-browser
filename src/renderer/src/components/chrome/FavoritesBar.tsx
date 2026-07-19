@@ -202,7 +202,14 @@ function FolderChip({
   return (
     <button
       type="button"
-      onClick={(e) => onToggle(e.currentTarget.getBoundingClientRect())}
+      // pointerdown + stopPropagation : voir AppMenuButton (TitleBar.tsx) — évite
+      // la course avec le handler `pointerdown` global d'App.tsx qui masque le
+      // popup à l'appui, ce qui faisait rouvrir la bulle au relâchement du clic.
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        e.stopPropagation()
+        onToggle(e.currentTarget.getBoundingClientRect())
+      }}
       onContextMenu={(e) => {
         e.preventDefault()
         window.aether.favoriteFolders.showContextMenu(folder.id, { x: e.clientX, y: e.clientY, width: 0, height: 0 })

@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.8] — 2026-07-19
+
+### Corrigé
+
+- **Menu principal (⋯) impossible à fermer / qui scintillait et se rouvrait en boucle** — vraie cause enfin identifiée (analyse image par image : la fenêtre du popup oscillait en opacité, curseur immobile). App.tsx pose un écouteur `pointerdown` GLOBAL sur `window` qui masque le popup à CHAQUE clic dans la chrome (pour fermer les menus contextuels). En cliquant le bouton pour fermer : ce `pointerdown` global masquait le popup (→ `popover:onClosed` → état « fermé »), puis le `click` (au relâchement) relisait « fermé » et RÉOUVRAIT le menu. Chaque clic = masqué à l'appui, réaffiché au relâchement : scintillement sans fin, bouton bloqué en surbrillance. Les boutons à popup (menu principal, extensions, traduction, mise à jour, infos de site, dossiers de favoris) basculent désormais sur `pointerdown` + `stopPropagation`, ce qui décide au même instant que le handler global et l'empêche de s'exécuter pour ce clic précis — plus de course. Les correctifs précédents (garde 250 ms, surbrillance distincte, garde de resize) ne pouvaient pas régler ça car la fermeture venait du handler GLOBAL, jamais du `close()` du bouton.
+
 ## [0.53.7] — 2026-07-19
 
 ### Corrigé
