@@ -138,9 +138,11 @@ const SPACE_HUE_PALETTE = [
  * `resizePopoverWindow` la recalait sur ses 620px réels — un saut visible au
  * tout premier affichage si ce correctif arrivait après que la fenêtre soit
  * déjà montrée (`pendingShow`), ne se réglant qu'au premier redimensionnement
- * suivant (ouvrir un sous-menu). Les deux formules doivent rester IDENTIQUES
- * (320+12+288=620) pour que la position initiale et celle post-mesure
- * coïncident dès la première image. */
+ * suivant (ouvrir un sous-menu) — la largeur RÉELLE ne bouge jamais après ça
+ * (voir AppMenuPopoverCard.tsx), donc cette valeur (320+12+288=620) doit
+ * rester exacte. La HAUTEUR (POPOVER_DEFAULT_HEIGHT, juste en dessous) suit
+ * une logique différente : elle n'a pas besoin d'être exacte, seulement
+ * jamais trop courte — voir son propre commentaire. */
 const POPOVER_WIDTH: Record<PopoverShowRequest['kind'], number> = {
   'site-info': 288,
   'tab-preview': 208,
@@ -150,13 +152,21 @@ const POPOVER_WIDTH: Record<PopoverShowRequest['kind'], number> = {
   'extensions-menu': 288,
   'update-ready': 288
 }
-/** Hauteur initiale (avant l'ajustement réel via `popover:resize`) — évite un popup vide au premier affichage. */
+/** Hauteur initiale (avant l'ajustement réel via `popover:resize`) — évite un popup vide au premier affichage.
+ * Une valeur trop COURTE est visible (le contenu réel dépasse et se fait
+ * rogner par `overflow-hidden` le temps que la vraie mesure arrive, coupant
+ * net jusqu'au coin arrondi du bas) ; une valeur trop GRANDE ne l'est jamais
+ * (fenêtre transparente, l'espace en trop est juste invisible) et se corrige
+ * proprement dès la première vraie mesure grâce à `naturalY`
+ * (popoverWindow.ts). Mieux vaut donc systématiquement surestimer. `app-menu`
+ * est volontairement bien au-dessus de la hauteur réelle du panneau racine
+ * (16 lignes + 6 séparateurs) pour cette raison. */
 const POPOVER_DEFAULT_HEIGHT: Record<PopoverShowRequest['kind'], number> = {
   'site-info': 280,
   'tab-preview': 195,
   translate: 130,
   'favorites-folder': 140,
-  'app-menu': 620,
+  'app-menu': 760,
   'extensions-menu': 220,
   'update-ready': 150
 }

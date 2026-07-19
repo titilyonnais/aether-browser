@@ -202,17 +202,28 @@ export function AppMenuPopoverCard() {
           Là où un simple montage/démontage conditionnel forçait ce
           redimensionnement à chaque clic, un `opacity`/`pointer-events`
           n'en déclenche aucun : la largeur mesurée par le ResizeObserver
-          (PopoverRoot.tsx) reste constante dès le tout premier affichage. */}
+          (PopoverRoot.tsx) reste constante dès le tout premier affichage.
+          L'alignement vertical sur la ligne cliquée (`flyoutOffsetY`) est
+          appliqué via `position:relative`+`top`, PAS `margin-top` : une marge
+          fait partie du flux normal et est comptée dans le calcul de hauteur
+          du conteneur flex (`items-start`), donc ouvrir "Aide" (tout en bas
+          de la liste racine) gonflait la hauteur MESURÉE du popup bien
+          au-delà de celle du panneau racine, faisant grandir toute la fenêtre
+          — et `sanitizeToDisplay` (popoverWindow.ts) remontait alors le menu
+          pour le garder à l'écran, visible comme un saut vers le haut au
+          clic. Un décalage `position:relative` est purement visuel : il ne
+          compte pas dans la taille réservée par le parent flex, donc la
+          hauteur mesurée reste toujours celle du panneau racine seul. */}
       <div
         // `inert` (pas seulement `pointer-events-none`) : sans lui, les boutons
         // du flyout resteraient atteignables au clavier (Tab) alors même
         // qu'ils sont invisibles.
         inert={!openPanel}
         className={cn(
-          'w-72 shrink-0 overflow-hidden rounded-xl transition-opacity duration-100',
+          'relative w-72 shrink-0 overflow-hidden rounded-xl transition-opacity duration-100',
           openPanel ? 'popover-surface p-1.5 opacity-100' : 'pointer-events-none opacity-0'
         )}
-        style={{ marginTop: flyoutOffsetY }}
+        style={{ top: flyoutOffsetY }}
       >
         {openPanel && (
           <>

@@ -4,6 +4,14 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.2] — 2026-07-19
+
+### Corrigé
+
+- **DevTools ancrées qui s'ouvraient TOUJOURS comme une fenêtre à part**, même après avoir attaché la vue avant `setDevToolsWebContents` (v0.53.1) : il manquait `mode: 'detach'` sur l'appel `openDevTools()` qui suit — sans lui, Electron tente de gérer un partage gauche/droite/bas *dans la fenêtre principale elle-même*, ce qu'une simple `WebContentsView` de page ne permet pas, et retombe silencieusement sur sa fenêtre interne détachée. C'est la valeur documentée par Electron pour cet usage précis : combiné à `setDevToolsWebContents`, `'detach'` ne veut plus dire « fenêtre séparée » mais « peins-toi dans le conteneur que je t'ai donné ». Notre propre ancrage gauche/droite/bas reste géré à côté, indépendamment de ce mode.
+- **Menu principal qui remontait au clic sur un sous-menu bas de liste** (ex. « Aide ») : le flyout était positionné avec `margin-top`, une propriété qui compte dans le calcul de hauteur du conteneur flex — ouvrir un sous-menu loin dans la liste racine gonflait donc la hauteur *mesurée* du popup, faisant remonter toute la fenêtre pour rester à l'écran. Remplacé par un décalage `position:relative`, purement visuel, qui ne change plus jamais la hauteur mesurée.
+- **Bas du menu principal parfois coupé net (coin non arrondi)** au tout premier affichage : la hauteur devinée avant la vraie mesure était calquée sur la largeur (620px) sans rapport avec la hauteur réelle du panneau — trop courte, elle coupait le contenu réel le temps que la correction arrive. Rendue largement plus généreuse (une fenêtre transparente n'affiche jamais l'espace en trop) et le recalcul qui suit repart maintenant systématiquement de la position idéale d'origine plutôt que de la position déjà affichée (qui pouvait rester coincée après un premier clamp).
+
 ## [0.53.1] — 2026-07-19
 
 ### Corrigé

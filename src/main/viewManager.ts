@@ -1121,7 +1121,21 @@ export class ViewManager {
     }
 
     wc.setDevToolsWebContents(toolsView.webContents)
-    wc.openDevTools()
+    // `mode: 'detach'` ICI n'ouvre PAS une fenêtre séparée : combiné à
+    // `setDevToolsWebContents`, c'est la valeur documentée par Electron
+    // lui-même (voir l'exemple officiel de `setDevToolsWebContents` dans la
+    // doc `webContents`) — DevTools se contente alors de peindre son UI dans
+    // le `WebContents` fourni, sans essayer de gérer un partage à l'intérieur
+    // de LA FENÊTRE PRINCIPALE. Omettre `mode` (ou passer 'left'/'right'/
+    // 'bottom') faisait qu'Electron tentait ce partage — impossible sur une
+    // `WebContentsView` de page, qui n'a pas de fenêtre à elle — et retombait
+    // silencieusement sur sa propre fenêtre détachée interne, d'où le "ça
+    // s'ouvre encore dans une page séparée" malgré tout le reste déjà en
+    // place. Notre PROPRE ancrage gauche/droite/bas (`splitBoundsForDock` +
+    // `toolsView.setBounds`, juste au-dessus/en dessous) est totalement
+    // indépendant de ce `mode` — c'est lui qui positionne réellement
+    // `toolsView` dans la fenêtre ÆTHER.
+    wc.openDevTools({ mode: 'detach' })
 
     // Rejoue maintenant le VRAI partage (page rétrécie + DevTools) — plus
     // seulement les bornes des DevTools posées ci-dessus en avance.

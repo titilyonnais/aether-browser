@@ -46,6 +46,17 @@ interface PopoverState {
    * `sanitizeToDisplay` rattrape en décalant TOUT le popup (donc le menu
    * racine, déjà affiché) vers la gauche au lieu de garder sa position. */
   pinnedRightEdge: number | null
+  /** Position Y écran demandée à l'ouverture (`openPopover`, AVANT le clamp de
+   * `sanitizeToDisplay`) — sert de base à CHAQUE recalcul dans
+   * `resizePopoverWindow`, plutôt que `popup.getBounds().y` (qui peut déjà
+   * être une valeur clampée par un précédent appel, ex. à cause d'une
+   * hauteur initiale devinée trop grande). Sans ce point de référence fixe,
+   * un premier clamp (guess trop haut) ne se défaisait jamais une fois la
+   * vraie taille, plus petite, mesurée : `sanitizeToDisplay` re-clampait la
+   * valeur DÉJÀ remontée contre la nouvelle hauteur au lieu de repartir de la
+   * position naturelle — le popup restait décalé vers le haut en
+   * permanence. */
+  naturalY: number
 }
 
 const states = new Map<number, PopoverState>()
@@ -60,7 +71,8 @@ function stateFor(owner: BW): PopoverState {
       fallbackShowTimer: null,
       boundsDebounceTimer: null,
       contextMenuActions: {},
-      pinnedRightEdge: null
+      pinnedRightEdge: null,
+      naturalY: 0
     }
     states.set(owner.id, s)
     owner.on('closed', () => states.delete(owner.id))
@@ -143,6 +155,7 @@ export function openPopover(
 ): void {
   const { win, s } = ensurePopup(parent)
   s.pinnedRightEdge = pinnedRightEdge
+  s.naturalY = bounds.y
   win.setBounds(sanitizeToDisplay(bounds))
 
   const push = (): void => {
@@ -294,7 +307,11 @@ export function resizePopoverWindow(sourceWc: WebContents, width: number, height
     // rattrape en décalant tout le popup (donc le panneau déjà affiché)
     // vers la gauche au lieu de grandir en gardant sa position d'origine.
     const x = s.pinnedRightEdge !== null ? s.pinnedRightEdge - w : current.x
-    const next = sanitizeToDisplay({ ...current, x, width: w, height: h })
+    // `y: s.naturalY` (pas `current.y`) : repart TOUJOURS de la position
+    // idéale d'origine plutôt que de la valeur déjà affichée — voir le
+    // commentaire sur `naturalY` (PopoverState) pour pourquoi `current.y`
+    // laissait un clamp initial se figer au lieu de se corriger.
+    const next = sanitizeToDisplay({ ...current, x, y: s.naturalY, width: w, height: h })
     // Le ResizeObserver du renderer (PopoverRoot.tsx) se redéclenche à CHAQUE
     // reflow (ex. ouvrir/fermer un sous-menu change `opacity`/`inert`, ce qui
     // recalcule le layout même quand les dimensions FINALES ne bougent pas
