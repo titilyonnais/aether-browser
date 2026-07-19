@@ -130,13 +130,23 @@ const SPACE_HUE_PALETTE = [
   { hue: 190, label: 'Cyan' }
 ]
 
-/** Largeur fixe par type de popover (correspond aux classes Tailwind du contenu : w-72/w-52/w-80). */
+/** Largeur fixe par type de popover (correspond aux classes Tailwind du contenu : w-72/w-52/w-80).
+ * `app-menu` réserve DÉJÀ la place du flyout de sous-menu (w-80 racine +
+ * gap-1.5 + w-72 flyout, toujours monté même invisible — voir
+ * AppMenuPopoverCard.tsx) dans cette toute première estimation : sans ça, le
+ * calcul initial positionnait la fenêtre pour un popup de 320px, puis
+ * `resizePopoverWindow` la recalait sur ses 620px réels — un saut visible au
+ * tout premier affichage si ce correctif arrivait après que la fenêtre soit
+ * déjà montrée (`pendingShow`), ne se réglant qu'au premier redimensionnement
+ * suivant (ouvrir un sous-menu). Les deux formules doivent rester IDENTIQUES
+ * (320+12+288=620) pour que la position initiale et celle post-mesure
+ * coïncident dès la première image. */
 const POPOVER_WIDTH: Record<PopoverShowRequest['kind'], number> = {
   'site-info': 288,
   'tab-preview': 208,
   translate: 320,
   'favorites-folder': 320,
-  'app-menu': 320,
+  'app-menu': 620,
   'extensions-menu': 288,
   'update-ready': 288
 }
@@ -146,7 +156,7 @@ const POPOVER_DEFAULT_HEIGHT: Record<PopoverShowRequest['kind'], number> = {
   'tab-preview': 195,
   translate: 130,
   'favorites-folder': 140,
-  'app-menu': 560,
+  'app-menu': 620,
   'extensions-menu': 220,
   'update-ready': 150
 }

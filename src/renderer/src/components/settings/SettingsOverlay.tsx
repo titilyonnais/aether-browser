@@ -191,7 +191,8 @@ function SettingsPanel() {
       id: 'systeme',
       label: t('settings.nav.systeme'),
       icon: MonitorCog,
-      keywords: 'fermeture fenêtre minimiser quitter navigateur par défaut proxy système direct personnalisé'
+      keywords:
+        'fermeture fenêtre minimiser quitter navigateur par défaut proxy système direct personnalisé outils de développement devtools inspecter ancrer gauche droite bas'
     },
     {
       id: 'donnees',
@@ -1498,6 +1499,19 @@ function SystemSection() {
             />
           )}
         </div>
+      </Block>
+
+      <Block title={t('settings.system.devtoolsTitle')} hint={t('settings.system.devtoolsHint')}>
+        <SelectInput
+          value={settings.devtoolsDockMode}
+          onChange={(v) => void patch({ devtoolsDockMode: v as AppSettings['devtoolsDockMode'] })}
+          options={[
+            { value: 'right', label: t('settings.system.devtoolsRight') },
+            { value: 'left', label: t('settings.system.devtoolsLeft') },
+            { value: 'bottom', label: t('settings.system.devtoolsBottom') },
+            { value: 'detach', label: t('settings.system.devtoolsDetach') }
+          ]}
+        />
       </Block>
     </div>
   )

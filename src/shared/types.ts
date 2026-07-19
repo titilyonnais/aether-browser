@@ -220,6 +220,13 @@ export type ThemeMode = 'dark' | 'light' | 'system'
 /** Mode proxy (Système). */
 export type ProxyMode = 'system' | 'direct' | 'custom'
 
+/** Position des outils de développement d'une page. `'left'|'right'|'bottom'`
+ * sont ancrés dans la fenêtre ÆTHER elle-même (`WebContents.setDevToolsWebContents`,
+ * pas le simple `openDevTools({mode})` — sans effet pour une page attachée en
+ * `WebContentsView`), `'detach'` reste une vraie fenêtre séparée (gérée par
+ * Electron). */
+export type DevtoolsDockMode = 'detach' | 'left' | 'right' | 'bottom'
+
 /** Un moteur de recherche ajouté par l'utilisateur. */
 export interface CustomSearchEngine {
   id: string
@@ -399,6 +406,8 @@ export interface AppSettings {
   proxyRules: string
   /** Le bouton fermer de la fenêtre minimise au lieu de quitter (« Quitter ÆTHER » reste le vrai quitter). */
   minimizeOnClose: boolean
+  /** Position des outils de développement d'une page (F12/Inspecter). */
+  devtoolsDockMode: DevtoolsDockMode
   // — Téléchargements —
   /** Dossier de téléchargement ('' = Téléchargements par défaut de l'OS). */
   downloadDir: string
@@ -461,6 +470,7 @@ export interface SettingsPatch {
   proxyMode?: ProxyMode
   proxyRules?: string
   minimizeOnClose?: boolean
+  devtoolsDockMode?: DevtoolsDockMode
   downloadDir?: string
   askDownloadLocation?: boolean
   autoCheckForUpdates?: boolean

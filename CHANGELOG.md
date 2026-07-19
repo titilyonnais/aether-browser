@@ -4,6 +4,16 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.0] — 2026-07-18
+
+### Ajouté
+
+- **DevTools réellement ancrées** (gauche/droite/bas, Réglages › Système) : `openDevTools({mode})` seul n'a aucun effet pour une page qui est une `WebContentsView` attachée (pas une vraie fenêtre à elle) — les DevTools sont désormais une vue native que l'appli crée et positionne elle-même à côté de la page, partageant l'espace au lieu de toujours s'ouvrir dans une fenêtre séparée.
+
+### Corrigé
+
+- **Menu principal parfois désaxé/coupé au premier affichage** : la toute première position calculée (avant la vraie mesure du contenu) supposait encore l'ancienne largeur sans flyout — corrigé pour refléter la largeur réellement réservée dès le départ.
+
 ## [0.52.4] — 2026-07-18
 
 ### Corrigé
