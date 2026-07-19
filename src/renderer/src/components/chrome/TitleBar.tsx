@@ -556,7 +556,15 @@ function AppMenuButton() {
       onClick={() => (open ? close() : show())}
       className={cn(
         'no-drag grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors duration-150',
-        open ? 'bg-white/[0.06] text-ink-dim' : 'text-ink-faint hover:bg-white/[0.05] hover:text-ink-dim'
+        // État OUVERT nettement plus marqué que le simple survol : avant, l'écart
+        // (bg-white/6% ouvert vs 5% au survol) était imperceptible, si bien qu'un
+        // bouton FERMÉ mais survolé paraissait « sélectionné » — l'utilisateur
+        // croyait le menu encore ouvert et recliquait, ce qui le RÉOUVRAIT. Le
+        // fond nettement plus clair + le texte plein distinguent sans ambiguïté
+        // « menu ouvert » de « simple survol ».
+        open
+          ? 'bg-white/[0.14] text-ink'
+          : 'text-ink-faint hover:bg-white/[0.05] hover:text-ink-dim'
       )}
     >
       <MoreVertical size={15} strokeWidth={1.7} />

@@ -1611,6 +1611,12 @@ export function registerIpc(router: AiRouter): void {
   ipcMain.on(CH.appMenuRunCommand, (e, cmd: ShortcutCommand) => {
     const { win } = resolveWindowContext(e)
     hidePopoverWindow(win)
+    // Prévient le renderer que le popup s'est fermé, sinon le bouton "⋯"
+    // (AppMenuButton, TitleBar.tsx) reste persuadé que le menu est ouvert
+    // (`open === true`, surbrillance persistante) et son clic suivant referme
+    // une fenêtre déjà masquée au lieu d'ouvrir. Même correctif que pour
+    // `CH.popoverHide`/`extensionsOpenPopup`.
+    sendTo(win, CH.popoverClosed)
     sendTo(win, CH.shortcut, cmd)
   })
 

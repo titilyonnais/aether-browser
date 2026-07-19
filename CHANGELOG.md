@@ -4,6 +4,15 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.7] — 2026-07-19
+
+### Corrigé
+
+- **Menu principal (⋯) qui se rouvrait tout seul à la fermeture, et bouton bloqué en surbrillance** — analyse image par image d'un nouvel enregistrement (build vérifié comme étant bien le dernier). Trois causes cumulées, toutes corrigées :
+  - **Réouverture automatique** : le `ResizeObserver` du popup (dont le contenu reste monté, la fenêtre n'étant que masquée entre deux usages) pouvait émettre un dernier rapport de taille APRÈS la fermeture ; le `setBounds()` qui suivait RÉAFFICHAIT la fenêtre masquée sur Windows (`SetWindowPos` réactive la visibilité) — le menu se rouvrait tout seul juste après un clic de fermeture. Tout redimensionnement d'un popup masqué (et pas en cours d'affichage) est désormais ignoré.
+  - **Surbrillance trompeuse** : l'état « ouvert » du bouton (fond blanc à 6 %) était quasi indiscernable du simple survol (5 %) — un bouton FERMÉ mais survolé paraissait « sélectionné », l'utilisateur croyait le menu encore ouvert et recliquait, ce qui le rouvrait. L'état ouvert est maintenant nettement plus marqué (fond à 14 % + texte plein).
+  - **Défensif** : l'exécution d'une commande depuis le menu prévient désormais explicitement le renderer de la fermeture (`popover:onClosed`), comme les autres chemins de fermeture — le bouton ne peut plus rester « ouvert » après avoir cliqué une action.
+
 ## [0.53.6] — 2026-07-19
 
 ### Corrigé

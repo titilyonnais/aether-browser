@@ -298,6 +298,16 @@ export function resizePopoverWindow(sourceWc: WebContents, width: number, height
   s.boundsDebounceTimer = setTimeout(() => {
     s.boundsDebounceTimer = null
     if (popup.isDestroyed()) return
+    // Popup masqué (déjà fermé) et pas en cours d'affichage différé : ignorer
+    // tout redimensionnement TARDIF. Le ResizeObserver du renderer (le contenu
+    // reste monté, la fenêtre n'est que masquée entre deux usages) peut émettre
+    // un dernier rapport APRÈS la fermeture (reflow résiduel : réinitialisation
+    // d'un sous-menu, transition d'opacité…). Appeler `setBounds()` sur une
+    // fenêtre masquée peut la RÉAFFICHER sur Windows (`SetWindowPos` réactive la
+    // visibilité), ce qui rouvrait tout seul le menu qu'on venait de fermer —
+    // exactement le « se ferme puis se rouvre immédiatement ». La prochaine
+    // ouverture repositionnera de toute façon la fenêtre via `openPopover`.
+    if (!popup.isVisible() && !s.pendingShow) return
     const current = popup.getBounds()
     const w = Math.max(1, width)
     const h = Math.max(1, height)
