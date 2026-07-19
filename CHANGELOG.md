@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.3] — 2026-07-19
+
+### Corrigé
+
+- **Coin arrondi du bas du menu principal toujours rogné net**, confirmé par analyse image par image d'un nouvel enregistrement après le fix précédent (v0.53.2 — pourtant bien celui installé et testé, vérifié octet pour octet) : le repositionnement au clic sur un sous-menu bas de liste (« menu qui remonte ») est bien corrigé, mais la fenêtre restait systématiquement quelques pixels trop courte pour le coin arrondi du bas — le texte n'était pas coupé, seuls le padding et le rayon de bordure finaux manquaient. Cause probable : arrondi de sous-pixels lors de la conversion des bornes de fenêtre en pixels physiques sur un facteur d'échelle Windows non entier (125 %, 150 %…). Corrigé en ajoutant une marge de sécurité (8px) directement à CHAQUE mesure réelle remontée par le popup (pas seulement à la hauteur devinée avant mesure) — sans risque, la fenêtre popup est intégralement transparente.
+
 ## [0.53.2] — 2026-07-19
 
 ### Corrigé

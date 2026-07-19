@@ -66,10 +66,26 @@ export default function PopoverRoot() {
     // centaines de ms (jusqu'au repli `fallbackShowTimer`), ce qui produisait
     // la latence perçue à l'ouverture. `getBoundingClientRect()` reflète déjà
     // le layout à jour sans attendre un frame peint.
+    // `SAFETY_PX` ajouté à la hauteur mesurée (pas juste au guess initial,
+    // cf. ipc.ts) : vérifié par capture vidéo que même la mesure RÉELLE
+    // (post-ResizeObserver, donc déjà appliquée à la fenêtre) laissait le
+    // coin arrondi du BAS de `.popover-surface` rogné net — le contenu texte
+    // n'était pas coupé, seuls les derniers pixels (padding + rayon de bordure)
+    // manquaient. `getBoundingClientRect()` mesure en pixels CSS ; sur un
+    // facteur d'échelle Windows non entier (125 %, 150 %…), l'arrondi vers les
+    // pixels physiques appliqué par `BrowserWindow.setBounds()` peut tronquer
+    // vers le bas au lieu d'arrondir au-dessus — quelques pixels de marge
+    // absorbent cet écart (et tout autre écart de sous-pixel similaire) sans
+    // aucun risque : la fenêtre est intégralement transparente, l'espace en
+    // trop est invisible.
+    const SAFETY_PX = 8
     const report = (): void => {
       const rect = el.getBoundingClientRect()
       if (rect.width > 0 && rect.height > 0) {
-        window.aether.popover.reportSize({ width: Math.ceil(rect.width), height: Math.ceil(rect.height) })
+        window.aether.popover.reportSize({
+          width: Math.ceil(rect.width) + SAFETY_PX,
+          height: Math.ceil(rect.height) + SAFETY_PX
+        })
       }
     }
     const ro = new ResizeObserver(report)
