@@ -14,9 +14,19 @@
  * stores Zustand de la fenêtre principale (process de rendu séparé).
  */
 import { ChevronLeft } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { ShortcutCommand } from '@shared/types'
 import { cn } from '@/lib/utils'
+
+// Dimensions FIXES du menu principal (doivent correspondre aux classes
+// Tailwind ci-dessous : `w-80` = 320px pour le panneau racine, `w-72` = 288px
+// pour le flyout, `gap` visuel de 6px entre les deux). La largeur totale
+// réservée est CONSTANTE quel que soit l'état du flyout — voir le commentaire
+// détaillé dans `AppMenuPopoverCard`. */
+const MENU_W = 320
+const FLYOUT_W = 288
+const FLYOUT_GAP = 6
+const TOTAL_W = FLYOUT_W + FLYOUT_GAP + MENU_W
 
 type Panel = 'root' | 'editAndFind' | 'castAndShare' | 'moreTools' | 'zoom' | 'help'
 
@@ -161,69 +171,68 @@ function MenuRow({
 export function AppMenuPopoverCard() {
   // Flyout ouvert À CÔTÉ du menu racine (façon Chrome), pas un remplacement
   // plein-panneau : cliquer un sous-menu ajoute un second panneau juste à sa
-  // droite, le premier reste visible et cliquable. Un seul niveau ici (aucune
+  // gauche, le premier reste visible et cliquable. Un seul niveau ici (aucune
   // ligne de PANELS n'a elle-même de sous-menu) — pas besoin d'une pile.
   const [openPanel, setOpenPanel] = useState<Exclude<Panel, 'root'> | null>(null)
-  // Aligné verticalement sur la LIGNE cliquée ("Aide" est loin dans la
-  // liste) — sans ça le flyout partait toujours du haut du menu.
-  const [flyoutOffsetY, setFlyoutOffsetY] = useState(0)
-  const rootRef = useRef<HTMLDivElement | null>(null)
+  // Décalage vertical DEMANDÉ (haut du flyout aligné sur la ligne cliquée) ;
+  // `flyoutTop` en est la version bornée pour que le flyout tienne toujours
+  // dans la hauteur du menu (voir le useLayoutEffect plus bas).
+  const [requestedY, setRequestedY] = useState(0)
+  const [flyoutTop, setFlyoutTop] = useState(0)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const flyoutRef = useRef<HTMLDivElement | null>(null)
 
   const handleOpenSubmenu = (panel: Exclude<Panel, 'root'>, rowEl: HTMLButtonElement): void => {
-    if (rootRef.current) {
-      setFlyoutOffsetY(rowEl.getBoundingClientRect().top - rootRef.current.getBoundingClientRect().top)
+    if (menuRef.current) {
+      setRequestedY(rowEl.getBoundingClientRect().top - menuRef.current.getBoundingClientRect().top)
     }
     setOpenPanel((cur) => (cur === panel ? null : panel))
   }
 
+  // Borne le haut du flyout pour qu'il ne dépasse JAMAIS le bas du menu racine :
+  // aligné sur la ligne cliquée quand il rentre, remonté juste ce qu'il faut
+  // sinon (ex. sous-menu « Aide », tout en bas). Comme le flyout est en
+  // `position:absolute` (hors flux), il ne peut de toute façon pas agrandir la
+  // boîte mesurée — ce clamp garantit en plus qu'il reste visuellement DANS les
+  // bornes de la fenêtre popup (sinon son bas serait rogné par la fenêtre, qui
+  // est dimensionnée sur le seul menu racine). `useLayoutEffect` : mesure et
+  // corrige AVANT peinture, donc aucun scintillement d'une position à l'autre.
+  useLayoutEffect(() => {
+    if (!openPanel || !menuRef.current || !flyoutRef.current) return
+    const menuH = menuRef.current.offsetHeight
+    const flyoutH = flyoutRef.current.offsetHeight
+    setFlyoutTop(Math.max(0, Math.min(requestedY, menuH - flyoutH)))
+  }, [openPanel, requestedY])
+
   return (
-    // `row-reverse` : ce popup est ouvert ancré à son bord DROIT (sous le
-    // bouton "⋯", voir `placement: 'below-right'` dans TitleBar.tsx et
-    // `pinnedRightEdge` dans popoverWindow.ts) — le panneau racine doit donc
-    // rester le panneau le plus à DROITE (jamais bouger) et un flyout
-    // s'ajoute en grandissant vers la gauche, où il y a de la place, plutôt
-    // que vers la droite où il pousserait hors écran près du bouton.
-    <div className="flex flex-row-reverse items-start gap-1.5">
-      <div ref={rootRef} className="popover-surface w-80 overflow-hidden rounded-xl p-1.5">
-        {ROOT.map((row, i) => (
-          <MenuRow
-            key={'separator' in row ? `sep-${i}` : row.label}
-            row={row}
-            openPanel={openPanel}
-            onOpenSubmenu={handleOpenSubmenu}
-          />
-        ))}
-      </div>
-      {/* Toujours monté, largeur FIXE, même fermé (juste rendu invisible) —
-          le popup natif ne doit jamais changer de largeur à l'ouverture/
-          fermeture d'un sous-menu : une fenêtre transparente qui se
-          redimensionne alors qu'elle est déjà affichée scintille
-          visiblement sur Windows (recomposition DWM de toute la surface).
-          Là où un simple montage/démontage conditionnel forçait ce
-          redimensionnement à chaque clic, un `opacity`/`pointer-events`
-          n'en déclenche aucun : la largeur mesurée par le ResizeObserver
-          (PopoverRoot.tsx) reste constante dès le tout premier affichage.
-          L'alignement vertical sur la ligne cliquée (`flyoutOffsetY`) est
-          appliqué via `position:relative`+`top`, PAS `margin-top` : une marge
-          fait partie du flux normal et est comptée dans le calcul de hauteur
-          du conteneur flex (`items-start`), donc ouvrir "Aide" (tout en bas
-          de la liste racine) gonflait la hauteur MESURÉE du popup bien
-          au-delà de celle du panneau racine, faisant grandir toute la fenêtre
-          — et `sanitizeToDisplay` (popoverWindow.ts) remontait alors le menu
-          pour le garder à l'écran, visible comme un saut vers le haut au
-          clic. Un décalage `position:relative` est purement visuel : il ne
-          compte pas dans la taille réservée par le parent flex, donc la
-          hauteur mesurée reste toujours celle du panneau racine seul. */}
+    // Boîte à largeur FIXE (`TOTAL_W`) et à hauteur = celle du SEUL menu racine.
+    // C'est cet élément que mesure PopoverRoot.tsx (ResizeObserver) pour
+    // dimensionner la fenêtre popup native. Rien ici ne doit changer de taille
+    // quand on ouvre/ferme un flyout : une fenêtre transparente qui se
+    // redimensionne OU se repositionne alors qu'elle est déjà affichée scintille
+    // et « saute » visiblement sur Windows. C'est pourquoi le flyout est en
+    // `position:absolute` — TOTALEMENT hors flux : il n'influe ni sur la largeur
+    // (réservée en dur par `TOTAL_W`) ni sur la hauteur (définie par le seul
+    // menu racine, en flux) de cette boîte. Les tentatives précédentes le
+    // gardaient dans le flux (flex + `opacity`, puis `position:relative`) en
+    // pensant que ça suffisait à figer la taille mesurée — mais le
+    // repositionnement vertical au clic persistait (vérifié image par image) :
+    // seul un retrait complet du flux le supprime réellement. Ancrage à DROITE
+    // (`pinnedRightEdge`, popoverWindow.ts) : le menu racine reste collé au bord
+    // droit sous le bouton "⋯", le flyout s'ouvre vers la gauche où il y a la
+    // place.
+    <div className="relative" style={{ width: TOTAL_W }}>
+      {/* Flyout : absolu, calé à gauche, hauteur ignorée par la boîte mesurée.
+          `inert` (pas seulement `pointer-events-none`) : sans lui, ses boutons
+          resteraient atteignables au clavier (Tab) alors qu'ils sont invisibles. */}
       <div
-        // `inert` (pas seulement `pointer-events-none`) : sans lui, les boutons
-        // du flyout resteraient atteignables au clavier (Tab) alors même
-        // qu'ils sont invisibles.
+        ref={flyoutRef}
         inert={!openPanel}
         className={cn(
-          'relative w-72 shrink-0 overflow-hidden rounded-xl transition-opacity duration-100',
+          'absolute left-0 w-72 overflow-hidden rounded-xl transition-opacity duration-100',
           openPanel ? 'popover-surface p-1.5 opacity-100' : 'pointer-events-none opacity-0'
         )}
-        style={{ top: flyoutOffsetY }}
+        style={{ top: flyoutTop }}
       >
         {openPanel && (
           <>
@@ -240,6 +249,18 @@ export function AppMenuPopoverCard() {
             ))}
           </>
         )}
+      </div>
+      {/* Menu racine : en flux, poussé à DROITE (`ml-auto`) — c'est lui qui
+          définit la hauteur de la boîte mesurée. */}
+      <div ref={menuRef} className="popover-surface ml-auto w-80 overflow-hidden rounded-xl p-1.5">
+        {ROOT.map((row, i) => (
+          <MenuRow
+            key={'separator' in row ? `sep-${i}` : row.label}
+            row={row}
+            openPanel={openPanel}
+            onOpenSubmenu={handleOpenSubmenu}
+          />
+        ))}
       </div>
     </div>
   )

@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.4] — 2026-07-19
+
+### Corrigé
+
+- **Menu principal qui « saute » vers le haut à l'ouverture d'un sous-menu**, définitivement. Analyse image par image d'un nouvel enregistrement (build vérifié comme étant bien le dernier, octet pour octet) : à CHAQUE ouverture de flyout, toute la fenêtre remontait de ~7px puis redescendait à la fermeture — le correctif `position:relative` (v0.53.2) n'avait PAS supprimé le problème (le flyout, resté dans le flux, continuait de coupler son état à la taille mesurée de la fenêtre). Refonte de l'architecture du menu : le flyout est désormais en `position:absolute` — **totalement hors flux** — donc il ne peut plus, en aucune circonstance, modifier la taille mesurée de la boîte (largeur réservée en dur, hauteur définie par le seul menu racine). La fenêtre popup native ne se redimensionne ni ne se repositionne plus jamais quand on ouvre/ferme un sous-menu. Le flyout est en plus borné verticalement pour toujours tenir dans la hauteur du menu (aligné sur la ligne cliquée quand il rentre, remonté juste ce qu'il faut sinon), donc son bas n'est jamais rogné non plus.
+
 ## [0.53.3] — 2026-07-19
 
 ### Corrigé
