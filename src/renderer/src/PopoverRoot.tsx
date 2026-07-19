@@ -57,6 +57,34 @@ export default function PopoverRoot() {
     })
   }, [])
 
+  // Cette fenêtre popup est délibérément un peu plus GRANDE que la carte
+  // visible : marge anti-rognage (`SAFETY_PX` plus bas) et, pour le menu
+  // principal, largeur réservée pour qu'un flyout puisse s'ouvrir sans jamais
+  // redimensionner la fenêtre (toujours allouée, même flyout fermé — voir
+  // AppMenuPopoverCard.tsx). Cette marge invisible fait néanmoins partie de la
+  // fenêtre NATIVE, qui passe AU-DESSUS de la fenêtre principale : un clic
+  // dedans atteint cette fenêtre popup (`transparent:true` ne la rend pas
+  // insensible aux clics) et n'atteint donc JAMAIS le détecteur global de
+  // clic-extérieur d'App.tsx (posé sur la fenêtre PRINCIPALE) — d'où une
+  // « zone morte » où fermer semblait ne rien faire, obligeant à cliquer loin
+  // de la bulle. Fix : on ferme nous-mêmes dès qu'un clic ne touche aucune
+  // carte VISIBLE. `.popover-surface` est la classe de cette carte dans TOUS
+  // les types de popover — un repère plus fiable que les bornes de `rootRef`,
+  // qui pour le menu principal couvre AUSSI la largeur réservée du flyout
+  // (invisible quand fermé, mais toujours « dans » `rootRef`).
+  // `elementsFromPoint` traverse la pile empilée sous le curseur (y compris
+  // les éléments à `pointer-events:none`) : aucune carte visible → marge.
+  useEffect(() => {
+    const onDown = (e: PointerEvent): void => {
+      const hitCard = document
+        .elementsFromPoint(e.clientX, e.clientY)
+        .some((el) => el.classList.contains('popover-surface'))
+      if (!hitCard) window.aether.popover.hide()
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [])
+
   useEffect(() => {
     const el = rootRef.current
     if (!el) return

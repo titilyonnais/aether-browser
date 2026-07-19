@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.9] — 2026-07-19
+
+### Corrigé
+
+- **Zone invisible autour des bulles de popup empêchant de les fermer en cliquant ailleurs** : la fenêtre popup native est délibérément un peu plus grande que la carte visible (marge anti-rognage + largeur réservée pour un flyout, menu principal) — mais cette marge fait partie de la fenêtre NATIVE, qui passe au-dessus de la fenêtre principale. Un clic dedans atteignait donc cette fenêtre popup (même sur fond transparent) et n'atteignait jamais le détecteur global de clic-extérieur de la fenêtre principale, obligeant à cliquer nettement à l'écart de la bulle pour la fermer. Le popup ferme désormais lui-même dès qu'un clic ne touche aucune carte visible en son sein.
+
 ## [0.53.8] — 2026-07-19
 
 ### Corrigé
