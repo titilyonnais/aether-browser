@@ -27,7 +27,7 @@ afterEach(() => {
 describe('migrate', () => {
   it('crée le schéma jusqu’à la dernière version sans erreur', () => {
     const db = openDatabase()
-    expect(db.pragma('user_version', { simple: true })).toBe(10)
+    expect(db.pragma('user_version', { simple: true })).toBe(11)
   })
 })
 

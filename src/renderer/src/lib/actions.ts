@@ -137,6 +137,22 @@ export async function initBridge(): Promise<void> {
     useUiStore.getState().openOverlay('certificate')
   })
 
+  // « Gérer les données des sites sur l'appareil » — même relais, l'origine
+  // se déduit ici de l'URL de la page (le main ne connaît que le PageId).
+  window.aether.site.onDataManagerRequested((id) => {
+    const page = usePagesStore.getState().pages[id]
+    if (!page) return
+    useUiStore.getState().setSiteDataTarget({ pageId: id, origin: new URL(page.url).origin })
+    useUiStore.getState().openOverlay('site-data')
+  })
+
+  // « Paramètres des sites » depuis le popover — le main résout déjà
+  // l'origine (il connaît le PageId réel), on ouvre directement la section.
+  window.aether.site.onSiteSettingsRequested((origin) => {
+    useUiStore.getState().setSiteDetailsOrigin(origin)
+    useUiStore.getState().openOverlay('settings', { section: 'site-details' })
+  })
+
   // Menu contextuel natif des favoris (voir FavoritesBar.tsx) — même relais
   // que pour les profils : le menu vit dans le main, les actions ici.
   window.aether.favorites.onOpenRequested((url) => void openFavoriteUrl(url))

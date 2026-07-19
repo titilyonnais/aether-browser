@@ -27,6 +27,7 @@ import type {
 } from '@shared/types'
 import { getSettings } from './settings'
 import { downloadsRepo, pagesRepo, type PageRow } from './db/repositories'
+import { noteMainFrameNavigation, siteBlocksPopups } from './contentBlocking'
 import { hidePopoverWindow, showContextMenuPopover } from './popoverWindow'
 import { capturePreview, deletePreview } from './previews'
 import { ensurePartitionHardened, webPartitionForProfile } from './webSession'
@@ -401,6 +402,12 @@ export class ViewManager {
   /** Dernières bornes PLEINES (avant partage avec les DevTools) reçues pour
    * cette page — pour restaurer la page à sa taille normale à la fermeture. */
   private fullBounds = new Map<PageId, Bounds>()
+  /** Origines des sous-frames vues sur cette page depuis sa dernière
+   * navigation de premier niveau (« Données des sites sur l'appareil »,
+   * photo 5 : grok.com + m.stripe.com/m.stripe.network intégrés) — scopé à
+   * la page, PAS persisté : une simple estampille de ce qui a été vu à
+   * l'écran, vidée à chaque nouvelle navigation principale. */
+  private embeddedOriginsByPage = new Map<PageId, Set<string>>()
 
   constructor(
     private win: BrowserWindow,
@@ -424,6 +431,43 @@ export class ViewManager {
   private patchRuntime(pageId: PageId, patch: Partial<PageRuntime>): void {
     this.runtime.set(pageId, { ...this.getRuntime(pageId), ...patch })
     this.delegate.onMetaChanged(pageId)
+  }
+
+  /** Origines des sous-frames intégrées vues depuis la dernière navigation
+   * principale de cette page (« Données des sites sur l'appareil »). */
+  getEmbeddedOrigins(pageId: PageId): string[] {
+    return Array.from(this.embeddedOriginsByPage.get(pageId) ?? [])
+  }
+
+  /** Facteur de zoom courant (pourcentage) d'un onglet EN VIE sur cette
+   * origine, ou `null` si aucun — limite assumée (page de réglages par site
+   * atteinte sans onglet ouvert dessus) : Chromium/`HostZoomMap` persiste
+   * déjà le zoom par host, rien à lire ici sans une page vivante. */
+  findLiveZoomPercent(origin: string): number | null {
+    for (const view of this.views.values()) {
+      const wc = view.webContents
+      if (wc.isDestroyed()) continue
+      try {
+        if (new URL(wc.getURL()).origin === origin) return Math.round(wc.getZoomFactor() * 100)
+      } catch {
+        // URL indéterminable — ignorée.
+      }
+    }
+    return null
+  }
+
+  /** Remet le zoom à 100% pour tout onglet EN VIE sur cette origine (comme
+   * Chrome, la réinitialisation est la seule écriture possible ici). */
+  resetZoomForOrigin(origin: string): void {
+    for (const view of this.views.values()) {
+      const wc = view.webContents
+      if (wc.isDestroyed()) continue
+      try {
+        if (new URL(wc.getURL()).origin === origin) wc.setZoomFactor(1)
+      } catch {
+        // URL indéterminable — ignorée.
+      }
+    }
   }
 
   private touchLru(pageId: PageId): void {
@@ -612,6 +656,30 @@ export class ViewManager {
       if (isMainFrame) onNavigated(url)
     })
 
+    // Origines intégrées (« Données des sites sur l'appareil ») — vidées à
+    // chaque navigation de premier niveau, peuplées par les sous-frames.
+    // Remet aussi à zéro le compteur « premier téléchargement depuis cette
+    // navigation » du moteur de blocage (contentBlocking.ts).
+    wc.on('did-start-navigation', (details) => {
+      if (!details.isMainFrame) return
+      this.embeddedOriginsByPage.delete(pageId)
+      noteMainFrameNavigation(wc.id)
+    })
+    wc.on('did-frame-navigate', (_e, url, _httpResponseCode, _httpStatusText, isMainFrame) => {
+      if (isMainFrame) return
+      try {
+        const origin = new URL(url).origin
+        let origins = this.embeddedOriginsByPage.get(pageId)
+        if (!origins) {
+          origins = new Set()
+          this.embeddedOriginsByPage.set(pageId, origins)
+        }
+        origins.add(origin)
+      } catch {
+        // URL sans origine (about:blank, data:…) — ignorée.
+      }
+    })
+
     wc.on('did-start-loading', () => {
       this.patchRuntime(pageId, { isLoading: true, loadError: null })
     })
@@ -705,9 +773,39 @@ export class ViewManager {
     // Les ouvertures de fenêtres deviennent des cartes dans l'espace courant.
     wc.setWindowOpenHandler(({ url }) => {
       if (url.startsWith('http://') || url.startsWith('https://')) {
+        // Popups : vérifiée EN PREMIER, additive — ne change rien pour les
+        // origines autorisées (réglage global par défaut à `true`), bloque
+        // silencieusement (comme Chrome) pour une origine explicitement
+        // bloquée par surcharge de site ou réglage global désactivé.
+        const pageUrl = wc.getURL()
+        let pageOrigin = ''
+        try {
+          pageOrigin = new URL(pageUrl).origin
+        } catch {
+          // URL de page indéterminable — laisse passer, en échec ouvert.
+        }
+        if (pageOrigin && siteBlocksPopups(this.activeProfileId, pageOrigin)) {
+          return { action: 'deny' }
+        }
         this.delegate.onOpenRequest(pageId, url)
       }
       return { action: 'deny' }
+    })
+
+    // Redirections automatiques (même catégorie que les popups pour
+    // l'utilisateur, « Popups et redirections ») — redirection SERVEUR
+    // (302…) uniquement, voir le commentaire de `contentBlocking.ts`.
+    wc.on('will-redirect', (event, _url, _httpResponseCode, _httpStatusText, isMainFrame) => {
+      if (!isMainFrame) return
+      let pageOrigin = ''
+      try {
+        pageOrigin = new URL(wc.getURL()).origin
+      } catch {
+        return
+      }
+      if (pageOrigin && siteBlocksPopups(this.activeProfileId, pageOrigin)) {
+        event.preventDefault()
+      }
     })
 
     wc.on('will-navigate', (event, url) => {
@@ -1549,6 +1647,7 @@ export class ViewManager {
     this.lru = this.lru.filter((x) => x !== id)
     this.storeShimHosts.delete(id)
     this.storeShimScriptIds.delete(id)
+    this.embeddedOriginsByPage.delete(id)
     const focusTimer = this.suppressNextFocusHide.get(id)
     if (focusTimer !== undefined) {
       clearTimeout(focusTimer)

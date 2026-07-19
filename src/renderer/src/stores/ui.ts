@@ -22,6 +22,7 @@ export type OverlayKind =
   | 'create-profile'
   | 'report-problem'
   | 'certificate'
+  | 'site-data'
   | null
 
 interface Toast {
@@ -65,6 +66,10 @@ interface UiState {
    * `qrTarget` : `openOverlay()` n'a pas de champ pageId dans ses `opts`, un
    * slot dédié reste plus cohérent qu'un bolt-on générique. */
   certificateTargetPageId: PageId | null
+  /** Page + origine ciblées par l'overlay « Données des sites sur l'appareil ». */
+  siteDataTarget: { pageId: PageId; origin: string } | null
+  /** Origine dont on affiche la page de réglages complète (section « site-details »). */
+  siteDetailsOrigin: string | null
 
   setReady(ready: boolean): void
   startCoach(): void
@@ -91,6 +96,8 @@ interface UiState {
   closeFindBar(): void
   setQrTarget(target: { url: string; title: string } | null): void
   setCertificateTarget(id: PageId | null): void
+  setSiteDataTarget(target: { pageId: PageId; origin: string } | null): void
+  setSiteDetailsOrigin(origin: string | null): void
 }
 
 export const useUiStore = create<UiState>()((set, get) => ({
@@ -113,6 +120,8 @@ export const useUiStore = create<UiState>()((set, get) => ({
   findBarPageId: null,
   qrTarget: null,
   certificateTargetPageId: null,
+  siteDataTarget: null,
+  siteDetailsOrigin: null,
 
   setReady: (ready) => set({ ready }),
   startCoach: () => set({ coachActive: true }),
@@ -153,5 +162,7 @@ export const useUiStore = create<UiState>()((set, get) => ({
   openFindBar: (id) => set({ findBarPageId: id }),
   closeFindBar: () => set({ findBarPageId: null }),
   setQrTarget: (qrTarget) => set({ qrTarget }),
-  setCertificateTarget: (certificateTargetPageId) => set({ certificateTargetPageId })
+  setCertificateTarget: (certificateTargetPageId) => set({ certificateTargetPageId }),
+  setSiteDataTarget: (siteDataTarget) => set({ siteDataTarget }),
+  setSiteDetailsOrigin: (siteDetailsOrigin) => set({ siteDetailsOrigin })
 }))

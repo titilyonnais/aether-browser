@@ -382,6 +382,15 @@ export interface AppSettings {
   allowMedia: boolean
   allowGeolocation: boolean
   allowNotifications: boolean
+  // — Blocage de contenu par origine (réglages globaux, `contentBlocking.ts`) —
+  allowCookies: boolean
+  blockImages: boolean
+  /** Ne bloque que les `<script src>` EXTERNES — pas de bascule Electron pour
+   * désactiver le JS inline dynamiquement par origine, voir `contentBlocking.ts`. */
+  blockJavascript: boolean
+  allowPopups: boolean
+  allowAutoDownloads: boolean
+  blockInsecureContent: boolean
   /** Envoyer l'en-tête « Do Not Track » (DNT: 1). */
   doNotTrack: boolean
   /** Tenter de forcer HTTPS en amont (mise à niveau http→https). */
@@ -460,6 +469,12 @@ export interface SettingsPatch {
   allowMedia?: boolean
   allowGeolocation?: boolean
   allowNotifications?: boolean
+  allowCookies?: boolean
+  blockImages?: boolean
+  blockJavascript?: boolean
+  allowPopups?: boolean
+  allowAutoDownloads?: boolean
+  blockInsecureContent?: boolean
   doNotTrack?: boolean
   httpsOnly?: boolean
   maxLivePages?: number
@@ -587,7 +602,61 @@ export const SPELLCHECK_LANGUAGES: SpellcheckLanguage[] = [
 
 // ─── Sécurité de site ──────────────────────────────────────────────────────
 
-export type SitePermissionKind = 'media' | 'geolocation' | 'notifications'
+/** `media` reste utilisé comme kind de REPLI pour `setPermissionCheckHandler`
+ * (qui ne reçoit pas `details.mediaTypes`, donc ne peut pas distinguer
+ * caméra/micro) et pour le réglage global (`allowMedia`) — mais les
+ * SURCHARGES PAR SITE (popover, page de réglages) se posent sur `camera`/
+ * `microphone` séparément, jamais sur `media` (voir `webSession.ts`).
+ * `midi` couvre aussi la permission Electron `midiSysex` (une seule ligne
+ * « Appareils MIDI » côté UI, pas deux). `clipboard`, `fileSystem`, `sound`
+ * sont réels côté Electron (mêmes gestionnaires de permission, ou API dédiée
+ * pour `sound`). `cookies`/`images`/`javascript`/`popups`/`autoDownloads`/
+ * `insecureContent` sont appliqués par le moteur de blocage par origine
+ * (`contentBlocking.ts`), pas par un gestionnaire de permission Electron —
+ * mais partagent la MÊME table de surcharges (aucune raison technique de les
+ * séparer, voir `sitePermissionsRepo`). USB/HID/Bluetooth/Ports série
+ * (reportés à une session dédiée, nécessitent un sélecteur d'appareil)
+ * s'ajouteraient ici de la même façon, sans changer la forme de cette table.
+ * `media` est volontairement EXCLU de `UI_SITE_PERMISSION_KINDS` (repli
+ * interne seulement, jamais affiché/réglable directement). */
+export type SitePermissionKind =
+  | 'media'
+  | 'camera'
+  | 'microphone'
+  | 'geolocation'
+  | 'notifications'
+  | 'midi'
+  | 'clipboard'
+  | 'fileSystem'
+  | 'sound'
+  | 'cookies'
+  | 'images'
+  | 'javascript'
+  | 'popups'
+  | 'autoDownloads'
+  | 'insecureContent'
+
+/** 14 des 15 catégories réellement affichées/réglables (popover, page de
+ * réglages par site) — exclut `media` (repli interne uniquement). La 15ᵉ,
+ * les niveaux de zoom, n'a PAS de kind ici : Chromium persiste déjà le zoom
+ * par hôte nativement (`HostZoomMap`), aucune table de surcharge nécessaire —
+ * gérée directement via `webContents.getZoomLevel/setZoomLevel` côté UI. */
+export const UI_SITE_PERMISSION_KINDS: readonly SitePermissionKind[] = [
+  'camera',
+  'microphone',
+  'geolocation',
+  'notifications',
+  'midi',
+  'clipboard',
+  'fileSystem',
+  'sound',
+  'cookies',
+  'images',
+  'javascript',
+  'popups',
+  'autoDownloads',
+  'insecureContent'
+]
 /** 'ask' = pas de surcharge, suit le réglage global du profil. */
 export type SitePermissionState = 'ask' | 'allow' | 'block'
 
@@ -595,6 +664,11 @@ export interface SiteInfo {
   origin: string
   isHttps: boolean
   permissions: Record<SitePermissionKind, SitePermissionState>
+  /** Kinds que ce site a RÉELLEMENT utilisés au moins une fois (accordés, pas
+   * seulement vérifiés) — pilote l'affichage conditionnel des lignes de
+   * permission du popover (photo 1 : Micro affiché car utilisé ; photo 2 :
+   * github.com, aucune ligne car rien n'a jamais été accordé). */
+  usedKinds: SitePermissionKind[]
 }
 
 /** Principal X.509 (émetteur ou objet) — nom commun toujours présent,
@@ -640,6 +714,26 @@ export interface SitePermissionOverride {
   kind: SitePermissionKind
   state: SitePermissionState
   updatedAt: number
+}
+
+/** Une origine exacte connue (via ses cookies, voir `siteDataRegistry.ts`) —
+ * granularité de la ligne dépliée façon photo 7 (www.youtube.com,
+ * accounts.youtube.com…). `usageBytes` vient de CDP `Storage.getUsageAndQuota`,
+ * mis en cache 60s — 0 si indisponible plutôt qu'une valeur inventée. */
+export interface SiteDataOrigin {
+  origin: string
+  usageBytes: number
+  cookieCount: number
+}
+
+/** Regroupement par domaine « registrable » (photo 6 : la ligne « youtube.com »
+ * avant dépliage) — heuristique simple deux-labels + petite liste de TLD
+ * composés connus, PAS une vraie liste de suffixes publics (limite assumée). */
+export interface SiteDataGroup {
+  registrableDomain: string
+  totalBytes: number
+  totalCookies: number
+  origins: SiteDataOrigin[]
 }
 
 /** Poussé par `permissionPromptWindow.ts` vers sa propre fenêtre native

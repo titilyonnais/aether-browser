@@ -42,6 +42,7 @@ import type {
   RecentSearch,
   SettingsPatch,
   ShortcutCommand,
+  SiteDataGroup,
   SiteInfo,
   SitePermissionKind,
   SitePermissionOverride,
@@ -200,6 +201,27 @@ export const CH = {
   /** Relayé PAR le main VERS la fenêtre principale — seule celle-ci a accès
    * au store `ui` qui pilote les overlays. */
   siteCertificateRequested: 'site:certificate-requested',
+
+  // Gestionnaire de données par site (« Gérer les données des sites sur
+  // l'appareil ») — mêmes relais que le certificat ci-dessus, même raison
+  // (bulle dans un process de rendu séparé, sans accès au store `ui`).
+  siteEmbeddedOrigins: 'site:embedded-origins',
+  siteClearOriginData: 'site:clear-origin-data',
+  siteShowDataManager: 'site:show-data-manager',
+  siteDataManagerRequested: 'site:data-manager-requested',
+
+  // Page de réglages complète d'un site (15 catégories) — mêmes relais.
+  siteShowSiteSettings: 'site:show-site-settings',
+  siteSettingsRequested: 'site:settings-requested',
+
+  // Registre de données par site (« Tous les sites »)
+  siteRegistryList: 'site-registry:list',
+  siteRegistryDetail: 'site-registry:detail',
+
+  // Niveaux de zoom par site (page de réglages, 15 catégories) — pas de table
+  // de surcharge, lu/écrit directement sur un onglet EN VIE de cette origine.
+  siteZoomPercent: 'site:zoom-percent',
+  siteResetZoom: 'site:reset-zoom',
 
   // Intention
   intentClassify: 'intent:classify',
@@ -517,6 +539,19 @@ export interface AetherApi {
     showCertificate(id: PageId): void
     /** Écouté par la fenêtre PRINCIPALE (seule à avoir accès au store `ui`). */
     onCertificateRequested(cb: (id: PageId) => void): Unsubscribe
+    /** Même relais que `showCertificate`, pour « Gérer les données des sites
+     * sur l'appareil » (SiteDataOverlay.tsx). */
+    showDataManager(id: PageId): void
+    onDataManagerRequested(cb: (id: PageId) => void): Unsubscribe
+    /** Même relais, pour la page de réglages complète d'un site — la section
+     * ciblée reçoit une ORIGINE (pas un PageId), résolue côté main. */
+    showSiteSettings(id: PageId): void
+    onSiteSettingsRequested(cb: (origin: string) => void): Unsubscribe
+    /** Origines des sous-frames intégrées vues sur cette page depuis sa
+     * dernière navigation principale (SiteDataOverlay.tsx). */
+    getEmbeddedOrigins(id: PageId): Promise<string[]>
+    /** Efface cookies + stockage d'UNE origine précise (pas toute la partition). */
+    clearOriginData(origin: string): Promise<void>
   }
   /** Vue d'ensemble des autorisations par site (Réglages › Confidentialité) —
    * scopée par ORIGINE directement, pas de PageId disponible depuis Réglages. */
@@ -524,6 +559,22 @@ export interface AetherApi {
     list(): Promise<SitePermissionOverride[]>
     set(origin: string, kind: SitePermissionKind, state: SitePermissionState): Promise<SitePermissionOverride[]>
     removeOrigin(origin: string): Promise<SitePermissionOverride[]>
+  }
+  /** Registre de données par site (« Tous les sites », Réglages ›
+   * Confidentialité) — origines connues via leurs cookies, tailles via CDP. */
+  siteRegistry: {
+    list(): Promise<SiteDataGroup[]>
+    /** Regroupement (domaine registrable) d'UNE origine précise — le domaine
+     * lui-même est résolu côté main (voir `registrableDomain`), le renderer
+     * ne manipule que des origines, jamais un domaine nu. */
+    detail(origin: string): Promise<SiteDataGroup | null>
+  }
+  /** Niveaux de zoom par site (page de réglages, 15 catégories) — aucune
+   * table de surcharge (Chromium persiste déjà par host), lu/écrit
+   * directement sur un onglet EN VIE de cette origine. */
+  siteZoom: {
+    percent(origin: string): Promise<number | null>
+    reset(origin: string): Promise<void>
   }
   intent: {
     classify(input: string): Promise<IntentResult>

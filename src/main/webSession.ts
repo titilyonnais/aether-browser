@@ -7,11 +7,20 @@
  * d'abord, proxy, téléchargements) est appliqué paresseusement, une fois
  * par partition.
  */
-import { app, session, type DownloadItem, type Session } from 'electron'
+import {
+  app,
+  session,
+  type BrowserWindow as BW,
+  type DownloadItem,
+  type MediaAccessPermissionRequest,
+  type Session,
+  type WebContents
+} from 'electron'
 import { basename, join } from 'node:path'
 import { CH } from '@shared/ipc'
 import type { ProfileId, SitePermissionKind } from '@shared/types'
 import { installCertificateObserver } from './certificates'
+import { contentBlockingBeforeRequest, contentBlockingHeadersReceived, shouldBlockAutoDownload } from './contentBlocking'
 import { downloadsRepo, sitePermissionsRepo } from './db/repositories'
 import { requestPermissionPrompt } from './permissionPromptWindow'
 import { getSettings } from './settings'
@@ -29,7 +38,12 @@ export const liveDownloads = new Map<string, DownloadItem>()
 /** Toujours autorisées (sans risque, nécessaires à une navigation normale). */
 const ALWAYS = new Set(['fullscreen', 'pointerLock', 'clipboard-sanitized-write'])
 
-/** Fait correspondre un nom de permission Electron à notre kind de site. */
+/** Fait correspondre un nom de permission Electron à notre kind de site.
+ * `media` est traité séparément (voir `mediaSiteKindsFor`) : seule la voie
+ * REQUEST (`setPermissionRequestHandler`) reçoit `details.mediaTypes`, qui
+ * permet de distinguer caméra/micro — la voie CHECK (synchrone) ne le peut
+ * pas, voir `decide()`. `midiSysex` est plié dans `midi` : Chrome lui-même ne
+ * distingue pas les deux dans son UI de permissions par site. */
 function toSiteKind(permission: string): SitePermissionKind | null {
   switch (permission) {
     case 'media':
@@ -38,16 +52,37 @@ function toSiteKind(permission: string): SitePermissionKind | null {
       return 'geolocation'
     case 'notifications':
       return 'notifications'
+    case 'midi':
+    case 'midiSysex':
+      return 'midi'
+    case 'clipboard-read':
+      return 'clipboard'
+    case 'fileSystem':
+      return 'fileSystem'
     default:
       return null
   }
 }
 
+/** Réglage global par défaut (aucune surcharge par site) — caméra/micro
+ * retombent sur `allowMedia`, seul réglage global qui existe pour ce couple
+ * (pas de bascule dédiée dans Réglages, comme Chrome n'en a pas non plus au
+ * global). Les catégories sans réglage global (MIDI, presse-papiers, accès
+ * aux fichiers) restent en « ask » par défaut — jamais accordées tacitement. */
 function globalDefault(kind: SitePermissionKind): boolean {
   const s = getSettings()
-  if (kind === 'media') return s.allowMedia
-  if (kind === 'geolocation') return s.allowGeolocation
-  return s.allowNotifications
+  switch (kind) {
+    case 'media':
+    case 'camera':
+    case 'microphone':
+      return s.allowMedia
+    case 'geolocation':
+      return s.allowGeolocation
+    case 'notifications':
+      return s.allowNotifications
+    default:
+      return false
+  }
 }
 
 /**
@@ -57,12 +92,62 @@ function globalDefault(kind: SitePermissionKind): boolean {
  */
 function decide(profileId: ProfileId, permission: string, origin: string): boolean {
   if (ALWAYS.has(permission)) return true
+  // `setPermissionCheckHandler` est synchrone et ne reçoit pas les types de
+  // média demandés — on combine les DEUX surcharges (caméra/micro) : un
+  // blocage explicite de l'une suffit à refuser, un octroi explicite de
+  // l'une suffit à accepter (repli sur le réglage global sinon).
+  if (permission === 'media') {
+    const cam = origin ? sitePermissionsRepo.get(profileId, origin, 'camera') : null
+    const mic = origin ? sitePermissionsRepo.get(profileId, origin, 'microphone') : null
+    if (cam === 'block' || mic === 'block') return false
+    if (cam === 'allow' || mic === 'allow') return true
+    return globalDefault('media')
+  }
   const kind = toSiteKind(permission)
   if (!kind) return false
   const override = origin ? sitePermissionsRepo.get(profileId, origin, kind) : null
   if (override === 'allow') return true
   if (override === 'block') return false
   return globalDefault(kind)
+}
+
+/** Types de média réellement demandés → kinds de site distincts (photo 1 :
+ * « Micro » seul, pas un générique « Média ») — repli sur `'media'` si
+ * Electron ne fournit pas `mediaTypes` (jamais observé en pratique, mais pas
+ * documenté comme garanti). */
+function mediaSiteKindsFor(details: MediaAccessPermissionRequest): SitePermissionKind[] {
+  const types = details.mediaTypes ?? []
+  const kinds: SitePermissionKind[] = []
+  if (types.includes('video')) kinds.push('camera')
+  if (types.includes('audio')) kinds.push('microphone')
+  return kinds.length > 0 ? kinds : ['media']
+}
+
+/** Tranche une demande `media` (caméra et/ou micro, potentiellement les deux
+ * à la fois) : refus immédiat si l'une des deux est bloquée par surcharge,
+ * sinon invite séquentiellement pour chaque kind ni bloqué ni déjà autorisé
+ * (surcharge ou réglage global). Marque `touchUsed` pour CHAQUE kind
+ * finalement accordé — c'est ce qui fait apparaître « Caméra »/« Micro »
+ * séparément dans la bulle « informations du site ». */
+async function resolveMediaRequest(
+  owner: BW | undefined,
+  profileId: ProfileId,
+  origin: string,
+  kinds: SitePermissionKind[],
+  wc: WebContents
+): Promise<boolean> {
+  for (const kind of kinds) {
+    if (sitePermissionsRepo.get(profileId, origin, kind) === 'block') return false
+  }
+  for (const kind of kinds) {
+    const override = sitePermissionsRepo.get(profileId, origin, kind)
+    if (override === 'allow' || globalDefault(kind)) continue
+    if (!owner) return false
+    const granted = await requestPermissionPrompt(owner, profileId, origin, kind, wc)
+    if (!granted) return false
+  }
+  for (const kind of kinds) sitePermissionsRepo.touchUsed(profileId, origin, kind)
+  return true
 }
 
 function originOf(url: string): string {
@@ -130,13 +215,31 @@ export function ensurePartitionHardened(partition: string, profileId: ProfileId)
       return
     }
     const origin = originOf(details.requestingUrl)
+    if (!origin) {
+      callback(false)
+      return
+    }
+    const owner = ownerContextForPageWebContents(wc)?.ctx.win
+    // Caméra/micro : distingués via `details.mediaTypes`, seule voie qui le
+    // permette (voir `toSiteKind`) — potentiellement les deux à la fois.
+    if (permission === 'media') {
+      void resolveMediaRequest(
+        owner,
+        profileId,
+        origin,
+        mediaSiteKindsFor(details as MediaAccessPermissionRequest),
+        wc
+      ).then(callback)
+      return
+    }
     const kind = toSiteKind(permission)
-    if (!kind || !origin) {
+    if (!kind) {
       callback(false)
       return
     }
     const override = sitePermissionsRepo.get(profileId, origin, kind)
     if (override === 'allow') {
+      sitePermissionsRepo.touchUsed(profileId, origin, kind)
       callback(true)
       return
     }
@@ -145,15 +248,18 @@ export function ensurePartitionHardened(partition: string, profileId: ProfileId)
       return
     }
     if (globalDefault(kind)) {
+      sitePermissionsRepo.touchUsed(profileId, origin, kind)
       callback(true)
       return
     }
-    const owner = ownerContextForPageWebContents(wc)?.ctx.win
     if (!owner) {
       callback(false)
       return
     }
-    void requestPermissionPrompt(owner, profileId, origin, kind, wc).then(callback)
+    void requestPermissionPrompt(owner, profileId, origin, kind, wc).then((granted) => {
+      if (granted) sitePermissionsRepo.touchUsed(profileId, origin, kind)
+      callback(granted)
+    })
   })
 
   installCertificateObserver(partition)
@@ -167,6 +273,9 @@ export function ensurePartitionHardened(partition: string, profileId: ProfileId)
   })
 
   // HTTPS d'abord : les navigations principales en http:// sont hissées en https://.
+  // Point d'enregistrement UNIQUE (Electron n'en autorise qu'un par session) —
+  // le moteur de blocage de contenu (contentBlocking.ts) est délégué APRÈS,
+  // jamais enregistré séparément.
   webSession.webRequest.onBeforeRequest((details, callback) => {
     if (
       getSettings().httpsOnly &&
@@ -176,13 +285,25 @@ export function ensurePartitionHardened(partition: string, profileId: ProfileId)
       callback({ redirectURL: details.url.replace(/^http:\/\//i, 'https://') })
       return
     }
-    callback({})
+    callback(contentBlockingBeforeRequest(profileId, details) ?? {})
+  })
+
+  // Cookies (blocage par site) — même contrainte d'enregistrement unique
+  // qu'`onBeforeRequest` ci-dessus, mais aucun autre écouteur n'existait déjà
+  // pour `onHeadersReceived` : rien à déléguer, un seul point suffit.
+  webSession.webRequest.onHeadersReceived((details, callback) => {
+    callback(contentBlockingHeadersReceived(profileId, details) ?? {})
   })
 
   applyProxy(partition)
   applySpellcheckLanguages(partition)
 
-  webSession.on('will-download', (_event, item) => {
+  webSession.on('will-download', (_event, item, wc) => {
+    const pageOrigin = originOf(wc.getURL())
+    if (pageOrigin && shouldBlockAutoDownload(profileId, pageOrigin, wc.id)) {
+      item.cancel()
+      return
+    }
     const s = getSettings()
     if (!s.askDownloadLocation) {
       const dir = s.downloadDir || app.getPath('downloads')

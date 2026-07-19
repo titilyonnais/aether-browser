@@ -4,6 +4,22 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.55.0] — 2026-07-19
+
+### Ajouté
+
+- **Refonte complète de la bulle « informations du site »**, façon Chrome — navigation interne dans la même bulle (« La connexion est sécurisée » et « Cookies et données des sites » ouvrent désormais un vrai détail, sans changer de fenêtre), et les lignes de permission ne s'affichent plus que si le site les a RÉELLEMENT utilisées (un site n'ayant jamais rien demandé n'affiche plus aucune ligne, comme github.com dans Chrome). Le menu déroulant ask/allow/block est remplacé par une simple bascule Autoriser/Bloquer + un bouton « Réinitialiser l'autorisation » séparé.
+- **Caméra et microphone désormais distingués** dans les autorisations par site (auparavant un seul kind combiné « média ») — la bulle affiche « Caméra » et « Micro » séparément selon ce qui a été utilisé, chacun avec son propre historique et sa propre surcharge.
+- **9 nouvelles catégories d'autorisation par site** : MIDI, presse-papiers, accès aux fichiers, sons, cookies, images, JavaScript, popups et redirections, téléchargements automatiques, contenu non sécurisé — en plus des trois déjà existantes (localisation, notifications, média).
+- **Moteur de blocage de contenu par site** — cookies, images et scripts externes peuvent désormais être réellement bloqués par origine (surcharge de site ou réglage global), de même que les popups/redirections automatiques et les téléchargements déclenchés sans action de l'utilisateur. Limite assumée : seuls les `<script src>` externes sont couverts pour JavaScript, pas le code inline (Electron n'offre pas de bascule dynamique pour désactiver le JS par origine).
+- **« Gérer les données des sites sur l'appareil »** — nouvelle fenêtre listant le site de la page et les origines tierces qui y sont intégrées (traceurs, widgets de paiement…), avec suppression des données par origine.
+- **Page « Tous les sites »** (Réglages › Confidentialité) — registre de toutes les origines ayant stocké des cookies dans le profil, regroupées par domaine avec la taille réelle des données (via CDP) et le nombre de cookies, dépliable pour voir chaque sous-domaine séparément.
+- **Page de réglages complète par site** (15 catégories : les 14 ci-dessus + niveaux de zoom), accessible depuis la bulle du site (« Paramètres des sites ») ou depuis « Tous les sites » — poids et nombre de cookies avec bouton de suppression, chaque autorisation réglable individuellement (Demander/Autoriser/Bloquer), et un bouton pour tout réinitialiser d'un coup.
+
+### Corrigé
+
+- **« Récemment utilisés »** : une autorisation de site conserve désormais la trace de son dernier usage même après réinitialisation du choix (Demander), pour que la bulle continue de savoir qu'elle a déjà été sollicitée.
+
 ## [0.54.0] — 2026-07-19
 
 ### Ajouté

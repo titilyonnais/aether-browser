@@ -41,6 +41,23 @@ export async function clearBrowsingData(
   }
 }
 
+/** Efface toutes les données stockées (cookies + stockage) d'UNE origine
+ * précise — contrairement à `clearBrowsingData`, qui vide toute la partition.
+ * Utilisé par « Gérer les données des sites sur l'appareil » (suppression
+ * par site, photo 5) et la page de réglages par site (en-tête cookies). */
+export async function clearOriginData(partition: string, origin: string): Promise<void> {
+  const storages: StorageKind[] = [
+    'cookies',
+    'localstorage',
+    'indexdb',
+    'serviceworkers',
+    'cachestorage',
+    'shadercache',
+    'filesystem'
+  ]
+  await session.fromPartition(partition).clearStorageData({ origin, storages })
+}
+
 /** Sélecteur de dossier natif (réglage du dossier de téléchargement). */
 export async function chooseDirectory(win: BrowserWindow): Promise<string | null> {
   const result = await dialog.showOpenDialog(win, {

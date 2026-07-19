@@ -57,6 +57,12 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   allowMedia: false,
   allowGeolocation: false,
   allowNotifications: false,
+  allowCookies: true,
+  blockImages: false,
+  blockJavascript: false,
+  allowPopups: true,
+  allowAutoDownloads: true,
+  blockInsecureContent: false,
   doNotTrack: false,
   httpsOnly: false,
   maxLivePages: defaultMaxLivePages(),
@@ -228,6 +234,12 @@ export function getSettings(): AppSettings {
     allowMedia: getString('allowMedia'),
     allowGeolocation: getString('allowGeolocation'),
     allowNotifications: getString('allowNotifications'),
+    allowCookies: getString('allowCookies'),
+    blockImages: getString('blockImages'),
+    blockJavascript: getString('blockJavascript'),
+    allowPopups: getString('allowPopups'),
+    allowAutoDownloads: getString('allowAutoDownloads'),
+    blockInsecureContent: getString('blockInsecureContent'),
     doNotTrack: getString('doNotTrack'),
     httpsOnly: getString('httpsOnly'),
     maxLivePages: getString('maxLivePages'),
@@ -337,6 +349,12 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
   if (patch.allowMedia !== undefined) putValue('allowMedia', patch.allowMedia)
   if (patch.allowGeolocation !== undefined) putValue('allowGeolocation', patch.allowGeolocation)
   if (patch.allowNotifications !== undefined) putValue('allowNotifications', patch.allowNotifications)
+  if (patch.allowCookies !== undefined) putValue('allowCookies', patch.allowCookies)
+  if (patch.blockImages !== undefined) putValue('blockImages', patch.blockImages)
+  if (patch.blockJavascript !== undefined) putValue('blockJavascript', patch.blockJavascript)
+  if (patch.allowPopups !== undefined) putValue('allowPopups', patch.allowPopups)
+  if (patch.allowAutoDownloads !== undefined) putValue('allowAutoDownloads', patch.allowAutoDownloads)
+  if (patch.blockInsecureContent !== undefined) putValue('blockInsecureContent', patch.blockInsecureContent)
   if (patch.doNotTrack !== undefined) putValue('doNotTrack', patch.doNotTrack)
   if (patch.httpsOnly !== undefined) putValue('httpsOnly', patch.httpsOnly)
   if (patch.maxLivePages !== undefined) {

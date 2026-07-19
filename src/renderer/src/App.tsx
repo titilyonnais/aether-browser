@@ -64,6 +64,9 @@ const ReportProblemOverlay = lazy(() =>
 const CertificateOverlay = lazy(() =>
   import('@/components/focus/CertificateOverlay').then((m) => ({ default: m.CertificateOverlay }))
 )
+const SiteDataOverlay = lazy(() =>
+  import('@/components/focus/SiteDataOverlay').then((m) => ({ default: m.SiteDataOverlay }))
+)
 const Onboarding = lazy(() => import('@/components/onboarding/Onboarding').then((m) => ({ default: m.Onboarding })))
 const CoachMarks = lazy(() => import('@/components/guide/CoachMarks').then((m) => ({ default: m.CoachMarks })))
 
@@ -242,6 +245,7 @@ export default function App() {
           <CreateProfileOverlay />
           <ReportProblemOverlay />
           <CertificateOverlay />
+          <SiteDataOverlay />
           <Onboarding />
           <CoachMarks />
         </Suspense>

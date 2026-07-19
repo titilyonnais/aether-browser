@@ -259,6 +259,7 @@ export function respondPermissionPrompt(sourceWc: WebContents, requestId: string
   const [req] = s.queue.splice(idx, 1)
   req.detach()
   sitePermissionsRepo.set(req.profileId, req.origin, req.kind, granted ? 'allow' : 'block')
+  if (granted) sitePermissionsRepo.touchUsed(req.profileId, req.origin, req.kind)
   req.resolve(granted)
   if (idx === 0) showNext(owner, s)
 }

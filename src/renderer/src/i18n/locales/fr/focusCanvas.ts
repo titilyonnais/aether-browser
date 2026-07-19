@@ -76,24 +76,57 @@ export const focusCanvas: Record<string, string> = {
   'focusCanvas.findBar.next': 'Suivant (Entrée)',
   'focusCanvas.findBar.close': 'Fermer (Échap)',
 
-  // SiteInfoCard
+  // SiteInfoCard — libellés de permission (popover ET page de réglages par site)
   'focusCanvas.siteInfo.permissionMedia': 'Caméra & micro',
+  'focusCanvas.siteInfo.permissionCamera': 'Caméra',
+  'focusCanvas.siteInfo.permissionMicrophone': 'Microphone',
   'focusCanvas.siteInfo.permissionGeolocation': 'Localisation',
   'focusCanvas.siteInfo.permissionNotifications': 'Notifications',
-  'focusCanvas.siteInfo.stateAsk': 'Réglage global',
+  'focusCanvas.siteInfo.permissionMidi': 'Appareils MIDI',
+  'focusCanvas.siteInfo.permissionClipboard': 'Presse-papiers',
+  'focusCanvas.siteInfo.permissionFileSystem': 'Accès aux fichiers',
+  'focusCanvas.siteInfo.permissionSound': 'Sons',
+  'focusCanvas.siteInfo.permissionCookies': 'Cookies et données des sites',
+  'focusCanvas.siteInfo.permissionImages': 'Images',
+  'focusCanvas.siteInfo.permissionJavascript': 'JavaScript',
+  'focusCanvas.siteInfo.permissionPopups': 'Popups et redirections',
+  'focusCanvas.siteInfo.permissionAutoDownloads': 'Téléchargements automatiques',
+  'focusCanvas.siteInfo.permissionInsecureContent': 'Contenu non sécurisé',
+  'focusCanvas.siteInfo.stateAsk': 'Demander (par défaut)',
   'focusCanvas.siteInfo.stateAllow': 'Autoriser',
   'focusCanvas.siteInfo.stateBlock': 'Bloquer',
   'focusCanvas.siteInfo.notHttp':
     'Cette page n’est pas servie via http(s) — aucune information de site.',
-  'focusCanvas.siteInfo.securedConnection': 'Connexion sécurisée',
-  'focusCanvas.siteInfo.unsecuredConnection': 'Connexion non sécurisée',
+  'focusCanvas.siteInfo.securedConnection': 'La connexion est sécurisée',
+  'focusCanvas.siteInfo.unsecuredConnection': 'La connexion n’est pas sécurisée',
   'focusCanvas.siteInfo.showCert': 'Voir le certificat',
   'focusCanvas.siteInfo.permissionsHeading': 'Autorisations pour ce site',
+  'focusCanvas.siteInfo.recentlyUsed': 'Récemment utilisés',
+  'focusCanvas.siteInfo.resetPermission': 'Réinitialiser l’autorisation',
+  'focusCanvas.siteInfo.cookiesAndSiteData': 'Cookies et données des sites',
+  'focusCanvas.siteInfo.siteSettings': 'Paramètres des sites',
+  // Vue détail « La connexion est sécurisée »
+  'focusCanvas.siteInfo.securityDetailBody':
+    'Les informations échangées avec ce site (identifiants, moyens de paiement) restent chiffrées pendant leur transport, ce qui empêche un tiers de les intercepter en clair.',
+  'focusCanvas.siteInfo.securityDetailBodyInsecure':
+    'Les informations échangées avec ce site circulent SANS chiffrement — évitez d’y saisir des identifiants ou des moyens de paiement.',
+  'focusCanvas.siteInfo.learnMore': 'En savoir plus',
+  // Vue détail « Cookies et données des sites »
+  'focusCanvas.siteInfo.cookiesDetailBody':
+    'Un site utilise ses cookies pour vous reconnaître d’une visite à l’autre (connexion conservée, préférences). Le réglage général se change dans les paramètres du navigateur.',
+  'focusCanvas.siteInfo.manageDeviceData': 'Gérer les données des sites sur l’appareil',
+  'focusCanvas.siteInfo.sitesAllowedCount_one': '{{count}} site autorisé',
+  'focusCanvas.siteInfo.sitesAllowedCount_other': '{{count}} sites autorisés',
 
   // PermissionPromptRoot — invite Autoriser/Bloquer (caméra/micro, localisation, notifications)
   'focusCanvas.permissionPrompt.wantsMedia': 'veut utiliser votre caméra et/ou votre micro',
+  'focusCanvas.permissionPrompt.wantsCamera': 'veut utiliser votre caméra',
+  'focusCanvas.permissionPrompt.wantsMicrophone': 'veut utiliser votre micro',
   'focusCanvas.permissionPrompt.wantsGeolocation': 'veut connaître votre position',
   'focusCanvas.permissionPrompt.wantsNotifications': 'veut vous envoyer des notifications',
+  'focusCanvas.permissionPrompt.wantsMidi': 'veut accéder à vos appareils MIDI',
+  'focusCanvas.permissionPrompt.wantsClipboard': 'veut lire le contenu de votre presse-papiers',
+  'focusCanvas.permissionPrompt.wantsFileSystem': 'veut accéder à des fichiers sur votre appareil',
   'focusCanvas.permissionPrompt.block': 'Bloquer',
   'focusCanvas.permissionPrompt.allow': 'Autoriser',
 

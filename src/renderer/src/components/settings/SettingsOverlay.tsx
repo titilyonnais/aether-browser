@@ -6,21 +6,23 @@
  */
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  Camera,
+  ArrowLeft,
   Check,
+  ChevronDown,
   ChevronLeft,
+  ChevronRight,
   Cloud,
   Compass,
   Database,
   ExternalLink,
   FolderOpen,
   Gauge,
+  Globe,
   HardDrive,
   Image as ImageIcon,
   Info,
   KeyRound,
   Languages,
-  MapPin,
   MonitorCog,
   Palette,
   Pencil,
@@ -30,16 +32,16 @@ import {
   RotateCcw,
   Search,
   Shield,
-  ShieldAlert,
   Trash2,
   UserRound,
   Wand2,
-  X
+  X,
+  ZoomIn
 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { FlagState } from '@shared/ipc'
 import { SEARCH_ENGINES } from '@shared/intent'
-import { CHROME_URLS, FLAG_DEFS, SPELLCHECK_LANGUAGES } from '@shared/types'
+import { CHROME_URLS, FLAG_DEFS, SPELLCHECK_LANGUAGES, UI_SITE_PERMISSION_KINDS } from '@shared/types'
 import type {
   AccentId,
   ApiProviderKind,
@@ -50,6 +52,7 @@ import type {
   Profile,
   SearchEngineId,
   SettingsPatch,
+  SiteDataGroup,
   SitePermissionKind,
   SitePermissionOverride,
   SitePermissionState,
@@ -61,6 +64,7 @@ import { Kbd } from '@/components/ui/Kbd'
 import { MiniSwitch } from '@/components/ui/MiniSwitch'
 import { ProfileAvatar } from '@/components/ui/ProfileAvatar'
 import { Select } from '@/components/ui/Select'
+import { Toggle } from '@/components/ui/Toggle'
 import { useT } from '@/i18n/useT'
 import {
   clearProfileAvatar,
@@ -73,6 +77,7 @@ import {
 } from '@/lib/actions'
 import { BACKGROUND_PRESETS, backgroundPresetCss } from '@/lib/backgroundPresets'
 import { extractDominantColor } from '@/lib/dominantColor'
+import { PERMISSION_LABELS } from '@/lib/sitePermissionLabels'
 import { cn, formatBytes } from '@/lib/utils'
 import { useMuseStore } from '@/stores/muse'
 import { usePagesStore } from '@/stores/pages'
@@ -96,6 +101,8 @@ type Section =
   | 'extensions'
   | 'reinitialiser'
   | 'apropos'
+  | 'all-sites'
+  | 'site-details'
 
 const SECTIONS: readonly Section[] = [
   'ia',
@@ -113,6 +120,15 @@ const SECTIONS: readonly Section[] = [
   'apropos'
 ]
 
+/** Sections atteignables uniquement par relais direct (bouton dédié, bulle
+ * de site) — jamais dans `SECTIONS` (qui pilote la nav visible/recherche),
+ * mais la garde de `SettingsPanel` doit les accepter tout de même. */
+const HIDDEN_SECTIONS: readonly Section[] = ['all-sites', 'site-details']
+
+function isKnownSection(id: string | null): id is Section {
+  return (SECTIONS as readonly string[]).includes(id ?? '') || (HIDDEN_SECTIONS as readonly string[]).includes(id ?? '')
+}
+
 export function SettingsOverlay() {
   const open = useUiStore((s) => s.overlay === 'settings')
   return <AnimatePresence>{open && <SettingsPanel />}</AnimatePresence>
@@ -122,7 +138,7 @@ function SettingsPanel() {
   const t = useT()
   const requested = useUiStore((s) => s.settingsSection)
   const pendingRelaunch = useUiStore((s) => s.pendingRelaunch)
-  const initial = (SECTIONS as readonly string[]).includes(requested ?? '') ? (requested as Section) : 'ia'
+  const initial = isKnownSection(requested) ? requested : 'ia'
   const [section, setSection] = useState<Section>(initial)
   const [navQuery, setNavQuery] = useState('')
   const close = (): void => useUiStore.getState().closeOverlay()
@@ -131,9 +147,7 @@ function SettingsPanel() {
   // alors que le panneau est DÉJÀ affiché, `requested` change mais le state
   // local ne suivait pas (seul le montage initial le lisait). On le resynchronise.
   useEffect(() => {
-    if (requested && (SECTIONS as readonly string[]).includes(requested)) {
-      setSection(requested as Section)
-    }
+    if (isKnownSection(requested)) setSection(requested)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requested])
 
@@ -328,6 +342,8 @@ function SettingsPanel() {
               {section === 'extensions' && <ExtensionsSection />}
               {section === 'reinitialiser' && <ResetSection />}
               {section === 'apropos' && <AboutSection />}
+              {section === 'all-sites' && <AllSitesSection />}
+              {section === 'site-details' && <SiteDetailsSection />}
             </div>
           </div>
         </div>
@@ -1267,6 +1283,17 @@ function PrivacySection() {
 
       <SitePermissionsBlock />
 
+      <Block title={t('settings.privacy.allSitesTitle')} hint={t('settings.privacy.allSitesHint')}>
+        <button
+          type="button"
+          onClick={() => useUiStore.getState().openOverlay('settings', { section: 'all-sites' })}
+          className="flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-4 py-2 text-[12px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink"
+        >
+          <Globe size={12} strokeWidth={1.8} />
+          {t('settings.privacy.allSitesButton')}
+        </button>
+      </Block>
+
       <Block title={t('settings.privacy.securityTitle')}>
         <div className="space-y-1">
           <Toggle
@@ -1303,22 +1330,14 @@ function PrivacySection() {
   )
 }
 
-const SITE_PERMISSION_ICONS: Record<SitePermissionKind, typeof Camera> = {
-  media: Camera,
-  geolocation: MapPin,
-  notifications: ShieldAlert
-}
-const SITE_PERMISSION_LABEL_KEYS: Record<SitePermissionKind, string> = {
-  media: 'focusCanvas.siteInfo.permissionMedia',
-  geolocation: 'focusCanvas.siteInfo.permissionGeolocation',
-  notifications: 'focusCanvas.siteInfo.permissionNotifications'
-}
-
 /** Vue d'ensemble de toutes les autorisations de site accordées/bloquées
- * explicitement (caméra/micro, localisation, notifications) — ce que
+ * explicitement (les 14 catégories de `SitePermissionKind`) — ce que
  * `SiteInfoCard.tsx` (bulle « informations du site ») écrit une origine à la
  * fois, listé ici tous profils confondus… non, seulement le profil ACTIF
- * (`sitePermissionsRepo.listByProfile`), comme le reste de Réglages. */
+ * (`sitePermissionsRepo.listByProfile`), comme le reste de Réglages.
+ * `state === 'ask'` est exclu : depuis `touchUsed`, ces lignes ne signalent
+ * qu'un usage passé (« Récemment utilisés » dans la bulle), pas une
+ * surcharge explicite — elles n'ont rien à faire dans cette vue. */
 function SitePermissionsBlock() {
   const t = useT()
   const [overrides, setOverrides] = useState<SitePermissionOverride[] | null>(null)
@@ -1330,6 +1349,7 @@ function SitePermissionsBlock() {
   const grouped = useMemo(() => {
     const map = new Map<string, SitePermissionOverride[]>()
     for (const o of overrides ?? []) {
+      if (o.state === 'ask') continue
       const arr = map.get(o.origin)
       if (arr) arr.push(o)
       else map.set(o.origin, [o])
@@ -1365,12 +1385,12 @@ function SitePermissionsBlock() {
               </div>
               <div className="mt-1.5 space-y-1">
                 {rows.map((r) => {
-                  const Icon = SITE_PERMISSION_ICONS[r.kind]
+                  const { key: labelKey, icon: Icon } = PERMISSION_LABELS[r.kind]
                   return (
                     <div key={r.kind} className="flex items-center gap-2">
                       <Icon size={12} strokeWidth={1.8} className="shrink-0 text-ink-faint" />
                       <span className="min-w-0 flex-1 truncate text-[11px] text-ink-faint">
-                        {t(SITE_PERMISSION_LABEL_KEYS[r.kind])}
+                        {t(labelKey)}
                       </span>
                       <div className="w-24 shrink-0">
                         <Select
@@ -1391,6 +1411,222 @@ function SitePermissionsBlock() {
         </div>
       )}
     </Block>
+  )
+}
+
+// ─── Tous les sites (registre de données par site, photo 6/7) ──────────────
+
+function cookieCountLabel(t: (key: string, vars?: Record<string, string | number>) => string, count: number): string {
+  return t(count === 1 ? 'settings.allSites.cookieCount_one' : 'settings.allSites.cookieCount_other', { count })
+}
+
+function AllSitesRow({ group }: { group: SiteDataGroup }) {
+  const t = useT()
+  const [expanded, setExpanded] = useState(false)
+
+  const openDetails = (): void => {
+    const origin = group.origins[0]?.origin
+    if (!origin) return
+    useUiStore.getState().setSiteDetailsOrigin(origin)
+    useUiStore.getState().openOverlay('settings', { section: 'site-details' })
+  }
+
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02]">
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim"
+        >
+          {expanded ? <ChevronDown size={13} strokeWidth={1.8} /> : <ChevronRight size={13} strokeWidth={1.8} />}
+        </button>
+        <Globe size={13} strokeWidth={1.8} className="shrink-0 text-ink-faint" />
+        <button
+          type="button"
+          onClick={openDetails}
+          className="min-w-0 flex-1 truncate text-left text-[12.5px] text-ink hover:underline"
+        >
+          {group.registrableDomain}
+        </button>
+        <span className="shrink-0 text-[11px] text-ink-faint">{formatBytes(group.totalBytes)}</span>
+        <span className="shrink-0 text-[11px] text-ink-faint">{cookieCountLabel(t, group.totalCookies)}</span>
+      </div>
+      {expanded && (
+        <div className="space-y-1.5 border-t border-white/[0.06] px-3 py-2.5 pl-11">
+          {group.origins.map((o) => (
+            <div key={o.origin} className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-faint">{o.origin}</span>
+              <span className="shrink-0 text-[10.5px] text-ink-faint">{formatBytes(o.usageBytes)}</span>
+              <span className="shrink-0 text-[10.5px] text-ink-faint">{cookieCountLabel(t, o.cookieCount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AllSitesSection() {
+  const t = useT()
+  const [groups, setGroups] = useState<SiteDataGroup[] | null>(null)
+
+  useEffect(() => {
+    void window.aether.siteRegistry.list().then(setGroups)
+  }, [])
+
+  return (
+    <div className="space-y-7">
+      <Block title={t('settings.allSites.heading')} hint={t('settings.allSites.hint')}>
+        {groups === null ? null : groups.length === 0 ? (
+          <p className="text-[11.5px] text-ink-faint">{t('settings.allSites.empty')}</p>
+        ) : (
+          <div className="space-y-1.5">
+            {groups.map((g) => (
+              <AllSitesRow key={g.registrableDomain} group={g} />
+            ))}
+          </div>
+        )}
+      </Block>
+    </div>
+  )
+}
+
+// ─── Page de réglages complète d'un site (15 catégories) ───────────────────
+
+function SiteDetailsSection() {
+  const t = useT()
+  const origin = useUiStore((s) => s.siteDetailsOrigin)
+  const [group, setGroup] = useState<SiteDataGroup | null>(null)
+  const [permissions, setPermissions] = useState<Partial<Record<SitePermissionKind, SitePermissionState>>>({})
+  const [zoomPercent, setZoomPercent] = useState<number | null>(null)
+
+  useEffect(() => {
+    setGroup(null)
+    setPermissions({})
+    setZoomPercent(null)
+    if (!origin) return
+    void window.aether.siteRegistry.detail(origin).then(setGroup)
+    void window.aether.sitePermissions.list().then((rows) => {
+      const map: Partial<Record<SitePermissionKind, SitePermissionState>> = {}
+      for (const r of rows) if (r.origin === origin) map[r.kind] = r.state
+      setPermissions(map)
+    })
+    void window.aether.siteZoom.percent(origin).then(setZoomPercent)
+  }, [origin])
+
+  if (!origin) {
+    return (
+      <div className="space-y-7">
+        <Block title={t('settings.siteDetails.permissionsHeading')}>
+          <p className="text-[11.5px] text-ink-faint">{t('settings.siteDetails.noOrigin')}</p>
+        </Block>
+      </div>
+    )
+  }
+
+  const setPermission = async (kind: SitePermissionKind, state: SitePermissionState): Promise<void> => {
+    await window.aether.sitePermissions.set(origin, kind, state)
+    setPermissions((prev) => ({ ...prev, [kind]: state }))
+  }
+
+  const clearData = async (): Promise<void> => {
+    const origins = group && group.origins.length > 0 ? group.origins.map((o) => o.origin) : [origin]
+    await Promise.all(origins.map((o) => window.aether.site.clearOriginData(o)))
+    useUiStore.getState().toast(t('settings.siteDetails.cleared'))
+    setGroup(await window.aether.siteRegistry.detail(origin))
+  }
+
+  const resetPermissions = async (): Promise<void> => {
+    await window.aether.sitePermissions.removeOrigin(origin)
+    setPermissions({})
+  }
+
+  const resetZoom = async (): Promise<void> => {
+    await window.aether.siteZoom.reset(origin)
+    setZoomPercent(await window.aether.siteZoom.percent(origin))
+  }
+
+  return (
+    <div className="space-y-7">
+      <button
+        type="button"
+        onClick={() => useUiStore.getState().openOverlay('settings', { section: 'confidentialite' })}
+        className="flex items-center gap-1.5 text-[11.5px] text-ink-faint transition-colors hover:text-ink-dim"
+      >
+        <ArrowLeft size={12} strokeWidth={1.8} />
+        {t('settings.siteDetails.back')}
+      </button>
+
+      <div className="flex items-center gap-2">
+        <Globe size={15} strokeWidth={1.8} className="text-glacier" />
+        <p className="min-w-0 flex-1 truncate font-mono text-[13px] text-ink">{origin}</p>
+      </div>
+
+      <Block title={t('settings.siteDetails.cookiesHeading')}>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[12px] text-ink-dim">
+            {formatBytes(group?.totalBytes ?? 0)} · {cookieCountLabel(t, group?.totalCookies ?? 0)}
+          </span>
+          <button
+            type="button"
+            onClick={() => void clearData()}
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-4 py-2 text-[12px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink"
+          >
+            <Trash2 size={12} strokeWidth={1.8} />
+            {t('settings.siteDetails.clearData')}
+          </button>
+        </div>
+      </Block>
+
+      <Block title={t('settings.siteDetails.permissionsHeading')}>
+        <div className="space-y-1">
+          {UI_SITE_PERMISSION_KINDS.map((kind) => {
+            const { key: labelKey, icon: Icon } = PERMISSION_LABELS[kind]
+            return (
+              <div key={kind} className="flex items-center gap-2.5 py-1">
+                <Icon size={13} strokeWidth={1.8} className="shrink-0 text-ink-faint" />
+                <span className="min-w-0 flex-1 truncate text-[12px] text-ink-dim">{t(labelKey)}</span>
+                <div className="w-40 shrink-0">
+                  <Select
+                    value={permissions[kind] ?? 'ask'}
+                    onChange={(v) => void setPermission(kind, v as SitePermissionState)}
+                    options={[
+                      { value: 'ask', label: t('focusCanvas.siteInfo.stateAsk') },
+                      { value: 'allow', label: t('focusCanvas.siteInfo.stateAllow') },
+                      { value: 'block', label: t('focusCanvas.siteInfo.stateBlock') }
+                    ]}
+                  />
+                </div>
+              </div>
+            )
+          })}
+          <div className="flex items-center gap-2.5 py-1">
+            <ZoomIn size={13} strokeWidth={1.8} className="shrink-0 text-ink-faint" />
+            <span className="min-w-0 flex-1 truncate text-[12px] text-ink-dim">
+              {t('settings.siteDetails.zoomLabel')}
+            </span>
+            <span className="shrink-0 text-[11.5px] text-ink-faint">
+              {zoomPercent === null ? t('settings.siteDetails.zoomUnavailable') : `${zoomPercent}%`}
+            </span>
+            <button
+              type="button"
+              onClick={() => void resetZoom()}
+              className="shrink-0 rounded-md px-2 py-1 text-[11px] text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim"
+            >
+              {t('settings.siteDetails.zoomReset')}
+            </button>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void resetPermissions()}
+          className="mt-3 rounded-full border border-white/[0.1] bg-white/[0.03] px-4 py-2 text-[12px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink"
+        >
+          {t('settings.siteDetails.resetAll')}
+        </button>
+      </Block>
+    </div>
   )
 }
 
@@ -2479,41 +2715,6 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
       <span className="w-24 shrink-0 text-[11px] text-ink-faint">{label}</span>
       <div className="flex min-w-0 flex-1">{children}</div>
     </div>
-  )
-}
-
-function Toggle({
-  label,
-  hint,
-  checked,
-  onChange
-}: {
-  label: string
-  hint?: string
-  checked: boolean
-  onChange: (v: boolean) => void
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left transition-colors hover:bg-white/[0.02]"
-    >
-      <span className="min-w-0 flex-1">
-        {label && <span className="block text-[12.5px] text-ink-dim">{label}</span>}
-        {hint && <span className="block text-[10.5px] text-ink-faint">{hint}</span>}
-      </span>
-      <span
-        className={cn(
-          'flex h-[18px] w-8 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200',
-          checked ? 'justify-end bg-glacier/80' : 'justify-start bg-toggle-track'
-        )}
-      >
-        <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-white" />
-      </span>
-    </button>
   )
 }
 

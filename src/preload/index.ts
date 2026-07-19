@@ -155,13 +155,27 @@ const api: AetherApi = {
     certificateDetail: (id: PageId) => ipcRenderer.invoke(CH.siteCertificateDetail, id),
     exportCertificate: (id: PageId) => ipcRenderer.invoke(CH.siteCertificateExport, id),
     showCertificate: (id: PageId) => ipcRenderer.send(CH.siteShowCertificate, id),
-    onCertificateRequested: (cb) => on(CH.siteCertificateRequested, cb)
+    onCertificateRequested: (cb) => on(CH.siteCertificateRequested, cb),
+    showDataManager: (id: PageId) => ipcRenderer.send(CH.siteShowDataManager, id),
+    onDataManagerRequested: (cb) => on(CH.siteDataManagerRequested, cb),
+    showSiteSettings: (id: PageId) => ipcRenderer.send(CH.siteShowSiteSettings, id),
+    onSiteSettingsRequested: (cb) => on(CH.siteSettingsRequested, cb),
+    getEmbeddedOrigins: (id: PageId) => ipcRenderer.invoke(CH.siteEmbeddedOrigins, id),
+    clearOriginData: (origin: string) => ipcRenderer.invoke(CH.siteClearOriginData, origin)
   },
   sitePermissions: {
     list: () => ipcRenderer.invoke(CH.sitePermissionsList),
     set: (origin: string, kind: SitePermissionKind, state: SitePermissionState) =>
       ipcRenderer.invoke(CH.sitePermissionsSet, origin, kind, state),
     removeOrigin: (origin: string) => ipcRenderer.invoke(CH.sitePermissionsRemoveOrigin, origin)
+  },
+  siteRegistry: {
+    list: () => ipcRenderer.invoke(CH.siteRegistryList),
+    detail: (origin: string) => ipcRenderer.invoke(CH.siteRegistryDetail, origin)
+  },
+  siteZoom: {
+    percent: (origin: string) => ipcRenderer.invoke(CH.siteZoomPercent, origin),
+    reset: (origin: string) => ipcRenderer.invoke(CH.siteResetZoom, origin)
   },
   intent: {
     classify: (input: string) => ipcRenderer.invoke(CH.intentClassify, input)

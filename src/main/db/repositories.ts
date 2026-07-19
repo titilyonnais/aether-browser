@@ -929,6 +929,18 @@ export const sitePermissionsRepo = {
     return out
   },
 
+  /** Kinds déjà UTILISÉS (au moins une fois accordés) pour cette origine —
+   * `last_used_at` non nul, indépendamment de l'existence d'une surcharge
+   * active (un site utilisant le réglage global n'a pas forcément de ligne
+   * `state` autre que 'ask'). Pilote l'affichage conditionnel des lignes de
+   * permission du popover (n'afficher que ce que le site a réellement demandé). */
+  usedKinds(profileId: ProfileId, origin: string): string[] {
+    const rows = getDb()
+      .prepare('SELECT kind FROM site_permissions WHERE profile_id = ? AND origin = ? AND last_used_at IS NOT NULL')
+      .all(profileId, origin) as { kind: string }[]
+    return rows.map((r) => r.kind)
+  },
+
   /** Lit une seule surcharge, ou null si absente (→ suit le réglage global). */
   get(profileId: ProfileId, origin: string, kind: SitePermissionKind): SitePermissionState | null {
     const row = getDb()
@@ -939,7 +951,7 @@ export const sitePermissionsRepo = {
 
   /** Toutes les surcharges de ce profil, toutes origines confondues — pour le
    * panneau « Autorisations par site » de Réglages (le regroupement par
-   * origine se fait côté renderer, au plus 3 lignes par origine). */
+   * origine se fait côté renderer). */
   listByProfile(
     profileId: ProfileId
   ): { origin: string; kind: SitePermissionKind; state: SitePermissionState; updatedAt: number }[] {
@@ -949,12 +961,41 @@ export const sitePermissionsRepo = {
     return rows.map((r) => ({ origin: r.origin, kind: r.kind, state: r.state, updatedAt: r.updated_at }))
   },
 
-  /** 'ask' = pas de surcharge → supprime la ligne pour rester au réglage global. */
+  /** Marque un kind comme réellement UTILISÉ pour cette origine (accordé, pas
+   * seulement vérifié) — appelé depuis `webSession.ts` à chaque octroi effectif,
+   * qu'il vienne d'une surcharge ou du réglage global. UPSERT : crée la ligne
+   * en `state='ask'` si absente (site jamais personnalisé mais déjà vu), sinon
+   * ne touche que `last_used_at`. C'est ce qui alimente « Récemment utilisés »
+   * et permet d'afficher une ligne de permission SANS que le site ait de
+   * surcharge active (cas du réglage global déjà activé). */
+  touchUsed(profileId: ProfileId, origin: string, kind: SitePermissionKind): void {
+    const now = Date.now()
+    getDb()
+      .prepare(
+        `INSERT INTO site_permissions (id, profile_id, origin, kind, state, updated_at, last_used_at)
+         VALUES (?, ?, ?, ?, 'ask', ?, ?)
+         ON CONFLICT(profile_id, origin, kind) DO UPDATE SET last_used_at = excluded.last_used_at`
+      )
+      .run(randomUUID(), profileId, origin, kind, now, now)
+  },
+
+  /** 'ask' = pas de surcharge → suit le réglage global. Ne supprime la ligne
+   * QUE si elle ne porte aucun `last_used_at` connu (sinon la case « Récemment
+   * utilisés » disparaîtrait à tort après une simple réinitialisation — Chrome
+   * garde le site dans sa liste après un reset, seule la valeur redevient
+   * « Demander »/le défaut). */
   set(profileId: ProfileId, origin: string, kind: SitePermissionKind, state: SitePermissionState): void {
     if (state === 'ask') {
       getDb()
-        .prepare('DELETE FROM site_permissions WHERE profile_id = ? AND origin = ? AND kind = ?')
+        .prepare(
+          'DELETE FROM site_permissions WHERE profile_id = ? AND origin = ? AND kind = ? AND last_used_at IS NULL'
+        )
         .run(profileId, origin, kind)
+      getDb()
+        .prepare(
+          'UPDATE site_permissions SET state = ?, updated_at = ? WHERE profile_id = ? AND origin = ? AND kind = ?'
+        )
+        .run('ask', Date.now(), profileId, origin, kind)
       return
     }
     getDb()
@@ -966,8 +1007,10 @@ export const sitePermissionsRepo = {
       .run(randomUUID(), profileId, origin, kind, state, Date.now())
   },
 
-  /** Réinitialise TOUTES les surcharges (les 3 kinds) d'une origine — bouton
-   * « réinitialiser ce site » du panneau Réglages. */
+  /** Réinitialise TOUTES les surcharges d'une origine (tous les kinds connus,
+   * pas seulement les 3 historiques) — bouton « Réinitialiser les
+   * autorisations » du panneau Réglages/du popover. Ne touche jamais aux
+   * données stockées (cookies/stockage) — action volontairement séparée. */
   removeOrigin(profileId: ProfileId, origin: string): void {
     getDb().prepare('DELETE FROM site_permissions WHERE profile_id = ? AND origin = ?').run(profileId, origin)
   }

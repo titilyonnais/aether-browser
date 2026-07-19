@@ -18,6 +18,15 @@ export const overlays: Record<string, string> = {
   'overlays.certificate.loading': 'Chargement du certificat…',
   'overlays.certificate.unavailable': 'Aucune information de certificat disponible pour cette page.',
 
+  // Données des sites sur l'appareil
+  'overlays.siteData.title': 'Données des sites sur l’appareil',
+  'overlays.siteData.mainSite': 'Ce site',
+  'overlays.siteData.embeddedSites': 'Sites intégrés à cette page',
+  'overlays.siteData.embeddedEmpty': 'Aucun contenu d’un autre site n’a été intégré à cette page.',
+  'overlays.siteData.clear': 'Supprimer',
+  'overlays.siteData.cleared': 'Données supprimées',
+  'overlays.siteData.confirmClear': 'Supprimer toutes les données stockées pour {{origin}} ?',
+
   // Téléchargements
   'overlays.downloads.title': 'Téléchargements',
   'overlays.downloads.linkCopied': 'Lien copié',

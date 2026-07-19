@@ -8,6 +8,7 @@ import { existsSync, statSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { CH } from '@shared/ipc'
+import { UI_SITE_PERMISSION_KINDS } from '@shared/types'
 import type {
   AppSettings,
   Bounds,
@@ -37,6 +38,7 @@ import type {
   ProfileId,
   ScreenRect,
   SettingsPatch,
+  SiteDataGroup,
   SiteInfo,
   SitePermissionKind,
   SitePermissionOverride,
@@ -51,6 +53,7 @@ import type { AiRouter } from './ai/router'
 import { avatarImageDataUrl, chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
 import { getCertificateDetail } from './certificates'
 import { getNewTabNews, getNewTabWeather, getSearchSuggestions, searchNewTabCities } from './newtab'
+import { invalidateSiteDataCache, listSiteDataGroups, registrableDomain, siteDataGroupFor } from './siteDataRegistry'
 import {
   downloadsRepo,
   favoriteFoldersRepo,
@@ -103,7 +106,7 @@ import {
 } from './ipcSchemas'
 import { cleanupPreviews, previewsDirSize } from './previews'
 import { isQuitting, markQuitting } from './quitState'
-import { chooseDirectory, clearBrowsingData } from './sessionActions'
+import { chooseDirectory, clearBrowsingData, clearOriginData } from './sessionActions'
 import {
   applySettingsPatch,
   getActiveProfileId,
@@ -361,15 +364,19 @@ function siteInfoForPage(views: ViewManager, id: PageId): SiteInfo | null {
   }
   if (!/^https?:$/.test(url.protocol)) return null
   const isHttps = url.protocol === 'https:'
-  const overrides = sitePermissionsRepo.forOrigin(activeProfileOf(views), url.origin)
+  const profileId = activeProfileOf(views)
+  const overrides = sitePermissionsRepo.forOrigin(profileId, url.origin)
+  const permissions = {} as Record<SitePermissionKind, SitePermissionState>
+  for (const kind of UI_SITE_PERMISSION_KINDS) {
+    permissions[kind] = (overrides[kind] as SitePermissionState) ?? 'ask'
+  }
+  permissions.media = (overrides.media as SitePermissionState) ?? 'ask'
+  const usedKinds = sitePermissionsRepo.usedKinds(profileId, url.origin) as SitePermissionKind[]
   return {
     origin: url.origin,
     isHttps,
-    permissions: {
-      media: (overrides.media as SitePermissionState) ?? 'ask',
-      geolocation: (overrides.geolocation as SitePermissionState) ?? 'ask',
-      notifications: (overrides.notifications as SitePermissionState) ?? 'ask'
-    }
+    permissions,
+    usedKinds
   }
 }
 
@@ -1421,6 +1428,45 @@ export function registerIpc(router: AiRouter): void {
     return sitePermissionsRepo.listByProfile(profileId)
   })
 
+  // ─── Données des sites sur l'appareil (SiteDataOverlay.tsx) ────────────────
+
+  ipcMain.handle(CH.siteEmbeddedOrigins, (e, id: PageId): string[] =>
+    resolveWindowContext(e).views.getEmbeddedOrigins(id)
+  )
+
+  ipcMain.handle(CH.siteClearOriginData, async (e, origin: string): Promise<void> => {
+    const { views } = resolveWindowContext(e)
+    const partition = views.activePartition()
+    await clearOriginData(partition, origin)
+    invalidateSiteDataCache(partition)
+  })
+
+  // ─── Registre de données par site (« Tous les sites ») ─────────────────────
+
+  ipcMain.handle(CH.siteRegistryList, (e): Promise<SiteDataGroup[]> =>
+    listSiteDataGroups(resolveWindowContext(e).views.activePartition())
+  )
+
+  ipcMain.handle(CH.siteRegistryDetail, (e, origin: string): Promise<SiteDataGroup | null> => {
+    let hostname: string
+    try {
+      hostname = new URL(String(origin)).hostname
+    } catch {
+      return Promise.resolve(null)
+    }
+    return siteDataGroupFor(resolveWindowContext(e).views.activePartition(), registrableDomain(hostname))
+  })
+
+  // ─── Niveaux de zoom par site ───────────────────────────────────────────────
+
+  ipcMain.handle(CH.siteZoomPercent, (e, origin: string): number | null =>
+    resolveWindowContext(e).views.findLiveZoomPercent(String(origin))
+  )
+
+  ipcMain.handle(CH.siteResetZoom, (e, origin: string): void => {
+    resolveWindowContext(e).views.resetZoomForOrigin(String(origin))
+  })
+
   // ─── Lecteur de certificat (overlay pleine fenêtre) ────────────────────────
 
   ipcMain.handle(CH.siteCertificateDetail, (e, id: PageId): CertificateDetail | null => {
@@ -1471,6 +1517,30 @@ export function registerIpc(router: AiRouter): void {
     hidePopoverWindow(win)
     sendTo(win, CH.popoverClosed)
     sendTo(win, CH.siteCertificateRequested, id)
+  })
+
+  // Même relais, pour « Gérer les données des sites sur l'appareil ».
+  ipcMain.on(CH.siteShowDataManager, (e, id: PageId) => {
+    const { win } = resolveWindowContext(e)
+    hidePopoverWindow(win)
+    sendTo(win, CH.popoverClosed)
+    sendTo(win, CH.siteDataManagerRequested, id)
+  })
+
+  // « Paramètres des sites » : la section Réglages ciblée est indexée par
+  // ORIGINE (pas par PageId, pour être atteignable aussi depuis « Tous les
+  // sites », qui n'a pas de page ouverte) — résolue ici avant le relais.
+  ipcMain.on(CH.siteShowSiteSettings, (e, id: PageId) => {
+    const { win } = resolveWindowContext(e)
+    const row = pagesRepo.get(id)
+    hidePopoverWindow(win)
+    sendTo(win, CH.popoverClosed)
+    if (!row) return
+    try {
+      sendTo(win, CH.siteSettingsRequested, new URL(row.url).origin)
+    } catch {
+      // URL invalide — rien à ouvrir.
+    }
   })
 
   // ─── Intention ─────────────────────────────────────────────────────────────

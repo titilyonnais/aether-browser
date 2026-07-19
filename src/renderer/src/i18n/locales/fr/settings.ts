@@ -175,7 +175,31 @@ export const settings: Record<string, string> = {
     "Choix mémorisés site par site (via l'invite de permission ou la bulle d'informations du site) — remplacent le réglage global ci-dessus pour ces origines.",
   'settings.privacy.sitePermissionsEmpty': 'Aucune autorisation particulière mémorisée pour le moment.',
   'settings.privacy.sitePermissionsReset': 'Réinitialiser ce site',
+  'settings.privacy.allSitesTitle': 'Tous les sites',
+  'settings.privacy.allSitesHint':
+    "Autorisations et données enregistrées, site par site — cookies, images, JavaScript, popups, zoom, et plus.",
+  'settings.privacy.allSitesButton': 'Afficher les autorisations et les données enregistrées',
   'settings.privacy.securityTitle': 'Sécurité & pistage',
+
+  // Tous les sites (Réglages > Confidentialité > bouton dédié)
+  'settings.allSites.heading': 'Tous les sites',
+  'settings.allSites.hint': 'Origines ayant stocké des cookies ou des données dans ce profil.',
+  'settings.allSites.empty': 'Aucune donnée de site enregistrée pour le moment.',
+  'settings.allSites.cookieCount_one': '{{count}} cookie',
+  'settings.allSites.cookieCount_other': '{{count}} cookies',
+
+  // Page de réglages complète d'un site (15 catégories)
+  'settings.siteDetails.back': 'Confidentialité et sécurité',
+  'settings.siteDetails.noOrigin': 'Aucun site sélectionné.',
+  'settings.siteDetails.cookiesHeading': 'Cookies et données de site',
+  'settings.siteDetails.clearData': 'Supprimer les données',
+  'settings.siteDetails.cleared': 'Données supprimées',
+  'settings.siteDetails.permissionsHeading': 'Autorisations',
+  'settings.siteDetails.resetAll': 'Réinitialiser les autorisations',
+  'settings.siteDetails.zoomLabel': 'Niveaux de zoom',
+  'settings.siteDetails.zoomReset': 'Réinitialiser',
+  'settings.siteDetails.zoomUnavailable': '—',
+  'settings.siteDetails.zoomNoTab': 'Ouvrez un onglet sur ce site pour voir son zoom actuel.',
   'settings.privacy.doNotTrack': 'Envoyer « Do Not Track »',
   'settings.privacy.doNotTrackHint': "Ajoute l'en-tête DNT à vos requêtes",
   'settings.privacy.httpsOnly': 'Toujours utiliser HTTPS',

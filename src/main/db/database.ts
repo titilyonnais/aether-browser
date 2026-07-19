@@ -403,4 +403,12 @@ CREATE INDEX IF NOT EXISTS idx_search_queries_profile ON search_queries(profile_
     database.exec('CREATE INDEX IF NOT EXISTS idx_favorites_lookup ON favorites(profile_id, url)')
     database.pragma('user_version = 10')
   }
+  if (version < 11) {
+    // Une ligne `site_permissions` ne veut plus dire seulement « surcharge
+    // active » : elle sert aussi à savoir qu'un site A DÉJÀ UTILISÉ tel type
+    // de permission (façon « Récemment utilisés » de Chrome), même sans
+    // surcharge (cas du réglage global) — voir `sitePermissionsRepo.touchUsed`.
+    database.exec('ALTER TABLE site_permissions ADD COLUMN last_used_at INTEGER')
+    database.pragma('user_version = 11')
+  }
 }
