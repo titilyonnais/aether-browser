@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.5] — 2026-07-19
+
+### Corrigé
+
+- **Sous-menu « Aide » (bas de liste) mal aligné** : depuis le passage du flyout en `position:absolute` (v0.53.4), le menu ne saute plus, mais un sous-menu bas de liste était remonté de force pour ne pas dépasser sous le menu — désaligné de la ligne cliquée, contrairement à « Rechercher et modifier » (haut de liste) qui, lui, s'alignait bien. Le flyout s'aligne désormais TOUJOURS sur la ligne cliquée : quand il descend plus bas que le menu racine, c'est la fenêtre popup qui s'agrandit vers le BAS pour le rendre entièrement visible — son haut restant épinglé, le menu racine ne bouge pas d'un pixel (toujours aucun saut).
+
 ## [0.53.4] — 2026-07-19
 
 ### Corrigé
