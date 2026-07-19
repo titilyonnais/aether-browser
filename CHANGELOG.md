@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.6] — 2026-07-19
+
+### Corrigé
+
+- **Bouton du menu principal (⋯) qui restait allumé et rouvrait le menu en boucle à la fermeture** : un signal asynchrone (`popover:onClosed`, ou un rebond de focus dû au redimensionnement natif du popup) repassait l'état du bouton à « fermé » ENTRE le `pointerdown` et le `click` du même clic, si bien que le `click` retombait sur la branche « ouvrir » et rouvrait aussitôt le menu — impossible à fermer, bouton bloqué en surbrillance. Ajout d'une garde : toute réouverture dans les 250 ms qui suivent une fermeture est ignorée (un vrai second clic délibéré est toujours plus lent). Casse la boucle quelle que soit la cause exacte de la course.
+
 ## [0.53.5] — 2026-07-19
 
 ### Corrigé

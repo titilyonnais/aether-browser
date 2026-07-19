@@ -500,13 +500,24 @@ function AppMenuButton() {
   const t = useT()
   const [open, setOpen] = useState(false)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
+  // Horodatage de la dernière FERMETURE — garde anti-réouverture immédiate.
+  // Course possible : un signal asynchrone (`popover:onClosed`, ou un rebond de
+  // focus provoqué par le redimensionnement natif du popup) repasse `open` à
+  // `false` ENTRE le `pointerdown` et le `click` du bouton, si bien que le
+  // `onClick` lit `open === false` et RÉOUVRE aussitôt (`show()`), laissant en
+  // prime le bouton bloqué en surbrillance. On ignore donc tout `show()` qui
+  // suivrait une fermeture de moins de 250ms — un vrai second clic délibéré est
+  // toujours plus lent que ça.
+  const closedAt = useRef(0)
 
   const close = (): void => {
+    closedAt.current = Date.now()
     setOpen(false)
     window.aether.popover.hide()
   }
 
   const show = (): void => {
+    if (Date.now() - closedAt.current < 250) return
     const el = buttonRef.current
     if (!el) return
     const r = el.getBoundingClientRect()
