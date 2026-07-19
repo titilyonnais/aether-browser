@@ -4,6 +4,13 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.1] — 2026-07-19
+
+### Corrigé
+
+- **DevTools ancrées qui s'ouvraient encore comme une vraie fenêtre à part** (avec sa propre barre de titre) : la vue DevTools était liée à `setDevToolsWebContents` avant même d'être attachée à la fenêtre ÆTHER — Electron l'ignorait silencieusement et retombait sur sa fenêtre interne détachée. Corrigé en attachant la vue d'abord.
+- **Scintillement résiduel du menu principal** : le `ResizeObserver` du popup se redéclenchait à chaque ouverture/fermeture de sous-menu même quand la taille finale ne changeait pas d'un pixel, provoquant un redimensionnement natif inutile (donc une recomposition visible de la fenêtre transparente) à chaque clic. Ignoré désormais quand les bornes calculées sont identiques aux bornes actuelles.
+
 ## [0.53.0] — 2026-07-18
 
 ### Ajouté

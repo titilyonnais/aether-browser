@@ -294,7 +294,29 @@ export function resizePopoverWindow(sourceWc: WebContents, width: number, height
     // rattrape en décalant tout le popup (donc le panneau déjà affiché)
     // vers la gauche au lieu de grandir en gardant sa position d'origine.
     const x = s.pinnedRightEdge !== null ? s.pinnedRightEdge - w : current.x
-    popup.setBounds(sanitizeToDisplay({ ...current, x, width: w, height: h }))
+    const next = sanitizeToDisplay({ ...current, x, width: w, height: h })
+    // Le ResizeObserver du renderer (PopoverRoot.tsx) se redéclenche à CHAQUE
+    // reflow (ex. ouvrir/fermer un sous-menu change `opacity`/`inert`, ce qui
+    // recalcule le layout même quand les dimensions FINALES ne bougent pas
+    // d'un pixel) — sans cette garde, `setBounds()` était rappelé avec des
+    // bornes strictement IDENTIQUES, et Windows recompose quand même toute la
+    // fenêtre transparente à chaque appel, même sans changement réel : un
+    // scintillement visible pour rien. On ignore un appel qui ne changerait
+    // concrètement rien.
+    if (
+      next.x === current.x &&
+      next.y === current.y &&
+      next.width === current.width &&
+      next.height === current.height
+    ) {
+      if (s.pendingShow) {
+        s.pendingShow = false
+        clearFallbackShow(s)
+        fadeWindowIn(popup)
+      }
+      return
+    }
+    popup.setBounds(next)
     if (s.pendingShow) {
       s.pendingShow = false
       clearFallbackShow(s)

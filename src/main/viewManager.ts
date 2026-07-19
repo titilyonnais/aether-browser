@@ -1103,13 +1103,28 @@ export class ViewManager {
     })
     this.devToolsViews.set(pageId, toolsView)
     this.devToolsDockSide.set(pageId, mode)
+
+    // ORDRE CRITIQUE : attacher la vue à la fenêtre AVANT `setDevToolsWebContents`.
+    // Testé et confirmé : appeler `setDevToolsWebContents` sur une
+    // `WebContentsView` encore orpheline (jamais ajoutée à un `contentView`)
+    // ne l'utilise PAS pour autant — Electron retombe silencieusement sur sa
+    // propre fenêtre interne détachée (avec sa propre barre de titre), comme
+    // si `mode` n'avait jamais été personnalisé. Lui donner déjà des bornes
+    // réelles (via les dernières bornes pleines connues) avant l'ouverture
+    // évite aussi un premier rendu à 0×0.
+    this.win.contentView.addChildView(toolsView)
+    this.devToolsAttached.add(pageId)
+    const last = this.fullBounds.get(pageId)
+    if (last) {
+      const [, toolsBounds] = splitBoundsForDock(last, mode)
+      toolsView.setBounds(this.sanitize(toolsBounds))
+    }
+
     wc.setDevToolsWebContents(toolsView.webContents)
     wc.openDevTools()
-    // La vue DevTools vient d'apparaître dans les maps ci-dessus : rejouer les
-    // dernières bornes PLEINES connues la partage immédiatement avec la page,
-    // sans attendre un futur `setBounds()` (le prochain ne viendrait qu'au
-    // prochain passage de la boucle rAF de mesure côté renderer).
-    const last = this.fullBounds.get(pageId)
+
+    // Rejoue maintenant le VRAI partage (page rétrécie + DevTools) — plus
+    // seulement les bornes des DevTools posées ci-dessus en avance.
     if (last) this.setBounds(pageId, last)
   }
 
