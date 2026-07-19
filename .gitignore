@@ -7,3 +7,6 @@ dist/
 *.local
 .vscode/*
 !.vscode/extensions.json
+
+# Éditeur / outillage local (configs de lancement, etc.)
+.claude/
