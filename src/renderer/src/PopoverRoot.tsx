@@ -126,7 +126,9 @@ export default function PopoverRoot() {
 
   return (
     <div key={contentNonce} ref={rootRef} className="inline-block">
-      {content.kind === 'site-info' && <SiteInfoCard pageId={content.pageId} locale={locale} />}
+      {content.kind === 'site-info' && (
+        <SiteInfoCard pageId={content.pageId} locale={locale} initialInfo={content.initialInfo} />
+      )}
       {content.kind === 'tab-preview' && (
         <TabPreviewCard pageId={content.pageId} showPreview={showPreview} locale={locale} />
       )}

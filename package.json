@@ -1,6 +1,6 @@
 {
   "name": "aether-browser",
-  "version": "0.53.10",
+  "version": "0.54.0",
   "description": "ÆTHER — un espace de pensée et d'action augmenté pour le web",
   "main": "out/main/index.js",
   "author": "ÆTHER",

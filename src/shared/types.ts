@@ -591,22 +591,63 @@ export type SitePermissionKind = 'media' | 'geolocation' | 'notifications'
 /** 'ask' = pas de surcharge, suit le réglage global du profil. */
 export type SitePermissionState = 'ask' | 'allow' | 'block'
 
-/** Détails d'un certificat TLS, capturés en observant la vérification (jamais modifiée). */
-export interface CertInfo {
-  subjectName: string
-  issuerName: string
-  /** Époque, en secondes (comme Electron les fournit). */
-  validStart: number
-  validExpiry: number
-  fingerprint: string
-}
-
 export interface SiteInfo {
   origin: string
   isHttps: boolean
-  /** null = http, ou aucune requête TLS observée pour cette origine dans cette session. */
-  cert: CertInfo | null
   permissions: Record<SitePermissionKind, SitePermissionState>
+}
+
+/** Principal X.509 (émetteur ou objet) — nom commun toujours présent,
+ * organisation/unité facultatives (beaucoup de certificats DV n'en portent pas). */
+export interface CertificatePrincipalDetail {
+  commonName: string
+  organization?: string
+  organizationUnit?: string
+}
+
+/** Un maillon de la chaîne de certification, du certificat visité jusqu'à la
+ * racine (voir `CertificateOverlay.tsx`, onglet Détails). */
+export interface CertificateChainLink {
+  commonName: string
+  organization?: string
+  isSelfSigned: boolean
+}
+
+/** Détail complet d'un certificat — calculé À LA DEMANDE (pas à chaque
+ * poignée de main TLS, coûteux inutilement) quand l'utilisateur ouvre
+ * `CertificateOverlay.tsx`. Champs absents plutôt que devinés quand
+ * l'information n'est pas fiablement disponible sans parsing ASN.1 manuel
+ * (ex. version X.509) — voir main/certificates.ts. */
+export interface CertificateDetail {
+  subject: CertificatePrincipalDetail
+  issuer: CertificatePrincipalDetail
+  serialNumber: string
+  validStart: number
+  validExpiry: number
+  /** Empreinte SHA-256 du certificat (`crypto.X509Certificate.fingerprint256` de Node). */
+  fingerprint: string
+  /** Empreinte SHA-256 de la clé publique (technique SPKI, comme Chrome). */
+  publicKeyFingerprint: string
+  signatureAlgorithm?: string
+  chain: CertificateChainLink[]
+  /** PEM — pour le bouton « Exporter… ». */
+  pem: string
+}
+
+/** Une ligne du panneau « Autorisations par site » (Réglages › Confidentialité). */
+export interface SitePermissionOverride {
+  origin: string
+  kind: SitePermissionKind
+  state: SitePermissionState
+  updatedAt: number
+}
+
+/** Poussé par `permissionPromptWindow.ts` vers sa propre fenêtre native
+ * (voir `PermissionPromptRoot.tsx`) — une demande de permission en attente. */
+export interface PermissionPromptContent {
+  requestId: string
+  origin: string
+  kind: SitePermissionKind
 }
 
 // ─── Popover flottant (fenêtre native) ─────────────────────────────────────
@@ -650,7 +691,12 @@ export type PopoverPlacement = 'below-right' | 'below-center' | 'below-left'
  * source du délai perçu comme « trop long » par rapport aux autres popups
  * (qui n'ont rien à charger de façon asynchrone). */
 export type PopoverContent =
-  | { kind: 'site-info' | 'tab-preview' | 'translate'; pageId: PageId }
+  // `initialInfo` (optionnel) : même raison que `favorites-folder` ci-dessus —
+  // `SiteInfoPopover.tsx` récupère déjà les infos par IPC AVANT d'ouvrir le
+  // popup (voir `PopoverShowRequest`), donc plus besoin d'attendre un aller-
+  // retour supplémentaire une fois affiché.
+  | { kind: 'site-info'; pageId: PageId; initialInfo: SiteInfo | null }
+  | { kind: 'tab-preview' | 'translate'; pageId: PageId }
   | { kind: 'favorites-folder'; folderId: string; folder: FavoriteFolder; items: Favorite[] }
   | { kind: 'app-menu' }
   | { kind: 'context-menu'; title?: string; rows: ContextMenuRow[] }
@@ -662,11 +708,18 @@ export type PopoverContent =
 /** Demande d'ouverture envoyée par la fenêtre principale. */
 export type PopoverShowRequest =
   | {
-      kind: 'site-info' | 'tab-preview' | 'translate'
+      kind: 'site-info'
       pageId: PageId
+      initialInfo: SiteInfo | null
       /** Rectangle du déclencheur (bouton, onglet…), coordonnées locales à la fenêtre principale. */
       anchor: LocalRect
       /** Où ancrer le popup par rapport au déclencheur. */
+      placement: PopoverPlacement
+    }
+  | {
+      kind: 'tab-preview' | 'translate'
+      pageId: PageId
+      anchor: LocalRect
       placement: PopoverPlacement
     }
   | {

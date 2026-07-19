@@ -10,8 +10,8 @@
  * lèverait une erreur) : chaque gestionnaire doit désormais résoudre LUI-MÊME
  * à quelle fenêtre appartient l'évènement reçu, via `resolveWindowContext`.
  */
-import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
-import type { ProfileId } from '@shared/types'
+import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import type { PageId, ProfileId } from '@shared/types'
 import type { ViewManager } from './viewManager'
 
 export interface WindowContext {
@@ -32,6 +32,21 @@ export function registerWindowContext(ctx: WindowContext): void {
 
 export function allWindowContexts(): WindowContext[] {
   return Array.from(contexts.values())
+}
+
+/** Retrouve la fenêtre de contenu (et l'id de page) propriétaire d'un
+ * `WebContents` de PAGE (pas d'un renderer hôte/popover) — aucune API
+ * Electron ne fait ce lien pour une page qui est une `WebContentsView` ENFANT.
+ * Utilisé par la demande de permission (`webSession.ts`) pour savoir où
+ * ancrer son invite depuis un `webContents` de page brut. */
+export function ownerContextForPageWebContents(
+  wc: WebContents
+): { ctx: WindowContext; pageId: PageId } | null {
+  for (const ctx of allWindowContexts()) {
+    const pageId = ctx.views.pageIdForWebContents(wc)
+    if (pageId) return { ctx, pageId }
+  }
+  return null
 }
 
 /** Toutes les fenêtres de contenu dont le profil actif correspond — pour

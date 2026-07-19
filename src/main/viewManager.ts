@@ -1008,6 +1008,18 @@ export class ViewManager {
     return view.webContents
   }
 
+  /** Sens inverse de `liveContents` — retrouve l'id de page propriétaire d'un
+   * `WebContents` donné. Aucune API Electron ne fait ce lien pour une page qui
+   * est une `WebContentsView` ENFANT (pas une vraie fenêtre) : nécessaire pour
+   * qu'une demande de permission (`webSession.ts`, `setPermissionRequestHandler`)
+   * sache à quelle page/fenêtre elle appartient et où ancrer son invite. */
+  pageIdForWebContents(wc: WebContents): PageId | null {
+    for (const [id, view] of this.views) {
+      if (view.webContents === wc) return id
+    }
+    return null
+  }
+
   /** Exécute un script dans la page si elle est encore vivante — seul canal
    * main→page possible pour une WebContentsView sans preload/contextBridge
    * (voir `__aetherResolveInstall`, WEBSTORE_HOOK_SCRIPT ci-dessus). */

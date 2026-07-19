@@ -8,6 +8,7 @@ import './styles/global.css'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import PermissionPromptRoot from './PermissionPromptRoot'
 import PopoverRoot from './PopoverRoot'
 
 // Pas de StrictMode : le double-montage des effets perturberait la
@@ -15,13 +16,18 @@ import PopoverRoot from './PopoverRoot'
 const container = document.getElementById('root')
 if (!container) throw new Error('#root introuvable')
 
-// Même bundle pour la fenêtre popup native (?popover=1) : voir
-// src/main/popoverWindow.ts et PopoverRoot.tsx pour le pourquoi.
-const isPopover = new URLSearchParams(window.location.search).get('popover') === '1'
-if (isPopover) {
+// Même bundle pour les fenêtres popup natives (?popover=1, ?permission-prompt=1) :
+// voir src/main/popoverWindow.ts/PopoverRoot.tsx et
+// src/main/permissionPromptWindow.ts/PermissionPromptRoot.tsx pour le pourquoi.
+const params = new URLSearchParams(window.location.search)
+if (params.get('popover') === '1') {
   document.documentElement.style.background = 'transparent'
   document.body.style.background = 'transparent'
   createRoot(container).render(<PopoverRoot />)
+} else if (params.get('permission-prompt') === '1') {
+  document.documentElement.style.background = 'transparent'
+  document.body.style.background = 'transparent'
+  createRoot(container).render(<PermissionPromptRoot />)
 } else {
   createRoot(container).render(
     <ErrorBoundary>

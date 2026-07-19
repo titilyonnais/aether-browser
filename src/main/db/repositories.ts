@@ -15,6 +15,8 @@ import type {
   Profile,
   ProfileId,
   RecentSearch,
+  SitePermissionKind,
+  SitePermissionState,
   Space,
   SpaceId,
   Visit
@@ -916,9 +918,6 @@ export const extensionsRepo = {
 
 // ─── Permissions de site (surcharges par origine, façon Chrome) ─────────────
 
-export type SitePermissionKind = 'media' | 'geolocation' | 'notifications'
-export type SitePermissionState = 'ask' | 'allow' | 'block'
-
 export const sitePermissionsRepo = {
   /** Toutes les surcharges d'une origine pour ce profil (kind → state). */
   forOrigin(profileId: ProfileId, origin: string): Record<string, SitePermissionState> {
@@ -938,6 +937,18 @@ export const sitePermissionsRepo = {
     return row?.state ?? null
   },
 
+  /** Toutes les surcharges de ce profil, toutes origines confondues — pour le
+   * panneau « Autorisations par site » de Réglages (le regroupement par
+   * origine se fait côté renderer, au plus 3 lignes par origine). */
+  listByProfile(
+    profileId: ProfileId
+  ): { origin: string; kind: SitePermissionKind; state: SitePermissionState; updatedAt: number }[] {
+    const rows = getDb()
+      .prepare('SELECT origin, kind, state, updated_at FROM site_permissions WHERE profile_id = ? ORDER BY updated_at DESC')
+      .all(profileId) as { origin: string; kind: SitePermissionKind; state: SitePermissionState; updated_at: number }[]
+    return rows.map((r) => ({ origin: r.origin, kind: r.kind, state: r.state, updatedAt: r.updated_at }))
+  },
+
   /** 'ask' = pas de surcharge → supprime la ligne pour rester au réglage global. */
   set(profileId: ProfileId, origin: string, kind: SitePermissionKind, state: SitePermissionState): void {
     if (state === 'ask') {
@@ -953,6 +964,12 @@ export const sitePermissionsRepo = {
          ON CONFLICT(profile_id, origin, kind) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at`
       )
       .run(randomUUID(), profileId, origin, kind, state, Date.now())
+  },
+
+  /** Réinitialise TOUTES les surcharges (les 3 kinds) d'une origine — bouton
+   * « réinitialiser ce site » du panneau Réglages. */
+  removeOrigin(profileId: ProfileId, origin: string): void {
+    getDb().prepare('DELETE FROM site_permissions WHERE profile_id = ? AND origin = ?').run(profileId, origin)
   }
 }
 

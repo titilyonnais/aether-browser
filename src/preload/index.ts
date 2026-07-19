@@ -151,7 +151,17 @@ const api: AetherApi = {
   site: {
     info: (id: PageId) => ipcRenderer.invoke(CH.siteInfo, id),
     setPermission: (id: PageId, kind: SitePermissionKind, state: SitePermissionState) =>
-      ipcRenderer.invoke(CH.siteSetPermission, id, kind, state)
+      ipcRenderer.invoke(CH.siteSetPermission, id, kind, state),
+    certificateDetail: (id: PageId) => ipcRenderer.invoke(CH.siteCertificateDetail, id),
+    exportCertificate: (id: PageId) => ipcRenderer.invoke(CH.siteCertificateExport, id),
+    showCertificate: (id: PageId) => ipcRenderer.send(CH.siteShowCertificate, id),
+    onCertificateRequested: (cb) => on(CH.siteCertificateRequested, cb)
+  },
+  sitePermissions: {
+    list: () => ipcRenderer.invoke(CH.sitePermissionsList),
+    set: (origin: string, kind: SitePermissionKind, state: SitePermissionState) =>
+      ipcRenderer.invoke(CH.sitePermissionsSet, origin, kind, state),
+    removeOrigin: (origin: string) => ipcRenderer.invoke(CH.sitePermissionsRemoveOrigin, origin)
   },
   intent: {
     classify: (input: string) => ipcRenderer.invoke(CH.intentClassify, input)
@@ -253,6 +263,12 @@ const api: AetherApi = {
     onClosed: (cb) => on(CH.popoverClosed, cb),
     runContextMenuAction: (id: string) => ipcRenderer.send(CH.contextMenuAction, id),
     confirmWebstoreInstall: (confirmed: boolean) => ipcRenderer.send(CH.webstoreInstallConfirm, confirmed)
+  },
+  permissionPrompt: {
+    onSetContent: (cb) => on(CH.permissionPromptSetContent, cb),
+    reportSize: (size: { width: number; height: number }) => ipcRenderer.send(CH.permissionPromptResize, size),
+    respond: (requestId: string, granted: boolean) =>
+      ipcRenderer.send(CH.permissionPromptRespond, requestId, granted)
   },
   updates: {
     check: () => ipcRenderer.send(CH.updatesCheck),

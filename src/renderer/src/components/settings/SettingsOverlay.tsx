@@ -6,8 +6,8 @@
  */
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  Camera,
   Check,
-  ChevronDown,
   ChevronLeft,
   Cloud,
   Compass,
@@ -20,6 +20,7 @@ import {
   Info,
   KeyRound,
   Languages,
+  MapPin,
   MonitorCog,
   Palette,
   Pencil,
@@ -29,12 +30,13 @@ import {
   RotateCcw,
   Search,
   Shield,
+  ShieldAlert,
   Trash2,
   UserRound,
   Wand2,
   X
 } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { FlagState } from '@shared/ipc'
 import { SEARCH_ENGINES } from '@shared/intent'
 import { CHROME_URLS, FLAG_DEFS, SPELLCHECK_LANGUAGES } from '@shared/types'
@@ -48,6 +50,9 @@ import type {
   Profile,
   SearchEngineId,
   SettingsPatch,
+  SitePermissionKind,
+  SitePermissionOverride,
+  SitePermissionState,
   ThemeMode,
   UpdateStatus
 } from '@shared/types'
@@ -55,6 +60,7 @@ import { ExtensionIcon } from '@/components/ui/ExtensionIcon'
 import { Kbd } from '@/components/ui/Kbd'
 import { MiniSwitch } from '@/components/ui/MiniSwitch'
 import { ProfileAvatar } from '@/components/ui/ProfileAvatar'
+import { Select } from '@/components/ui/Select'
 import { useT } from '@/i18n/useT'
 import {
   clearProfileAvatar,
@@ -291,31 +297,38 @@ function SettingsPanel() {
                 ))
               )}
             </div>
-            <button
-              type="button"
-              onClick={close}
-              className="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 m-3 mt-0 text-left text-[12.5px] text-ink-faint transition-colors hover:bg-white/[0.03] hover:text-ink-dim"
-            >
-              <X size={13} strokeWidth={1.7} />
-              {t('settings.common.close')}
-            </button>
           </nav>
 
-          {/* Contenu */}
-          <div className="min-w-0 flex-1 overflow-y-auto p-6">
-            {section === 'ia' && <AiSection />}
-            {section === 'profils' && <ProfilesSection />}
-            {section === 'apparence' && <AppearanceSection />}
-            {section === 'navigation' && <NavigationSection />}
-            {section === 'recherche' && <SearchSection />}
-            {section === 'confidentialite' && <PrivacySection />}
-            {section === 'performance' && <PerformanceSection />}
-            {section === 'langues' && <LanguagesSection />}
-            {section === 'systeme' && <SystemSection />}
-            {section === 'donnees' && <DataSection />}
-            {section === 'extensions' && <ExtensionsSection />}
-            {section === 'reinitialiser' && <ResetSection />}
-            {section === 'apropos' && <AboutSection />}
+          {/* Contenu — bande fixe (croix de fermeture) au-dessus du volet
+              scrollable : une croix flottant en `absolute` par-dessus TOUT le
+              panneau chevaucherait les contrôles alignés à droite qui défilent
+              sous elle (Toggle/SelectInput de chaque section) ; ici c'est une
+              vraie rangée `shrink-0`, jamais recouverte ni recouvrante. */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex shrink-0 justify-end px-3 pt-3">
+              <button
+                type="button"
+                onClick={close}
+                className="grid h-8 w-8 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.05] hover:text-ink-dim"
+              >
+                <X size={15} strokeWidth={1.7} />
+              </button>
+            </div>
+            <div className="min-w-0 flex-1 overflow-y-auto p-6 pt-2">
+              {section === 'ia' && <AiSection />}
+              {section === 'profils' && <ProfilesSection />}
+              {section === 'apparence' && <AppearanceSection />}
+              {section === 'navigation' && <NavigationSection />}
+              {section === 'recherche' && <SearchSection />}
+              {section === 'confidentialite' && <PrivacySection />}
+              {section === 'performance' && <PerformanceSection />}
+              {section === 'langues' && <LanguagesSection />}
+              {section === 'systeme' && <SystemSection />}
+              {section === 'donnees' && <DataSection />}
+              {section === 'extensions' && <ExtensionsSection />}
+              {section === 'reinitialiser' && <ResetSection />}
+              {section === 'apropos' && <AboutSection />}
+            </div>
           </div>
         </div>
 
@@ -474,7 +487,7 @@ function AiSection() {
             </span>
           </Row>
           <Row label={t('settings.ai.modelLabel')}>
-            <SelectInput
+            <Select
               value={settings.ollamaModel}
               onChange={(v) => void patch({ ollamaModel: v })}
               options={[
@@ -486,7 +499,7 @@ function AiSection() {
             />
           </Row>
           <Row label={t('settings.ai.embeddingsLabel')}>
-            <SelectInput
+            <Select
               value={settings.ollamaEmbedModel}
               onChange={(v) => void patch({ ollamaEmbedModel: v })}
               options={[
@@ -1167,7 +1180,7 @@ function NavigationSection() {
         />
         <div className="mt-3">
           <p className="mb-1.5 text-[11.5px] text-ink-dim">{t('settings.navigation.startupTabsLabel')}</p>
-          <SelectInput
+          <Select
             value={settings.startupTabs}
             onChange={(v) => void patch({ startupTabs: v as AppSettings['startupTabs'] })}
             options={[
@@ -1252,6 +1265,8 @@ function PrivacySection() {
         </div>
       </Block>
 
+      <SitePermissionsBlock />
+
       <Block title={t('settings.privacy.securityTitle')}>
         <div className="space-y-1">
           <Toggle
@@ -1285,6 +1300,97 @@ function PrivacySection() {
         </button>
       </Block>
     </div>
+  )
+}
+
+const SITE_PERMISSION_ICONS: Record<SitePermissionKind, typeof Camera> = {
+  media: Camera,
+  geolocation: MapPin,
+  notifications: ShieldAlert
+}
+const SITE_PERMISSION_LABEL_KEYS: Record<SitePermissionKind, string> = {
+  media: 'focusCanvas.siteInfo.permissionMedia',
+  geolocation: 'focusCanvas.siteInfo.permissionGeolocation',
+  notifications: 'focusCanvas.siteInfo.permissionNotifications'
+}
+
+/** Vue d'ensemble de toutes les autorisations de site accordées/bloquées
+ * explicitement (caméra/micro, localisation, notifications) — ce que
+ * `SiteInfoCard.tsx` (bulle « informations du site ») écrit une origine à la
+ * fois, listé ici tous profils confondus… non, seulement le profil ACTIF
+ * (`sitePermissionsRepo.listByProfile`), comme le reste de Réglages. */
+function SitePermissionsBlock() {
+  const t = useT()
+  const [overrides, setOverrides] = useState<SitePermissionOverride[] | null>(null)
+
+  useEffect(() => {
+    void window.aether.sitePermissions.list().then(setOverrides)
+  }, [])
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, SitePermissionOverride[]>()
+    for (const o of overrides ?? []) {
+      const arr = map.get(o.origin)
+      if (arr) arr.push(o)
+      else map.set(o.origin, [o])
+    }
+    return Array.from(map.entries())
+  }, [overrides])
+
+  const setPermission = async (origin: string, kind: SitePermissionKind, state: SitePermissionState): Promise<void> => {
+    setOverrides(await window.aether.sitePermissions.set(origin, kind, state))
+  }
+  const removeOrigin = async (origin: string): Promise<void> => {
+    setOverrides(await window.aether.sitePermissions.removeOrigin(origin))
+  }
+
+  return (
+    <Block title={t('settings.privacy.sitePermissionsTitle')} hint={t('settings.privacy.sitePermissionsHint')}>
+      {overrides === null ? null : grouped.length === 0 ? (
+        <p className="text-[11.5px] text-ink-faint">{t('settings.privacy.sitePermissionsEmpty')}</p>
+      ) : (
+        <div className="space-y-2">
+          {grouped.map(([origin, rows]) => (
+            <div key={origin} className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-mono text-[11px] text-ink-dim">{origin}</span>
+                <button
+                  type="button"
+                  title={t('settings.privacy.sitePermissionsReset')}
+                  onClick={() => void removeOrigin(origin)}
+                  className="shrink-0 rounded-md p-1 text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim"
+                >
+                  <Trash2 size={12} strokeWidth={1.8} />
+                </button>
+              </div>
+              <div className="mt-1.5 space-y-1">
+                {rows.map((r) => {
+                  const Icon = SITE_PERMISSION_ICONS[r.kind]
+                  return (
+                    <div key={r.kind} className="flex items-center gap-2">
+                      <Icon size={12} strokeWidth={1.8} className="shrink-0 text-ink-faint" />
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-ink-faint">
+                        {t(SITE_PERMISSION_LABEL_KEYS[r.kind])}
+                      </span>
+                      <div className="w-24 shrink-0">
+                        <Select
+                          value={r.state}
+                          onChange={(v) => void setPermission(origin, r.kind, v as SitePermissionState)}
+                          options={[
+                            { value: 'allow', label: t('focusCanvas.siteInfo.stateAllow') },
+                            { value: 'block', label: t('focusCanvas.siteInfo.stateBlock') }
+                          ]}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Block>
   )
 }
 
@@ -1485,7 +1591,7 @@ function SystemSection() {
 
       <Block title={t('settings.system.proxyTitle')} hint={t('settings.system.proxyHint')}>
         <div className="space-y-2.5">
-          <SelectInput
+          <Select
             value={settings.proxyMode}
             onChange={(v) => void patch({ proxyMode: v as AppSettings['proxyMode'] })}
             options={proxyModes.map((m) => ({ value: m.id, label: m.label }))}
@@ -1502,7 +1608,7 @@ function SystemSection() {
       </Block>
 
       <Block title={t('settings.system.devtoolsTitle')} hint={t('settings.system.devtoolsHint')}>
-        <SelectInput
+        <Select
           value={settings.devtoolsDockMode}
           onChange={(v) => void patch({ devtoolsDockMode: v as AppSettings['devtoolsDockMode'] })}
           options={[
@@ -1891,7 +1997,7 @@ function ClearDataBlock() {
       hint={t('settings.data.clearHint')}
     >
       <Row label={t('settings.data.periodLabel')}>
-        <SelectInput value={range} onChange={(v) => setRange(v as ClearDataRange)} options={RANGE_OPTIONS.map((r) => ({ value: r.id, label: t(r.labelKey) }))} />
+        <Select value={range} onChange={(v) => setRange(v as ClearDataRange)} options={RANGE_OPTIONS.map((r) => ({ value: r.id, label: t(r.labelKey) }))} />
       </Row>
       <div className="mt-3 space-y-1">
         {items.map((it) => (
@@ -2439,73 +2545,3 @@ function TextInput({
   )
 }
 
-/** Menu déroulant custom : la liste native `<option>` d'un `<select>` est
- * rendue par l'OS (fond noir/surbrillance bleue Windows par défaut, cf.
- * capture utilisateur) — impossible à styler en CSS dans Chromium, quoi
- * qu'on tente sur `<option>`. Une vraie liste DOM (bouton + panneau) reste
- * intégralement au style ÆTHER. */
-function SelectInput({
-  value,
-  onChange,
-  options
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: { value: string; label: string }[]
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const current = options.find((o) => o.value === value)
-
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (e: PointerEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => document.removeEventListener('pointerdown', onPointerDown)
-  }, [open])
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
-        className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[12px] text-ink outline-none transition-colors hover:bg-white/[0.05] focus:border-glacier/40"
-      >
-        <span className="fade-truncate">{current?.label ?? ''}</span>
-        <ChevronDown
-          size={13}
-          strokeWidth={1.8}
-          className={cn('shrink-0 text-ink-faint transition-transform', open && 'rotate-180')}
-        />
-      </button>
-      {open && (
-        <div role="listbox" className="glass-strong absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-60 overflow-y-auto rounded-lg p-1">
-          {options.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              role="option"
-              aria-selected={o.value === value}
-              onClick={() => {
-                onChange(o.value)
-                setOpen(false)
-              }}
-              className={cn(
-                'flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors',
-                o.value === value ? 'bg-glacier/15 text-glacier' : 'text-ink-dim hover:bg-white/[0.05] hover:text-ink'
-              )}
-            >
-              <span className="fade-truncate">{o.label}</span>
-              {o.value === value && <Check size={13} strokeWidth={2} className="shrink-0" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}

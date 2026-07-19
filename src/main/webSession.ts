@@ -13,8 +13,9 @@ import { CH } from '@shared/ipc'
 import type { ProfileId, SitePermissionKind } from '@shared/types'
 import { installCertificateObserver } from './certificates'
 import { downloadsRepo, sitePermissionsRepo } from './db/repositories'
+import { requestPermissionPrompt } from './permissionPromptWindow'
 import { getSettings } from './settings'
-import { windowContextsForProfile } from './windowRegistry'
+import { ownerContextForPageWebContents, windowContextsForProfile } from './windowRegistry'
 
 export function webPartitionForProfile(profileId: ProfileId, isPrivate: boolean): string {
   return isPrivate ? `aether-private-${profileId}` : `persist:aether-web-${profileId}`
@@ -110,12 +111,50 @@ export function ensurePartitionHardened(partition: string, profileId: ProfileId)
     .replace(/\saether-browser\/[\d.]+/i, '')
   webSession.setUserAgent(cleanUa)
 
-  webSession.setPermissionRequestHandler((_wc, permission, callback, details) =>
-    callback(decide(profileId, permission, originOf(details.requestingUrl)))
-  )
+  // `setPermissionCheckHandler` DOIT rester synchrone (Electron n'attend pas
+  // de promesse ici) — jamais d'invite, toujours `decide()` tel quel.
   webSession.setPermissionCheckHandler((_wc, permission, requestingOrigin) =>
     decide(profileId, permission, requestingOrigin)
   )
+  // `setPermissionRequestHandler`, lui, accepte un `callback` invoqué de façon
+  // DIFFÉRÉE — c'est le seul endroit où une vraie invite a du sens. Une
+  // surcharge de site déjà connue (allow/block), ou le réglage global déjà à
+  // `true`, tranchent sans rien demander (chemin synchrone inchangé, identique
+  // à `decide()`) ; SEUL le cas « aucune surcharge, réglage global désactivé »
+  // (par défaut) déclenche l'invite — avant ce correctif, ce cas retombait
+  // silencieusement sur un refus, sans le moindre signe visible pour
+  // l'utilisateur (« un site demande le micro, rien ne se passe »).
+  webSession.setPermissionRequestHandler((wc, permission, callback, details) => {
+    if (ALWAYS.has(permission)) {
+      callback(true)
+      return
+    }
+    const origin = originOf(details.requestingUrl)
+    const kind = toSiteKind(permission)
+    if (!kind || !origin) {
+      callback(false)
+      return
+    }
+    const override = sitePermissionsRepo.get(profileId, origin, kind)
+    if (override === 'allow') {
+      callback(true)
+      return
+    }
+    if (override === 'block') {
+      callback(false)
+      return
+    }
+    if (globalDefault(kind)) {
+      callback(true)
+      return
+    }
+    const owner = ownerContextForPageWebContents(wc)?.ctx.win
+    if (!owner) {
+      callback(false)
+      return
+    }
+    void requestPermissionPrompt(owner, profileId, origin, kind, wc).then(callback)
+  })
 
   installCertificateObserver(partition)
 

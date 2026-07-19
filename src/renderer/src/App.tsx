@@ -61,6 +61,9 @@ const CreateProfileOverlay = lazy(() =>
 const ReportProblemOverlay = lazy(() =>
   import('@/components/chrome/ReportProblemOverlay').then((m) => ({ default: m.ReportProblemOverlay }))
 )
+const CertificateOverlay = lazy(() =>
+  import('@/components/focus/CertificateOverlay').then((m) => ({ default: m.CertificateOverlay }))
+)
 const Onboarding = lazy(() => import('@/components/onboarding/Onboarding').then((m) => ({ default: m.Onboarding })))
 const CoachMarks = lazy(() => import('@/components/guide/CoachMarks').then((m) => ({ default: m.CoachMarks })))
 
@@ -238,6 +241,7 @@ export default function App() {
           <RenameWindowOverlay />
           <CreateProfileOverlay />
           <ReportProblemOverlay />
+          <CertificateOverlay />
           <Onboarding />
           <CoachMarks />
         </Suspense>

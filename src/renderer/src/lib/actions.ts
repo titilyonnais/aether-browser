@@ -129,6 +129,14 @@ export async function initBridge(): Promise<void> {
     useUiStore.getState().openOverlay('qr-code')
   })
 
+  // Bulle « informations du site » (fenêtre popup séparée, sans accès au
+  // store `ui`) : « Voir le certificat » relaie ici via le main — même
+  // patron que qrCode.onShow ci-dessus.
+  window.aether.site.onCertificateRequested((id) => {
+    useUiStore.getState().setCertificateTarget(id)
+    useUiStore.getState().openOverlay('certificate')
+  })
+
   // Menu contextuel natif des favoris (voir FavoritesBar.tsx) — même relais
   // que pour les profils : le menu vit dans le main, les actions ici.
   window.aether.favorites.onOpenRequested((url) => void openFavoriteUrl(url))

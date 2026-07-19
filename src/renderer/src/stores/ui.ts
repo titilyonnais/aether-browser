@@ -21,6 +21,7 @@ export type OverlayKind =
   | 'rename-window'
   | 'create-profile'
   | 'report-problem'
+  | 'certificate'
   | null
 
 interface Toast {
@@ -60,6 +61,10 @@ interface UiState {
   findBarPageId: PageId | null
   /** Page ciblée par l'overlay QR code (url + titre), ou null. */
   qrTarget: { url: string; title: string } | null
+  /** Page ciblée par l'overlay certificat, ou null — même précédent que
+   * `qrTarget` : `openOverlay()` n'a pas de champ pageId dans ses `opts`, un
+   * slot dédié reste plus cohérent qu'un bolt-on générique. */
+  certificateTargetPageId: PageId | null
 
   setReady(ready: boolean): void
   startCoach(): void
@@ -85,6 +90,7 @@ interface UiState {
   openFindBar(id: PageId): void
   closeFindBar(): void
   setQrTarget(target: { url: string; title: string } | null): void
+  setCertificateTarget(id: PageId | null): void
 }
 
 export const useUiStore = create<UiState>()((set, get) => ({
@@ -106,6 +112,7 @@ export const useUiStore = create<UiState>()((set, get) => ({
   zoomIndicator: null,
   findBarPageId: null,
   qrTarget: null,
+  certificateTargetPageId: null,
 
   setReady: (ready) => set({ ready }),
   startCoach: () => set({ coachActive: true }),
@@ -145,5 +152,6 @@ export const useUiStore = create<UiState>()((set, get) => ({
 
   openFindBar: (id) => set({ findBarPageId: id }),
   closeFindBar: () => set({ findBarPageId: null }),
-  setQrTarget: (qrTarget) => set({ qrTarget })
+  setQrTarget: (qrTarget) => set({ qrTarget }),
+  setCertificateTarget: (certificateTargetPageId) => set({ certificateTargetPageId })
 }))

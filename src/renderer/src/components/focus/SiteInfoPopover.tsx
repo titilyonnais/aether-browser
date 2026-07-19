@@ -26,13 +26,21 @@ export function SiteInfoPopover({ pageId, url }: SiteInfoPopoverProps) {
     window.aether.popover.hide()
   }
 
-  const show = (): void => {
+  // Récupère les infos AVANT d'ouvrir le popup (pas dans SiteInfoCard une fois
+  // affiché) — même technique que la bulle de dossier de favoris : le popup
+  // reste caché tant que son contenu n'a pas de taille mesurable, donc un
+  // composant qui rend `null` en attendant un aller-retour IPC retarde
+  // l'affichage jusqu'au filet de sécurité (500ms). Récupérer la donnée
+  // D'ABORD élimine ce délai perçu — le popup s'ouvre déjà complet.
+  const show = async (): Promise<void> => {
     const el = buttonRef.current
     if (!el) return
     const r = el.getBoundingClientRect()
+    const initialInfo = await window.aether.site.info(pageId)
     window.aether.popover.show({
       kind: 'site-info',
       pageId,
+      initialInfo,
       anchor: { x: r.x, y: r.y, width: r.width, height: r.height },
       placement: 'below-right'
     })
@@ -46,7 +54,7 @@ export function SiteInfoPopover({ pageId, url }: SiteInfoPopoverProps) {
     if (e.button !== 0) return
     e.stopPropagation()
     if (open) close()
-    else show()
+    else void show()
   }
 
   useEffect(() => {

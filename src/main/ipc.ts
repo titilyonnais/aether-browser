@@ -5,6 +5,7 @@
  */
 import { app, clipboard, dialog, ipcMain, Menu, screen, shell, type BrowserWindow } from 'electron'
 import { existsSync, statSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { CH } from '@shared/ipc'
 import type {
@@ -13,6 +14,7 @@ import type {
   BrowsingDataKind,
   CanvasRect,
   CanvasView,
+  CertificateDetail,
   ChatRequest,
   ClearDataRange,
   ContextMenuRow,
@@ -37,6 +39,7 @@ import type {
   SettingsPatch,
   SiteInfo,
   SitePermissionKind,
+  SitePermissionOverride,
   SitePermissionState,
   Space,
   SpaceId,
@@ -46,7 +49,7 @@ import { computeAffinities, queuePageEmbedding } from './ai/embeddings'
 import { classifyIntent } from './ai/intent'
 import type { AiRouter } from './ai/router'
 import { avatarImageDataUrl, chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
-import { getCertInfo } from './certificates'
+import { getCertificateDetail } from './certificates'
 import { getNewTabNews, getNewTabWeather, getSearchSuggestions, searchNewTabCities } from './newtab'
 import {
   downloadsRepo,
@@ -86,6 +89,7 @@ import {
   runContextMenuAction,
   showContextMenuPopover
 } from './popoverWindow'
+import { resizePermissionPrompt, respondPermissionPrompt } from './permissionPromptWindow'
 import {
   boundsSchema,
   canvasRectSchema,
@@ -342,7 +346,10 @@ export function buildPageMeta(views: ViewManager, row: PageRow): PageMeta {
   }
 }
 
-/** Assemble les infos HTTPS/certificat/permissions de la page (façon Chrome). */
+/** Assemble les infos HTTPS/permissions de la page (façon Chrome). Le détail du
+ * certificat n'en fait plus partie — calculé À LA DEMANDE par
+ * `CH.siteCertificateDetail` seulement (voir CertificateOverlay.tsx), pour ne
+ * jamais alourdir ce popover appelé à chaque ouverture de la bulle de site. */
 function siteInfoForPage(views: ViewManager, id: PageId): SiteInfo | null {
   const row = pagesRepo.get(id)
   if (!row) return null
@@ -354,14 +361,10 @@ function siteInfoForPage(views: ViewManager, id: PageId): SiteInfo | null {
   }
   if (!/^https?:$/.test(url.protocol)) return null
   const isHttps = url.protocol === 'https:'
-  const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
-  const partition = webPartitionForProfile(activeProfileOf(views), isPrivate)
-  const cert = isHttps ? getCertInfo(partition, url.hostname) : null
   const overrides = sitePermissionsRepo.forOrigin(activeProfileOf(views), url.origin)
   return {
     origin: url.origin,
     isHttps,
-    cert,
     permissions: {
       media: (overrides.media as SitePermissionState) ?? 'ask',
       geolocation: (overrides.geolocation as SitePermissionState) ?? 'ask',
@@ -1393,6 +1396,83 @@ export function registerIpc(router: AiRouter): void {
     }
   )
 
+  // ─── Autorisations par site (vue d'ensemble, Réglages › Confidentialité) ───
+  // Scopées par ORIGINE directement (pas de PageId disponible depuis Réglages),
+  // contrairement à CH.siteSetPermission ci-dessus.
+
+  ipcMain.handle(CH.sitePermissionsList, (e): SitePermissionOverride[] =>
+    sitePermissionsRepo.listByProfile(activeProfileOf(resolveWindowContext(e).views))
+  )
+
+  ipcMain.handle(
+    CH.sitePermissionsSet,
+    (e, origin: string, kind: SitePermissionKind, state: SitePermissionState): SitePermissionOverride[] => {
+      const { views } = resolveWindowContext(e)
+      const profileId = activeProfileOf(views)
+      sitePermissionsRepo.set(profileId, origin, kind, state)
+      return sitePermissionsRepo.listByProfile(profileId)
+    }
+  )
+
+  ipcMain.handle(CH.sitePermissionsRemoveOrigin, (e, origin: string): SitePermissionOverride[] => {
+    const { views } = resolveWindowContext(e)
+    const profileId = activeProfileOf(views)
+    sitePermissionsRepo.removeOrigin(profileId, origin)
+    return sitePermissionsRepo.listByProfile(profileId)
+  })
+
+  // ─── Lecteur de certificat (overlay pleine fenêtre) ────────────────────────
+
+  ipcMain.handle(CH.siteCertificateDetail, (e, id: PageId): CertificateDetail | null => {
+    const { views } = resolveWindowContext(e)
+    const row = pagesRepo.get(id)
+    if (!row) return null
+    let url: URL
+    try {
+      url = new URL(row.url)
+    } catch {
+      return null
+    }
+    if (url.protocol !== 'https:') return null
+    const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
+    const partition = webPartitionForProfile(activeProfileOf(views), isPrivate)
+    return getCertificateDetail(partition, url.hostname)
+  })
+
+  ipcMain.handle(CH.siteCertificateExport, async (e, id: PageId): Promise<boolean> => {
+    const { views, win } = resolveWindowContext(e)
+    const row = pagesRepo.get(id)
+    if (!row) return false
+    let url: URL
+    try {
+      url = new URL(row.url)
+    } catch {
+      return false
+    }
+    const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
+    const partition = webPartitionForProfile(activeProfileOf(views), isPrivate)
+    const detail = getCertificateDetail(partition, url.hostname)
+    if (!detail) return false
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      defaultPath: `${url.hostname}.pem`,
+      filters: [{ name: 'Certificat', extensions: ['pem', 'crt'] }]
+    })
+    if (canceled || !filePath) return false
+    await writeFile(filePath, detail.pem, 'utf8')
+    return true
+  })
+
+  // Depuis la bulle « informations du site » (fenêtre popup séparée, sans accès
+  // aux stores Zustand de la fenêtre principale — voir AppMenuPopoverCard.tsx
+  // pour la même limite déjà documentée) : ferme le popover et relaie à la
+  // fenêtre principale, seule à pouvoir piloter le store `ui` (overlays).
+  ipcMain.on(CH.siteShowCertificate, (e, id: PageId) => {
+    const { win } = resolveWindowContext(e)
+    hidePopoverWindow(win)
+    sendTo(win, CH.popoverClosed)
+    sendTo(win, CH.siteCertificateRequested, id)
+  })
+
   // ─── Intention ─────────────────────────────────────────────────────────────
 
   ipcMain.handle(CH.intentClassify, (_e, input: string) =>
@@ -1744,7 +1824,9 @@ export function registerIpc(router: AiRouter): void {
             ? { kind: 'extensions-menu' }
             : req.kind === 'update-ready'
               ? { kind: 'update-ready', version: req.version }
-              : { kind: req.kind, pageId: req.pageId }
+              : req.kind === 'site-info'
+                ? { kind: 'site-info', pageId: req.pageId, initialInfo: req.initialInfo }
+                : { kind: req.kind, pageId: req.pageId }
     if (req.kind === 'extensions-menu') {
       const winBounds = win.getBounds()
       extensionsMenuAnchors.set(win.id, {
@@ -1771,6 +1853,16 @@ export function registerIpc(router: AiRouter): void {
 
   ipcMain.on(CH.popoverResize, (e, size: { width: number; height: number }) => {
     resizePopoverWindow(e.sender, size.width, size.height)
+  })
+
+  // ─── Invite de permission (fenêtre native séparée) ─────────────────────────
+
+  ipcMain.on(CH.permissionPromptResize, (e, size: { width: number; height: number }) => {
+    resizePermissionPrompt(e.sender, size.width, size.height)
+  })
+
+  ipcMain.on(CH.permissionPromptRespond, (e, requestId: string, granted: boolean) => {
+    respondPermissionPrompt(e.sender, requestId, Boolean(granted))
   })
 
   // Le popup natif du contenu d'un dossier de favoris (fenêtre séparée, aucun

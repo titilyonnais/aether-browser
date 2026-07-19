@@ -87,14 +87,15 @@ export const focusCanvas: Record<string, string> = {
     'Cette page n’est pas servie via http(s) — aucune information de site.',
   'focusCanvas.siteInfo.securedConnection': 'Connexion sécurisée',
   'focusCanvas.siteInfo.unsecuredConnection': 'Connexion non sécurisée',
-  'focusCanvas.siteInfo.hideCert': 'Masquer le certificat',
   'focusCanvas.siteInfo.showCert': 'Voir le certificat',
-  'focusCanvas.siteInfo.issuedFor': 'Émis pour : ',
-  'focusCanvas.siteInfo.issuedBy': 'Émis par : ',
-  'focusCanvas.siteInfo.validity': 'Validité : ',
-  'focusCanvas.siteInfo.fingerprint': 'Empreinte : ',
-  'focusCanvas.siteInfo.noCertInfo': 'Aucune information de certificat capturée pour cette session.',
   'focusCanvas.siteInfo.permissionsHeading': 'Autorisations pour ce site',
+
+  // PermissionPromptRoot — invite Autoriser/Bloquer (caméra/micro, localisation, notifications)
+  'focusCanvas.permissionPrompt.wantsMedia': 'veut utiliser votre caméra et/ou votre micro',
+  'focusCanvas.permissionPrompt.wantsGeolocation': 'veut connaître votre position',
+  'focusCanvas.permissionPrompt.wantsNotifications': 'veut vous envoyer des notifications',
+  'focusCanvas.permissionPrompt.block': 'Bloquer',
+  'focusCanvas.permissionPrompt.allow': 'Autoriser',
 
   // TranslatePopoverCard
   'focusCanvas.translate.unknownLanguage': 'inconnue',

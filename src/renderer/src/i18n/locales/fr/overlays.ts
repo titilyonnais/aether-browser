@@ -1,5 +1,23 @@
 /** Traductions FR — section "overlays". */
 export const overlays: Record<string, string> = {
+  // Lecteur de certificat
+  'overlays.certificate.title': 'Certificat',
+  'overlays.certificate.tabGeneral': 'Général',
+  'overlays.certificate.tabDetails': 'Détails',
+  'overlays.certificate.issuedTo': 'Émis pour',
+  'overlays.certificate.issuedBy': 'Émis par',
+  'overlays.certificate.validFrom': 'Émis le',
+  'overlays.certificate.validTo': 'Expire le',
+  'overlays.certificate.fingerprints': 'Empreintes SHA-256',
+  'overlays.certificate.certificateFingerprint': 'Certificat',
+  'overlays.certificate.publicKeyFingerprint': 'Clé publique',
+  'overlays.certificate.chainHeading': 'Hiérarchie des certificats',
+  'overlays.certificate.serialNumber': 'Numéro de série',
+  'overlays.certificate.signatureAlgorithm': 'Algorithme de signature',
+  'overlays.certificate.export': 'Exporter…',
+  'overlays.certificate.loading': 'Chargement du certificat…',
+  'overlays.certificate.unavailable': 'Aucune information de certificat disponible pour cette page.',
+
   // Téléchargements
   'overlays.downloads.title': 'Téléchargements',
   'overlays.downloads.linkCopied': 'Lien copié',

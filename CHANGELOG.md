@@ -4,6 +4,21 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.54.0] — 2026-07-19
+
+### Ajouté
+
+- **Invite de permission (caméra/micro, localisation, notifications)** — jusqu'ici, un site qui demandait une de ces permissions était silencieusement refusé, sans le moindre signe visible (« rien ne se passe »). Une vraie bulle Autoriser/Bloquer apparaît désormais, façon Chrome, quand aucun choix n'est déjà mémorisé pour ce site. Nouvelle fenêtre native dédiée (`permissionPromptWindow.ts`), délibérément séparée du système de popover partagé : elle doit survivre à un clic dans la page (contrairement aux autres popups, qui se ferment sur ce même clic) et garantir qu'un callback Electron en attente est TOUJOURS résolu (fermeture de fenêtre, navigation, Échap → refus non mémorisé ; réponse explicite → mémorisée). File d'attente si plusieurs demandes arrivent en même temps.
+- **Section « Autorisations par site »** (Réglages › Confidentialité) — vue d'ensemble de tous les choix mémorisés par origine (caméra/micro, localisation, notifications), modifiables ou réinitialisables directement depuis Réglages, sans repasser par chaque site un par un.
+- **Lecteur de certificat façon Chrome** — remplace l'ancien bloc de texte minimal dans la bulle « informations du site » par une vraie page (onglets Général/Détails, hiérarchie de certificats jusqu'à la racine, empreintes SHA-256 du certificat et de la clé publique, bouton Exporter). Version X.509 et algorithme de signature affichés seulement quand réellement disponibles (jamais devinés).
+
+### Corrigé
+
+- **Bouton « Fermer » des Réglages** mal placé (texte + icône en bas de la barre latérale) — remplacé par une simple croix en haut à droite, comme les autres fenêtres (Historique, Téléchargements, Favoris).
+- **Menus déroulants des Réglages qui coupaient leur texte avec un fondu** même quand il y avait de la place — même bug déjà corrigé pour la pilule d'intention (v0.53.10), racine identique dans le composant de menu déroulant : le fondu ne s'applique désormais que si le texte déborde réellement.
+- **Popover « informations du site » lent à s'afficher** — les données sont maintenant récupérées avant l'ouverture du popup, plus d'attente d'un aller-retour réseau une fois affiché (même technique déjà utilisée pour la bulle de dossier de favoris).
+- **Menu déroulant des permissions qui ne s'ouvrait pas** dans cette même bulle — remplacé le `<select>` natif (incompatible avec une fenêtre popup non focusable) par le menu déroulant personnalisé de l'appli, restructuré pour ne jamais être rogné par les bords de la bulle.
+
 ## [0.53.10] — 2026-07-19
 
 ### Corrigé

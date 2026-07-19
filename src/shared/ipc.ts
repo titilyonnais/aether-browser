@@ -10,6 +10,7 @@ import type {
   BrowsingDataKind,
   CanvasRect,
   CanvasView,
+  CertificateDetail,
   ChatChunk,
   ChatDone,
   ChatRequest,
@@ -33,6 +34,7 @@ import type {
   PageContext,
   PageId,
   PageMeta,
+  PermissionPromptContent,
   PopoverContent,
   PopoverShowRequest,
   Profile,
@@ -42,6 +44,7 @@ import type {
   ShortcutCommand,
   SiteInfo,
   SitePermissionKind,
+  SitePermissionOverride,
   SitePermissionState,
   Space,
   SpaceId,
@@ -182,6 +185,22 @@ export const CH = {
   siteInfo: 'site:info',
   siteSetPermission: 'site:set-permission',
 
+  // Autorisations par site — vue d'ensemble (Réglages › Confidentialité),
+  // scopées par ORIGINE (pas de PageId disponible depuis Réglages).
+  sitePermissionsList: 'site-permissions:list',
+  sitePermissionsSet: 'site-permissions:set',
+  sitePermissionsRemoveOrigin: 'site-permissions:remove-origin',
+
+  // Lecteur de certificat (overlay pleine fenêtre, façon Chrome)
+  siteCertificateDetail: 'site:certificate-detail',
+  siteCertificateExport: 'site:certificate-export',
+  /** Depuis la bulle « informations du site » (fenêtre popup séparée, pas de
+   * store partagé) : demande à la fenêtre principale d'ouvrir l'overlay. */
+  siteShowCertificate: 'site:show-certificate',
+  /** Relayé PAR le main VERS la fenêtre principale — seule celle-ci a accès
+   * au store `ui` qui pilote les overlays. */
+  siteCertificateRequested: 'site:certificate-requested',
+
   // Intention
   intentClassify: 'intent:classify',
 
@@ -270,6 +289,12 @@ export const CH = {
 
   // Raccourcis relayés depuis les pages web
   shortcut: 'shortcut',
+
+  // Invite de permission (caméra/micro, localisation, notifications) — fenêtre
+  // native séparée du système de popover partagé, voir permissionPromptWindow.ts.
+  permissionPromptSetContent: 'permission-prompt:set-content',
+  permissionPromptResize: 'permission-prompt:resize',
+  permissionPromptRespond: 'permission-prompt:respond',
 
   // Popover flottant (fenêtre native — infos de site, aperçu d'onglet)
   popoverShow: 'popover:show',
@@ -482,6 +507,23 @@ export interface AetherApi {
       kind: SitePermissionKind,
       state: SitePermissionState
     ): Promise<SiteInfo | null>
+    /** Détail complet du certificat (onglets Général/Détails de CertificateOverlay.tsx). */
+    certificateDetail(id: PageId): Promise<CertificateDetail | null>
+    /** Bouton « Exporter… » — ouvre un `dialog.showSaveDialog`, écrit le PEM. */
+    exportCertificate(id: PageId): Promise<boolean>
+    /** Depuis la bulle « informations du site » (fenêtre popup séparée, sans
+     * accès aux stores Zustand) : demande à la fenêtre principale d'ouvrir
+     * l'overlay certificat pour cette page. */
+    showCertificate(id: PageId): void
+    /** Écouté par la fenêtre PRINCIPALE (seule à avoir accès au store `ui`). */
+    onCertificateRequested(cb: (id: PageId) => void): Unsubscribe
+  }
+  /** Vue d'ensemble des autorisations par site (Réglages › Confidentialité) —
+   * scopée par ORIGINE directement, pas de PageId disponible depuis Réglages. */
+  sitePermissions: {
+    list(): Promise<SitePermissionOverride[]>
+    set(origin: string, kind: SitePermissionKind, state: SitePermissionState): Promise<SitePermissionOverride[]>
+    removeOrigin(origin: string): Promise<SitePermissionOverride[]>
   }
   intent: {
     classify(input: string): Promise<IntentResult>
@@ -635,6 +677,13 @@ export interface AetherApi {
     runContextMenuAction(id: string): void
     /** Depuis la bulle de confirmation d'installation (Chrome Web Store). */
     confirmWebstoreInstall(confirmed: boolean): void
+  }
+  /** Invite de permission (caméra/micro, localisation, notifications) — fenêtre
+   * native séparée, voir permissionPromptWindow.ts/PermissionPromptRoot.tsx. */
+  permissionPrompt: {
+    onSetContent(cb: (content: PermissionPromptContent) => void): Unsubscribe
+    reportSize(size: { width: number; height: number }): void
+    respond(requestId: string, granted: boolean): void
   }
   /** Mises à jour ÆTHER (Réglages › À propos) — voir main/updater.ts. */
   updates: {

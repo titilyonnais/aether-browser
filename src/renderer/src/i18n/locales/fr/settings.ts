@@ -170,6 +170,11 @@ export const settings: Record<string, string> = {
   'settings.privacy.locationHint': 'Position géographique des sites',
   'settings.privacy.notifications': 'Notifications',
   'settings.privacy.notificationsHint': 'Notifications système envoyées par les sites',
+  'settings.privacy.sitePermissionsTitle': 'Autorisations par site',
+  'settings.privacy.sitePermissionsHint':
+    "Choix mémorisés site par site (via l'invite de permission ou la bulle d'informations du site) — remplacent le réglage global ci-dessus pour ces origines.",
+  'settings.privacy.sitePermissionsEmpty': 'Aucune autorisation particulière mémorisée pour le moment.',
+  'settings.privacy.sitePermissionsReset': 'Réinitialiser ce site',
   'settings.privacy.securityTitle': 'Sécurité & pistage',
   'settings.privacy.doNotTrack': 'Envoyer « Do Not Track »',
   'settings.privacy.doNotTrackHint': "Ajoute l'en-tête DNT à vos requêtes",
