@@ -24,6 +24,7 @@ import { Kbd } from '@/components/ui/Kbd'
 import { ProfileSwitcher } from './ProfileSwitcher'
 import { TranslatePopoverButton } from './TranslatePopoverButton'
 import { remainingSeconds, useDownloadSpeed } from '@/hooks/useDownloadSpeed'
+import { useOverflowFade } from '@/hooks/useOverflowFade'
 import { useT } from '@/i18n/useT'
 import { getActivePageId } from '@/lib/actions'
 import { cn, domainOf, formatBytes, formatDuration } from '@/lib/utils'
@@ -50,6 +51,18 @@ export function TitleBar() {
   })()
   const wideAddressBar = useSettingsStore((s) => s.settings?.wideAddressBar ?? false)
   const neverTranslateDomains = useSettingsStore((s) => s.settings?.neverTranslateDomains ?? [])
+
+  // Le dégradé de sortie (`.fade-truncate`) est une largeur FIXE (16px) — sur
+  // un texte COURT (ex. « cia.gov ») dont la boîte ne dépasse pas réellement,
+  // ces 16px représentent une part disproportionnée du mot entier et le
+  // faisaient paraître "coupé" malgré la place disponible dans la pilule. On
+  // ne l'applique donc que quand le texte DÉBORDE vraiment (voir useOverflowFade).
+  const titleOverflow = useOverflowFade<HTMLSpanElement>([activePage?.title, activePage?.url])
+  const domainOverflow = useOverflowFade<HTMLSpanElement>([activePage?.url])
+  const fadeMaskStyle = {
+    maskImage: 'linear-gradient(to right, black calc(100% - 16px), transparent 100%)',
+    WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 16px), transparent 100%)'
+  }
 
   const ui = useUiStore.getState()
 
@@ -91,10 +104,18 @@ export function TitleBar() {
         {activePage ? (
           <>
             <Favicon url={activePage.url} faviconUrl={activePage.faviconUrl} size={13} />
-            <span className="fade-truncate text-ink-dim">
+            <span
+              ref={titleOverflow.ref}
+              className="min-w-0 overflow-hidden whitespace-nowrap text-ink-dim"
+              style={titleOverflow.overflowing ? fadeMaskStyle : undefined}
+            >
               {activePage.title || domainOf(activePage.url)}
             </span>
-            <span className="fade-truncate font-mono text-[10px] text-ink-faint/80">
+            <span
+              ref={domainOverflow.ref}
+              className="min-w-0 overflow-hidden whitespace-nowrap font-mono text-[10px] text-ink-faint/80"
+              style={domainOverflow.overflowing ? fadeMaskStyle : undefined}
+            >
               {domainOf(activePage.url)}
             </span>
           </>

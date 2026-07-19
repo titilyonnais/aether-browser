@@ -20,7 +20,7 @@ jobs:
       changed: ${{ steps.diff.outputs.changed }}
       version: ${{ steps.diff.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 2
       - id: diff
@@ -40,10 +40,10 @@ jobs:
     if: needs.check-version.outputs.changed == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci
       - run: npm run typecheck
       # electron-builder uploade plusieurs fichiers EN PARALLÈLE (l'installeur

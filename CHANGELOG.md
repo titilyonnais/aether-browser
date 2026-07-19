@@ -4,6 +4,13 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.53.10] — 2026-07-19
+
+### Corrigé
+
+- **CI GitHub Actions dépréciée (avertissement Node.js 20)** : `actions/checkout`/`actions/setup-node` en `@v4` (runtime interne Node 20, en fin de vie) → `@v5` (runtime Node 24 natif) ; version Node du workflow de release passée de 20 à 22.
+- **Pilule d'intention (titre/domaine de la page active) coupée par le fondu malgré la place disponible** : `.fade-truncate` applique un dégradé de sortie à largeur FIXE (16px), quel que soit le contenu — pour un texte court comme « cia.gov » (≈60px), ces 16px représentent ~27% du mot entier, faisant disparaître ses derniers caractères dans le fondu même quand rien ne débordait réellement. Le dégradé ne s'applique désormais que si le texte DÉBORDE vraiment sa boîte (nouveau hook `useOverflowFade`, comparaison `scrollWidth`/`clientWidth`) — un texte qui tient entièrement s'affiche maintenant en entier, sans fondu cosmétique.
+
 ## [0.53.9] — 2026-07-19
 
 ### Corrigé
