@@ -111,12 +111,57 @@ electron-builder horodate automatiquement la signature (RFC 3161, serveur public
 qu'un certificat est fourni — aucun réglage supplémentaire. **Ne jamais committer le
 `.pfx`** (`*.pfx`/`*.p12` sont dans `.gitignore`) : il embarque la clé privée.
 
-La seule voie **gratuite et réellement efficace** contre SmartScreen pour une
-distribution publique est [SignPath.io Foundation](https://signpath.org/) — certificats
-de signature de code gratuits pour les projets open source éligibles (licence OSI,
-dépôt public, CI active) : ÆTHER remplit ces critères (MIT, dépôt public, workflow CI),
-mais la candidature et l'intégration au pipeline de signature restent à faire par
-quelqu'un ayant autorité sur le dépôt — non automatisable depuis ici.
+#### La seule vraie solution gratuite : SignPath Foundation
+
+[SignPath Foundation](https://signpath.org/) délivre un **vrai** certificat de
+signature de code (niveau OV, clé privée sur leur HSM, jamais exposée) gratuitement
+aux projets open source éligibles — sans vérification d'identité personnelle : ils
+vérifient que le binaire a bien été construit depuis le dépôt public déclaré.
+ÆTHER remplit a priori leurs critères (licence MIT — OSI —, dépôt GitHub public,
+projet activement maintenu, déjà distribué). **Compromis à connaître avant de
+candidater** : le certificat est délivré à *SignPath Foundation*, pas à « ÆTHER » —
+Windows affichera « Éditeur vérifié : SignPath Foundation » dans SmartScreen et les
+propriétés du fichier, pas le nom du projet.
+
+1. **Candidater** (action manuelle, nécessite l'autorité sur le dépôt — non
+   automatisable) : https://signpath.org/apply. Compter quelques jours à quelques
+   semaines de traitement.
+2. Une fois approuvé, le tableau de bord SignPath fournit un `organization-id`, un
+   `project-slug` et un `signing-policy-slug`, plus un jeton API à stocker comme
+   secret GitHub Actions (`SIGNPATH_API_TOKEN`).
+3. **Intégration CI prête à activer** — contrairement à `CSC_LINK` (fichier `.pfx`
+   local), SignPath signe à DISTANCE : le workflow construit l'installeur normalement,
+   l'envoie non signé, puis récupère la version signée. Ajouter au job `release` de
+   [`.github/workflows/release.yml`](.github/workflows/release.yml), après l'étape
+   `Run npm run release` :
+
+   ```yaml
+         - name: Envoyer l'installeur à SignPath pour signature
+           uses: actions/upload-artifact@v7
+           with:
+             name: unsigned-installer
+             path: release/Aether-Setup-*.exe
+         - name: Signer via SignPath Foundation
+           uses: signpath/github-action-submit-signing-request@v2
+           with:
+             api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+             organization-id: "<à remplir après approbation>"
+             project-slug: "aether-browser"
+             signing-policy-slug: "release-signing"
+             github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+             wait-for-completion: true
+             output-artifact-directory: release-signed
+   ```
+
+   Puis remplacer l'artefact non signé par `release-signed/Aether-Setup-*.exe` avant
+   l'étape `Publier la release`. Documentation complète :
+   [docs.signpath.io/trusted-build-systems/github](https://docs.signpath.io/trusted-build-systems/github).
+
+Piste alternative, **payante mais très bon marché** (~10 $/mois) si le gratuit prend
+trop de temps : [Azure Trusted Signing](https://learn.microsoft.com/azure/trusted-signing/) —
+ouvert aux développeurs individuels, conçu spécifiquement pour éviter la période de
+« réputation froide » de SmartScreen (contrairement à un certificat OV classique, qui
+met des semaines à construire sa réputation même une fois signé).
 
 ## Chromium, pas Chrome
 

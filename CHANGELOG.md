@@ -4,6 +4,12 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.57.1] — 2026-07-20
+
+### Documentation
+
+- **Marche à suivre complète pour SignPath Foundation** (README, section Signature) — vérifiée directement sur signpath.org : critères d'éligibilité, lien de candidature, compromis à connaître (le certificat identifie « SignPath Foundation », pas « ÆTHER », dans SmartScreen), et l'étape de workflow GitHub Actions prête à coller une fois approuvé (signature à distance, différente du `CSC_LINK` local déjà câblé). Mention d'Azure Trusted Signing (~10 $/mois) comme repli payant si le délai d'approbation gratuit pose problème.
+
 ## [0.57.0] — 2026-07-20
 
 ### Ajouté
