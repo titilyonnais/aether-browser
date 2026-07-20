@@ -8,5 +8,10 @@ dist/
 .vscode/*
 !.vscode/extensions.json
 
+# Certificats de signature de code (jamais dans git, même auto-signés — clé
+# privée embarquée dans le .pfx) — voir README, section « Signature ».
+*.pfx
+*.p12
+
 # Éditeur / outillage local (configs de lancement, etc.)
 .claude/

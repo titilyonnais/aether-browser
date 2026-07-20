@@ -1,6 +1,7 @@
-# Configuration electron-builder — packaging Windows 11 (NSIS)
+# Configuration electron-builder — packaging Windows 11 (NSIS + portable)
 appId: com.aether.browser
 productName: Aether
+copyright: Copyright © 2026 ÆTHER
 directories:
   output: release
   buildResources: build
@@ -26,13 +27,47 @@ files:
   - "!**/*.map"
 asarUnpack:
   - "**/*.node"
+# En l'absence de certificat de signature de code (voir README, section
+# « Signature »), un SHA-256 publié à côté des artefacts reste le seul moyen
+# offert aux utilisateurs de vérifier l'intégrité d'un téléchargement.
+afterAllArtifactBuild: scripts/write-checksums.mjs
 win:
   target:
     - target: nsis
       arch:
         - x64
+    # Cible « portable » : un seul .exe autonome, aucune installation, aucune
+    # écriture registre — s'exécute directement depuis n'importe quel dossier
+    # (clé USB, dossier Téléchargements…). Alternative utile tant que
+    # SmartScreen bloque l'installeur : ne déclenche PAS le même écran
+    # (« application non reconnue » au premier LANCEMENT plutôt qu'à
+    # l'installation), mais reste soumis à la même absence de réputation —
+    # ce n'est PAS un contournement de SmartScreen, juste un mode de
+    # distribution différent, parfois moins intimidant pour un utilisateur.
+    - target: portable
+      arch:
+        - x64
   executableName: Aether
   icon: build/icon.ico
+  # Signature Authenticode — AUCUN chemin de certificat ici volontairement :
+  # electron-builder détecte automatiquement les variables d'environnement
+  # `CSC_LINK` (chemin ou base64 d'un .pfx) et `CSC_KEY_PASSWORD` si elles
+  # sont définies au moment du build, sans le moindre réglage YAML. Voir la
+  # section « Signature » du README pour la procédure complète (génération du
+  # certificat, portée réelle sur SmartScreen). `signtoolOptions` fige
+  # l'algorithme sur SHA-256 seul (le défaut signe en SHA-1 ET SHA-256 pour la
+  # compatibilité Windows 7/Vista, inutile pour une app qui cible Windows 11) ;
+  # l'horodatage RFC 3161 est appliqué automatiquement par electron-builder
+  # dès qu'une signature a lieu — aucun réglage supplémentaire nécessaire.
+  signtoolOptions:
+    signingHashAlgorithms:
+      - sha256
+portable:
+  # Niveau d'exécution le plus bas possible (cohérent avec `nsis.perMachine:
+  # false` + `allowElevation: false` ci-dessous — Aether n'a jamais besoin des
+  # droits administrateur, qu'il soit installé ou lancé en portable).
+  requestExecutionLevel: user
+  artifactName: ${productName}-Portable-${version}.${ext}
 nsis:
   # Installeur « assisté » (assistant classique : Bienvenue → CGU → Installer →
   # Terminer), PAS le mode « un clic » d'origine qui installait directement

@@ -64,6 +64,60 @@ même emplacement (`allowToChangeInstallationDirectory: false`) — indispensabl
 qu'une mise à jour se pose par-dessus l'installation existante au lieu d'en créer une
 seconde à côté.
 
+### Signature (SmartScreen)
+
+L'installeur et l'exécutable ne sont **pas signés** actuellement : Windows affiche
+« Microsoft Defender SmartScreen a empêché le démarrage d'une application non
+reconnue » au premier lancement. C'est attendu, pas un bug — Windows n'a aucun moyen
+de vérifier qui a produit le binaire tant qu'aucun certificat de signature de code
+reconnu ne l'accompagne, et la réputation SmartScreen (build automatique au fil des
+téléchargements/exécutions sans signalement) ne s'accumule que pour un binaire déjà
+signé de façon cohérente.
+
+**Un certificat auto-signé ne règle PAS ce problème pour une distribution publique** :
+il n'est présent dans le magasin « Autorités de confiance » d'aucune machine tant que
+l'utilisateur ne l'y importe pas manuellement lui-même — impossible à grande échelle
+via GitHub Releases. Il reste utile pour un usage strictement interne/dev (machines où
+le certificat est déjà importé, ou simplement pour renseigner un éditeur dans les
+propriétés du fichier). Génération (PowerShell, en administrateur) :
+
+```powershell
+$cert = New-SelfSignedCertificate `
+  -Type CodeSigningCert `
+  -Subject "CN=Aether Dev" `
+  -KeyUsage DigitalSignature `
+  -FriendlyName "Aether Code Signing (dev, auto-signé)" `
+  -CertStoreLocation "Cert:\CurrentUser\My" `
+  -NotAfter (Get-Date).AddYears(3) `
+  -KeyExportPolicy Exportable `
+  -KeyLength 2048 `
+  -KeyAlgorithm RSA `
+  -HashAlgorithm SHA256
+
+$pwd = ConvertTo-SecureString -String "change-moi" -Force -AsPlainText
+Export-PfxCertificate -Cert $cert -FilePath ".\build\aether-dev-signing.pfx" -Password $pwd
+```
+
+Puis, pour signer un build (`electron-builder.yml` ne contient aucun chemin de
+certificat — `CSC_LINK`/`CSC_KEY_PASSWORD` sont détectées automatiquement) :
+
+```powershell
+$env:CSC_LINK = "C:\chemin\vers\aether-dev-signing.pfx"
+$env:CSC_KEY_PASSWORD = "change-moi"
+npm run dist
+```
+
+electron-builder horodate automatiquement la signature (RFC 3161, serveur public) dès
+qu'un certificat est fourni — aucun réglage supplémentaire. **Ne jamais committer le
+`.pfx`** (`*.pfx`/`*.p12` sont dans `.gitignore`) : il embarque la clé privée.
+
+La seule voie **gratuite et réellement efficace** contre SmartScreen pour une
+distribution publique est [SignPath.io Foundation](https://signpath.org/) — certificats
+de signature de code gratuits pour les projets open source éligibles (licence OSI,
+dépôt public, CI active) : ÆTHER remplit ces critères (MIT, dépôt public, workflow CI),
+mais la candidature et l'intégration au pipeline de signature restent à faire par
+quelqu'un ayant autorité sur le dépôt — non automatisable depuis ici.
+
 ## Chromium, pas Chrome
 
 ÆTHER utilise le **moteur** Chromium (rendu Blink, V8, réseau, sandbox) via Electron — d'où

@@ -4,6 +4,15 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.57.0] — 2026-07-20
+
+### Ajouté
+
+- **Cible portable Windows** (`Aether-Portable-X.Y.Z.exe`) en plus de l'installeur NSIS — un seul exécutable autonome, sans installation ni écriture registre. Publié automatiquement aux côtés de l'installeur sur chaque release.
+- **Vérification d'intégrité** — un `SHA256SUMS.txt` est désormais généré et publié avec chaque release (empreintes de l'installeur, du portable et du blockmap), pour permettre de vérifier qu'un téléchargement n'a pas été altéré.
+- **Infrastructure de signature de code (prête, pas activée)** — `electron-builder.yml` détecte automatiquement `CSC_LINK`/`CSC_KEY_PASSWORD` si définies au moment du build, sans configuration supplémentaire. Documentation complète dans le README (génération d'un certificat auto-signé pour du dev, et pourquoi ça ne suffit **pas** à faire disparaître SmartScreen pour une distribution publique — la seule voie gratuite et réellement efficace, SignPath.io Foundation, demande une candidature côté mainteneur).
+- **Métadonnées de packaging** — `copyright` renseigné, algorithme de signature figé sur SHA-256 seul (au lieu du défaut SHA-1+SHA-256, hérité de la compatibilité Windows Vista/7, inutile ici).
+
 ## [0.56.0] — 2026-07-20
 
 ### Ajouté
