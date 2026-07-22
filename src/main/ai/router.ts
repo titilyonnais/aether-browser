@@ -6,7 +6,7 @@
  */
 import type { AiStatus, ApiProviderKind, ChatMessage, ProviderKind } from '@shared/types'
 import { logger } from '../logger'
-import { getSettings, hasSecret, readSecret } from '../settings'
+import { getAiCloudUsage, getSettings, hasSecret, readSecret, tryConsumeAiCloudBudget } from '../settings'
 import {
   anthropicChat,
   ollamaChat,
@@ -28,7 +28,8 @@ export class AiRouter {
     configured: { anthropic: false, openai: false, xai: false },
     active: 'none',
     activeModel: null,
-    embeddings: 'none'
+    embeddings: 'none',
+    cloudBudget: { count: 0, limit: 0 }
   }
 
   private aborters = new Map<string, AbortController>()
@@ -59,7 +60,8 @@ export class AiRouter {
       configured,
       active: 'none',
       activeModel: null,
-      embeddings: 'none'
+      embeddings: 'none',
+      cloudBudget: getAiCloudUsage()
     }
     const resolved = this.resolveCandidates()[0] ?? null
     if (resolved) {
@@ -180,18 +182,38 @@ export class AiRouter {
       case 'anthropic': {
         const key = readSecret('anthropic')
         if (!key) throw new Error('Clé Claude absente.')
+        this.consumeCloudBudgetOrThrow()
         return anthropicChat(key, params)
       }
       case 'openai': {
         const key = readSecret('openai')
         if (!key) throw new Error('Clé OpenAI absente.')
+        this.consumeCloudBudgetOrThrow()
         return openaiCompatChat('https://api.openai.com/v1', key, 'OpenAI', params)
       }
       case 'xai': {
         const key = readSecret('xai')
         if (!key) throw new Error('Clé xAI absente.')
+        this.consumeCloudBudgetOrThrow()
         return openaiCompatChat('https://api.x.ai/v1', key, 'xAI', params)
       }
+    }
+  }
+
+  /** Décrémente le plafond quotidien d'appels IA cloud avant l'appel réel —
+   * jamais pour Ollama (local, gratuit). Lève une erreur claire (plutôt que
+   * de tomber silencieusement dans le candidat suivant, ce qui masquerait un
+   * plafond réellement atteint derrière un simple « échec du provider ») si
+   * le plafond du jour est déjà consommé, et notifie l'UI du nouveau compte
+   * pour un affichage à jour (Réglages › IA) sans re-sonder Ollama. */
+  private consumeCloudBudgetOrThrow(): void {
+    const ok = tryConsumeAiCloudBudget()
+    this.status = { ...this.status, cloudBudget: getAiCloudUsage() }
+    this.onStatusChanged?.(this.status)
+    if (!ok) {
+      throw new Error(
+        `Plafond quotidien d'appels IA cloud atteint (${this.status.cloudBudget.limit}/jour) — réessayez demain ou augmentez la limite dans Réglages › IA.`
+      )
     }
   }
 
@@ -219,6 +241,14 @@ export class AiRouter {
     }
     const openaiKey = readSecret('openai')
     if (openaiKey) {
+      if (!tryConsumeAiCloudBudget()) {
+        this.status = { ...this.status, cloudBudget: getAiCloudUsage() }
+        this.onStatusChanged?.(this.status)
+        logger.warn('ai.router', "Plafond quotidien d'appels IA cloud atteint — embedding OpenAI abandonné")
+        return null
+      }
+      this.status = { ...this.status, cloudBudget: getAiCloudUsage() }
+      this.onStatusChanged?.(this.status)
       try {
         const vector = await openaiEmbed(openaiKey, 'text-embedding-3-small', text)
         return { vector, model: 'openai:text-embedding-3-small' }

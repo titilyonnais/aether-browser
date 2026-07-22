@@ -23,14 +23,18 @@ function escapeHtml(s: string): string {
 }
 
 /** Corps HTML soigné (façon ticket) + repli texte brut pour les clients qui
- * ne rendent pas le HTML. */
-function buildEmail(subject: string, body: string): { html: string; text: string } {
-  const meta = [
-    ['Version ÆTHER', app.getVersion()],
-    ['Electron', process.versions.electron ?? '?'],
-    ['Chromium', process.versions.chrome ?? '?'],
-    ['OS', `${process.platform} ${process.getSystemVersion?.() ?? ''}`.trim()]
-  ]
+ * ne rendent pas le HTML. `includeMetadata` = false omet complètement le
+ * bloc version/OS (case à cocher côté ReportProblemOverlay.tsx) — le rapport
+ * reste alors composé du seul texte saisi par l'utilisateur. */
+function buildEmail(subject: string, body: string, includeMetadata: boolean): { html: string; text: string } {
+  const meta = includeMetadata
+    ? [
+        ['Version ÆTHER', app.getVersion()],
+        ['Electron', process.versions.electron ?? '?'],
+        ['Chromium', process.versions.chrome ?? '?'],
+        ['OS', `${process.platform} ${process.getSystemVersion?.() ?? ''}`.trim()]
+      ]
+    : []
   const metaHtml = meta.map(([k, v]) => `<tr><td style="color:#8a8f9c;padding:2px 12px 2px 0;">${k}</td><td style="color:#c9cdd6;">${escapeHtml(v)}</td></tr>`).join('')
   const metaText = meta.map(([k, v]) => `${k} : ${v}`).join('\n')
 
@@ -44,20 +48,25 @@ function buildEmail(subject: string, body: string): { html: string; text: string
     <div style="padding:20px 24px;">
       <p style="margin:0;white-space:pre-wrap;font-size:13.5px;line-height:1.6;color:#d7d9e0;">${escapeHtml(body) || '<em style="color:#6b7280;">(aucune description)</em>'}</p>
     </div>
-    <div style="padding:16px 24px;background:#0d0d13;border-top:1px solid #26262f;">
+    ${
+      includeMetadata
+        ? `<div style="padding:16px 24px;background:#0d0d13;border-top:1px solid #26262f;">
       <table style="font-size:11.5px;border-collapse:collapse;">${metaHtml}</table>
-    </div>
+    </div>`
+        : ''
+    }
   </div>
 </div>`.trim()
 
-  const text = `${subject}\n\n${body}\n\n---\n${metaText}`
+  const text = includeMetadata ? `${subject}\n\n${body}\n\n---\n${metaText}` : `${subject}\n\n${body}`
   return { html, text }
 }
 
 export async function sendBugReport(
   subject: string,
   body: string,
-  attachmentPaths: string[] = []
+  attachmentPaths: string[] = [],
+  includeMetadata = true
 ): Promise<{ ok: boolean; error?: string }> {
   const config = readSmtpConfig()
   if (!config) return { ok: false, error: 'smtp-not-configured' }
@@ -79,7 +88,7 @@ export async function sendBugReport(
       secure: config.port === 465,
       auth: { user: config.user, pass: config.pass }
     })
-    const { html, text } = buildEmail(subject.slice(0, 200), body.slice(0, 10_000))
+    const { html, text } = buildEmail(subject.slice(0, 200), body.slice(0, 10_000), includeMetadata)
     await transporter.sendMail({
       from: config.user,
       to: REPORT_TO_ADDRESS,

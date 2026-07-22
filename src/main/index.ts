@@ -13,7 +13,7 @@ import { createMainWindow } from './mainWindow'
 import { cleanupPreviews } from './previews'
 import { installAetherProtocol, registerAetherScheme } from './protocol'
 import { isQuitting } from './quitState'
-import { getSettings, seedSmtpConfigFromEnv } from './settings'
+import { getSettings, seedE2eDefaultsFromEnv, seedSmtpConfigFromEnv } from './settings'
 import { checkForUpdates, initUpdater } from './updater'
 import { ViewManager } from './viewManager'
 import { allWindowContexts, registerWindowContext } from './windowRegistry'
@@ -64,6 +64,7 @@ if (!gotLock) {
 
     openDatabase()
     seedSmtpConfigFromEnv()
+    seedE2eDefaultsFromEnv()
     // Filet de sécurité si un crash/kill forcé a empêché le nettoyage normal
     // de `will-quit` (ci-dessous) : un profil de navigation privée resté en
     // base survivrait sinon indéfiniment (espaces/pages/visites/favoris),

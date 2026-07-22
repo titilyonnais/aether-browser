@@ -4,6 +4,18 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.58.0] — 2026-07-23
+
+### Ajouté
+
+- **Budget quotidien d'appels IA cloud** (Réglages › IA) — plafond configurable sur les appels Claude/OpenAI/Grok (0 = illimité, 300/jour par défaut), protège d'une facture surprise en cas de bug ou de boucle qui martèle l'API. Ollama (local, gratuit) n'est jamais concerné. Compteur remis à zéro chaque jour, affiché en temps réel dans Réglages.
+- **Option « ne pas envoyer les informations système »** dans « Signaler un problème » — case à cocher qui omet version d'ÆTHER/Electron/Chromium/OS du mail envoyé, pour les utilisateurs qui préfèrent ne partager que leur description du problème.
+- **Tests e2e smoke** (Playwright, vrai processus Electron via `_electron`) — 3 scénarios : démarrage + ouverture d'une page depuis la Barre d'Intention, bascule Focus/Toile, création d'un espace. `npm run test:e2e`, chaque run dans un profil temporaire isolé (jamais le profil réel).
+
+### Corrigé
+
+- **`better-sqlite3` pouvait rester compilé pour la mauvaise ABI (Node au lieu d'Electron) après `npm test`**, malgré un `npm run rebuild` signalé « réussi » — `electron-builder install-app-deps` fait confiance à un cache qui ignore qu'un `npm rebuild` ciblant Node a entre-temps écrasé le binaire réellement lié. Symptôme réel : l'app plante silencieusement au lancement juste après avoir lancé les tests. `posttest` (et le nouveau `pretest:e2e`) utilisent désormais `scripts/rebuild-native-for-electron.mjs`, qui republie inconditionnellement via `@electron/rebuild` (`force: true`) sans jamais faire confiance à un cache.
+
 ## [0.57.1] — 2026-07-20
 
 ### Documentation

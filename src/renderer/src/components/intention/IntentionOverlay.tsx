@@ -260,6 +260,7 @@ function IntentionPanel() {
           <Sparkles size={17} strokeWidth={1.6} className="shrink-0 text-glacier/80" />
           <input
             ref={inputRef}
+            data-testid="intention-input"
             autoFocus
             value={input}
             onChange={(e) => setInput(e.target.value)}

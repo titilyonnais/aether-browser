@@ -7,6 +7,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { Paperclip, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { Toggle } from '@/components/ui/Toggle'
 import { useT } from '@/i18n/useT'
 import { formatBytes } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settings'
@@ -25,6 +26,7 @@ function ReportProblemPanel() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [attachments, setAttachments] = useState<{ path: string; name: string; size: number }[]>([])
+  const [includeMetadata, setIncludeMetadata] = useState(true)
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
   const titleRef = useRef<HTMLInputElement | null>(null)
   const close = (): void => useUiStore.getState().closeOverlay()
@@ -66,7 +68,8 @@ function ReportProblemPanel() {
     const result = await window.aether.app.sendReport(
       title.trim() || 'Signalement ÆTHER',
       description.trim(),
-      attachments.map((a) => a.path)
+      attachments.map((a) => a.path),
+      includeMetadata
     )
     if (result.ok) {
       setStatus('sent')
@@ -146,6 +149,15 @@ function ReportProblemPanel() {
           <Paperclip size={11} strokeWidth={1.7} />
           {t('overlays.reportProblem.attach')}
         </button>
+
+        <div className="mt-3 border-t border-white/[0.06] pt-3">
+          <Toggle
+            label={t('overlays.reportProblem.includeMetadata')}
+            hint={t('overlays.reportProblem.includeMetadataHint')}
+            checked={includeMetadata}
+            onChange={setIncludeMetadata}
+          />
+        </div>
 
         <div className="mt-4 flex justify-end gap-2">
           <button

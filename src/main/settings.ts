@@ -31,6 +31,10 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   anthropicModel: 'claude-sonnet-5',
   openaiModel: 'gpt-4o-mini',
   xaiModel: 'grok-3',
+  // Généreux par défaut (n'entrave jamais un usage normal) — pense à
+  // stopper une boucle/un bug qui martèle l'API, pas à rationner l'usage
+  // courant. 0 = illimité, réglable dans Réglages › IA.
+  aiCloudDailyLimit: 300,
   searchEngine: 'duckduckgo',
   theme: 'dark',
   accent: 'glacier',
@@ -183,6 +187,19 @@ export function seedSmtpConfigFromEnv(): void {
   storeSmtpConfig({ host, port: portNum, user, pass })
 }
 
+/** Graine ponctuelle pour les tests e2e (`tests/e2e/`, Playwright) — quand
+ * `AETHER_E2E=1` est posée (jamais en usage normal), force `onboarded: true`
+ * dès le tout premier lancement pour que le test atteigne directement la
+ * coquille principale (Constellation/Muse/TitleBar) sans avoir à piloter
+ * l'intro en plus du scénario réellement testé. Chaque run e2e utilise de
+ * toute façon un `--user-data-dir` temporaire dédié (voir tests/e2e/) —
+ * jamais le profil réel de l'utilisateur, cette graine ne peut donc jamais
+ * affecter un usage normal de l'application. */
+export function seedE2eDefaultsFromEnv(): void {
+  if (process.env['AETHER_E2E'] !== '1') return
+  putValue('onboarded', true)
+}
+
 // ─── Réglages ────────────────────────────────────────────────────────────────
 
 function getString<K extends keyof typeof DEFAULTS>(key: K): (typeof DEFAULTS)[K] {
@@ -208,6 +225,7 @@ export function getSettings(): AppSettings {
     anthropicModel: getString('anthropicModel'),
     openaiModel: getString('openaiModel'),
     xaiModel: getString('xaiModel'),
+    aiCloudDailyLimit: getString('aiCloudDailyLimit'),
     searchEngine: getString('searchEngine'),
     theme: getString('theme'),
     accent: getString('accent'),
@@ -287,6 +305,9 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
   if (patch.anthropicModel !== undefined) putValue('anthropicModel', patch.anthropicModel.trim())
   if (patch.openaiModel !== undefined) putValue('openaiModel', patch.openaiModel.trim())
   if (patch.xaiModel !== undefined) putValue('xaiModel', patch.xaiModel.trim())
+  if (patch.aiCloudDailyLimit !== undefined) {
+    putValue('aiCloudDailyLimit', Math.max(0, Math.round(patch.aiCloudDailyLimit)))
+  }
   if (patch.searchEngine !== undefined) putValue('searchEngine', patch.searchEngine)
   if (patch.theme !== undefined) putValue('theme', patch.theme)
   if (patch.accent !== undefined) putValue('accent', patch.accent)
@@ -402,6 +423,55 @@ export function resetSettings(): AppSettings {
   }
   putValue('onboarded', wasOnboarded)
   return getSettings()
+}
+
+// ─── Budget d'appels IA cloud (protection contre une facture surprise) ──────
+// Suivi comme un ÉTAT (préfixe `state.*`, comme `activeProfileId`/`focus`),
+// PAS un réglage : ne doit jamais être remis à la valeur par défaut par
+// `resetSettings()`, et se remet à zéro tout seul chaque jour, pas sur
+// demande explicite de l'utilisateur.
+
+interface AiCloudUsage {
+  date: string
+  count: number
+}
+
+function todayKey(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function readAiCloudUsage(): AiCloudUsage {
+  const raw = kvRepo.get('state.aiCloudUsage')
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as AiCloudUsage
+      if (parsed.date === todayKey()) return parsed
+    } catch {
+      // Valeur illisible — repart de zéro, sans conséquence réelle.
+    }
+  }
+  return { date: todayKey(), count: 0 }
+}
+
+/** Usage du jour + plafond configuré, pour affichage (Réglages › IA). */
+export function getAiCloudUsage(): { count: number; limit: number } {
+  return { count: readAiCloudUsage().count, limit: getString('aiCloudDailyLimit') }
+}
+
+/**
+ * À appeler juste AVANT chaque appel réel à un provider IA CLOUD (jamais
+ * Ollama, local et gratuit) — incrémente le compteur du jour et retourne
+ * `false` si le plafond est déjà atteint (0 = illimité, toujours `true`).
+ * Le routeur (`ai/router.ts`) doit alors refuser l'appel plutôt que de
+ * risquer une facture surprise (boucle/bug qui martèle l'API).
+ */
+export function tryConsumeAiCloudBudget(): boolean {
+  const limit = getString('aiCloudDailyLimit')
+  const usage = readAiCloudUsage()
+  if (limit > 0 && usage.count >= limit) return false
+  kvRepo.set('state.aiCloudUsage', JSON.stringify({ date: usage.date, count: usage.count + 1 }))
+  return true
 }
 
 // ─── Divers état applicatif ──────────────────────────────────────────────────

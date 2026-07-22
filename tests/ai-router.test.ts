@@ -8,7 +8,9 @@ import type { AppSettings } from '../src/shared/types'
 const settingsMock = vi.hoisted(() => ({
   getSettings: vi.fn(),
   hasSecret: vi.fn(),
-  readSecret: vi.fn()
+  readSecret: vi.fn(),
+  tryConsumeAiCloudBudget: vi.fn(),
+  getAiCloudUsage: vi.fn()
 }))
 vi.mock('../src/main/settings', () => settingsMock)
 
@@ -42,6 +44,8 @@ beforeEach(() => {
   settingsMock.getSettings.mockReturnValue(baseSettings())
   settingsMock.hasSecret.mockReturnValue(false)
   settingsMock.readSecret.mockReturnValue(null)
+  settingsMock.tryConsumeAiCloudBudget.mockReturnValue(true)
+  settingsMock.getAiCloudUsage.mockReturnValue({ count: 0, limit: 0 })
 })
 
 describe('AiRouter.chat — repli entre candidats', () => {
@@ -97,6 +101,22 @@ describe('AiRouter.chat — repli entre candidats', () => {
   it("rejette immédiatement si aucun candidat n'est disponible", async () => {
     const router = new AiRouter()
     await expect(router.chat('req-4', 'system', [], () => {})).rejects.toThrow('Aucune intelligence disponible')
+  })
+
+  it('rejette avec un message clair si le plafond IA cloud est atteint (Ollama jamais concerné)', async () => {
+    settingsMock.hasSecret.mockImplementation((k: string) => k === 'anthropic')
+    settingsMock.readSecret.mockReturnValue('sk-ant')
+    settingsMock.tryConsumeAiCloudBudget.mockReturnValue(false)
+    settingsMock.getAiCloudUsage.mockReturnValue({ count: 300, limit: 300 })
+    const router = new AiRouter()
+    // Ollama indisponible : seul le candidat cloud (anthropic) reste.
+    ;(router as unknown as { status: { ollama: { reachable: boolean; models: string[] } } }).status.ollama = {
+      reachable: false,
+      models: []
+    }
+
+    await expect(router.chat('req-5', 'system', [], () => {})).rejects.toThrow('Plafond quotidien')
+    expect(providersMock.anthropicChat).not.toHaveBeenCalled()
   })
 })
 

@@ -1,6 +1,6 @@
 {
   "name": "aether-browser",
-  "version": "0.57.1",
+  "version": "0.58.0",
   "description": "ÆTHER — un espace de pensée et d'action augmenté pour le web",
   "main": "out/main/index.js",
   "author": "ÆTHER",
@@ -16,7 +16,9 @@
     "typecheck": "tsc --noEmit --composite false -p tsconfig.node.json && tsc --noEmit --composite false -p tsconfig.web.json",
     "pretest": "npm rebuild better-sqlite3",
     "test": "vitest run",
-    "posttest": "npm run rebuild",
+    "posttest": "node scripts/rebuild-native-for-electron.mjs",
+    "pretest:e2e": "electron-vite build && node scripts/rebuild-native-for-electron.mjs",
+    "test:e2e": "playwright test",
     "gen:icon": "node scripts/gen-icon.mjs",
     "rebuild": "electron-builder install-app-deps",
     "postinstall": "electron-builder install-app-deps",
@@ -33,9 +35,11 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource/instrument-serif": "^5.2.8",
+    "@playwright/test": "^1.61.1",
     "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.3.2",
     "@types/better-sqlite3": "^7.6.13",

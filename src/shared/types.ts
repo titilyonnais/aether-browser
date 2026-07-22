@@ -157,6 +157,10 @@ export interface AiStatus {
   active: ProviderKind | 'none'
   activeModel: string | null
   embeddings: 'ollama' | 'openai' | 'none'
+  /** Usage du jour vs plafond configuré (`AppSettings.aiCloudDailyLimit`) —
+   * `limit: 0` = illimité, `count` toujours suivi même dans ce cas (affichage
+   * informatif seulement). */
+  cloudBudget: { count: number; limit: number }
 }
 
 export interface ChatMessage {
@@ -318,6 +322,10 @@ export interface AppSettings {
   hasAnthropicKey: boolean
   hasOpenaiKey: boolean
   hasXaiKey: boolean
+  /** Plafond quotidien d'appels IA cloud (Anthropic/OpenAI/xAI) — Ollama non
+   * concerné (local, gratuit). 0 = illimité. Protège d'une facture surprise
+   * en cas de boucle/bug qui martèle l'API ; remis à zéro chaque jour. */
+  aiCloudDailyLimit: number
   /** Relais SMTP configuré (développeur uniquement, jamais via une UI
    * Réglages) — permet à l'overlay « Signaler un problème » de proposer un
    * repli `mailto:` si l'envoi automatique n'est pas disponible. */
@@ -442,6 +450,7 @@ export interface SettingsPatch {
   anthropicKey?: string | null
   openaiKey?: string | null
   xaiKey?: string | null
+  aiCloudDailyLimit?: number
   searchEngine?: string
   theme?: ThemeMode
   accent?: AccentId

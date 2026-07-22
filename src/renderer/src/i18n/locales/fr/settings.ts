@@ -66,6 +66,12 @@ export const settings: Record<string, string> = {
   'settings.ai.keyPlaceholderSaved': '•••••••••••• (enregistrée)',
   'settings.ai.keysSecurityNote':
     "Les clés sont chiffrées sur cet appareil (DPAPI Windows) et ne servent qu'à appeler le provider choisi. Rien n'est synchronisé, rien n'est collecté.",
+  'settings.ai.cloudBudgetTitle': 'Budget IA cloud',
+  'settings.ai.cloudBudgetHint':
+    "Plafond quotidien d'appels vers Claude/OpenAI/Grok — protège d'une facture surprise en cas de bug ou de boucle. Ollama (local) n'est jamais concerné, il est gratuit.",
+  'settings.ai.cloudBudgetLimitLabel': 'Appels max par jour',
+  'settings.ai.cloudBudgetUsage': '{{count}} / {{limit}} appels utilisés aujourd’hui',
+  'settings.ai.cloudBudgetUnlimited': '{{count}} appel(s) aujourd’hui — aucune limite fixée',
 
   // Section Profils
   'settings.profiles.title': 'Profils',

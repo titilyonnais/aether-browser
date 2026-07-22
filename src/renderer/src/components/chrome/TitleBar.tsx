@@ -91,6 +91,7 @@ export function TitleBar() {
           symétrie des deux colonnes `1fr` adjacentes, jamais superposée. */}
       <button
         type="button"
+        data-testid="intention-pill"
         onClick={() => ui.openOverlay('intention')}
         className={cn(
           'no-drag flex h-8 min-w-0 items-center gap-2.5 rounded-full',
@@ -138,6 +139,7 @@ export function TitleBar() {
         <div className="no-drag flex shrink-0 items-center rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
           <button
             type="button"
+            data-testid="mode-focus"
             title={t('shell.titlebar.focusModeTitle')}
             onClick={() => ui.setMode('focus')}
             className={cn(
@@ -150,6 +152,7 @@ export function TitleBar() {
           </button>
           <button
             type="button"
+            data-testid="mode-canvas"
             title={t('shell.titlebar.canvasModeTitle')}
             onClick={() => ui.setMode('canvas')}
             className={cn(

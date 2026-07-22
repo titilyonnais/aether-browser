@@ -106,6 +106,9 @@ export const overlays: Record<string, string> = {
   'overlays.reportProblem.titlePlaceholder': 'Titre du problème',
   'overlays.reportProblem.descriptionPlaceholder': 'Décrivez ce qui ne fonctionne pas comme prévu…',
   'overlays.reportProblem.attach': 'Joindre des fichiers…',
+  'overlays.reportProblem.includeMetadata': 'Inclure les informations système',
+  'overlays.reportProblem.includeMetadataHint':
+    'Version d’ÆTHER, Electron, Chromium et système d’exploitation — aide à diagnostiquer, mais pas indispensable.',
   'overlays.reportProblem.cancel': 'Annuler',
   'overlays.reportProblem.send': 'Envoyer',
   'overlays.reportProblem.sending': 'Envoi…',

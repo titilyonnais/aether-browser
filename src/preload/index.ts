@@ -241,8 +241,8 @@ const api: AetherApi = {
     runMenuCommand: (cmd: ShortcutCommand) => ipcRenderer.send(CH.appMenuRunCommand, cmd),
     setTitle: (title: string) => ipcRenderer.send(CH.appSetTitle, title),
     openNewWindow: () => ipcRenderer.send(CH.appNewWindow),
-    sendReport: (subject: string, body: string, attachmentPaths?: string[]) =>
-      ipcRenderer.invoke(CH.reportSend, subject, body, attachmentPaths),
+    sendReport: (subject: string, body: string, attachmentPaths?: string[], includeMetadata?: boolean) =>
+      ipcRenderer.invoke(CH.reportSend, subject, body, attachmentPaths, includeMetadata),
     chooseReportAttachments: () => ipcRenderer.invoke(CH.reportChooseAttachments),
     chooseBackgroundImage: () => ipcRenderer.invoke(CH.backgroundChooseImage),
     backgroundImageDataUrl: (filename: string) => ipcRenderer.invoke(CH.backgroundImageDataUrl, filename)

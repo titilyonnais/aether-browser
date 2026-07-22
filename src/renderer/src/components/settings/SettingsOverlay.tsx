@@ -554,6 +554,33 @@ function AiSection() {
         onKey={(v) => void patch({ xaiKey: v })}
       />
 
+      <Block title={t('settings.ai.cloudBudgetTitle')} hint={t('settings.ai.cloudBudgetHint')}>
+        <div className="space-y-2.5">
+          <Row label={t('settings.ai.cloudBudgetLimitLabel')}>
+            <input
+              type="number"
+              min={0}
+              max={5000}
+              step={10}
+              defaultValue={settings.aiCloudDailyLimit}
+              onBlur={(e) => void patch({ aiCloudDailyLimit: Number(e.target.value) || 0 })}
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+              className="h-8 w-24 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[12px] text-ink outline-none transition-colors focus:border-glacier/40"
+            />
+          </Row>
+          {aiStatus && (
+            <p className="text-[11px] text-ink-faint">
+              {settings.aiCloudDailyLimit === 0
+                ? t('settings.ai.cloudBudgetUnlimited', { count: aiStatus.cloudBudget.count })
+                : t('settings.ai.cloudBudgetUsage', {
+                    count: aiStatus.cloudBudget.count,
+                    limit: aiStatus.cloudBudget.limit
+                  })}
+            </p>
+          )}
+        </div>
+      </Block>
+
       <p className="flex items-start gap-2 text-[10.5px] leading-relaxed text-ink-faint">
         <Shield size={11} strokeWidth={1.7} className="mt-0.5 shrink-0" />
         {t('settings.ai.keysSecurityNote')}

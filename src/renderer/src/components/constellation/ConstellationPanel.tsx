@@ -129,6 +129,7 @@ function SpacesList() {
       {spaces.map((space) => (
         <div
           key={space.id}
+          data-testid="space-row"
           title={t('shell.constellation.spaceRowHint')}
           onContextMenu={(e) => {
             e.preventDefault()
@@ -236,6 +237,7 @@ function SpacesList() {
 
       <button
         type="button"
+        data-testid="new-space"
         onClick={() => {
           void createSpace(t('shell.constellation.newSpace'))
         }}

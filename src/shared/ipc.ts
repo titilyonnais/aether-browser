@@ -672,8 +672,15 @@ export interface AetherApi {
     openNewWindow(): void
     /** Envoie un rapport de bug par SMTP (identifiants côté main uniquement,
      * jamais exposés ici) — échoue proprement si aucun relais n'est configuré.
-     * `attachmentPaths` : chemins déjà choisis via `chooseReportAttachments`. */
-    sendReport(subject: string, body: string, attachmentPaths?: string[]): Promise<{ ok: boolean; error?: string }>
+     * `attachmentPaths` : chemins déjà choisis via `chooseReportAttachments`.
+     * `includeMetadata` (défaut `true`) : `false` omet version/OS/Electron du
+     * mail envoyé — case à cocher dans ReportProblemOverlay.tsx. */
+    sendReport(
+      subject: string,
+      body: string,
+      attachmentPaths?: string[],
+      includeMetadata?: boolean
+    ): Promise<{ ok: boolean; error?: string }>
     /** Sélecteur de fichiers natif (multi-sélection) pour joindre des pièces
      * au rapport de bug — retourne les chemins choisis. */
     chooseReportAttachments(): Promise<{ path: string; name: string; size: number }[]>

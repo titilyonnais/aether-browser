@@ -1706,12 +1706,15 @@ export function registerIpc(router: AiRouter): void {
     createSecondaryContentWindow(activeProfileOf(views), false, undefined, router)
   })
 
-  ipcMain.handle(CH.reportSend, (_e, subject: string, body: string, attachmentPaths?: string[]) =>
-    sendBugReport(
-      String(subject ?? '').slice(0, 200),
-      String(body ?? '').slice(0, 10_000),
-      Array.isArray(attachmentPaths) ? attachmentPaths.slice(0, 10).map(String) : []
-    )
+  ipcMain.handle(
+    CH.reportSend,
+    (_e, subject: string, body: string, attachmentPaths?: string[], includeMetadata?: boolean) =>
+      sendBugReport(
+        String(subject ?? '').slice(0, 200),
+        String(body ?? '').slice(0, 10_000),
+        Array.isArray(attachmentPaths) ? attachmentPaths.slice(0, 10).map(String) : [],
+        includeMetadata !== false
+      )
   )
 
   ipcMain.handle(

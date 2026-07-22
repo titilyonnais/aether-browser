@@ -15,3 +15,7 @@ dist/
 
 # Éditeur / outillage local (configs de lancement, etc.)
 .claude/
+
+# Sorties des tests e2e (Playwright) — voir tests/e2e/, playwright.config.ts.
+test-results/
+playwright-report/
