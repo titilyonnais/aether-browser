@@ -26,10 +26,6 @@ import { PageListBubble } from './PageListBubble'
 const ZOOM_MIN = 0.22
 const ZOOM_MAX = 2.5
 const GRID_STEP = 26
-/** Largeur cible des aperçus JPEG (voir main/previews.ts `TARGET_WIDTH`) —
- * au-delà, la carte agrandit un bitmap plus petit qu'elle-même via
- * `transform: scale()` et devient visiblement floue/pixélisée. */
-const PREVIEW_TARGET_WIDTH = 1600
 
 export function SpatialCanvas() {
   const t = useT()
@@ -95,19 +91,24 @@ export function SpatialCanvas() {
     []
   )
 
-  // Rafraîchit l'aperçu (haute résolution, voir main/previews.ts) des cartes
-  // dont la largeur effective à l'écran (largeur monde × zoom) dépasse la
-  // résolution native déjà capturée — sans ça, zoomer agrandit juste le petit
-  // bitmap existant et le résultat reste flou. Une seule requête par page
-  // (`refreshedPreviews`), pas à chaque cran de zoom.
+  // Rafraîchit l'aperçu (résolution/qualité relevées, voir main/previews.ts)
+  // dès qu'une carte apparaît sur la Toile — les fichiers déjà sur disque ont
+  // pu être capturés AVANT ce relèvement (ancienne session, ou simplement
+  // jamais recapturés depuis) et restent flous indéfiniment sans ça. Un seuil
+  // basé sur la largeur effective à l'écran (largeur × zoom) avait été essayé
+  // mais ne se déclenchait quasiment jamais en pratique : la largeur par
+  // défaut d'une carte (360px, voir DEFAULT_CARD dans main/ipc.ts) reste sous
+  // n'importe quel seuil raisonnable même au zoom maximal (900px à ×2.5) — la
+  // plupart des cartes n'étaient donc jamais rafraîchies. `views.capture()`
+  // ne fait rien pour une page qui n'est pas vivante (canvas.ts ne monte
+  // aucune vue web), donc cette requête est sans coût pour les autres.
   useEffect(() => {
     for (const page of pages) {
       if (refreshedPreviews.current.has(page.id)) continue
-      if (page.canvas.w * zoomDisplay <= PREVIEW_TARGET_WIDTH) continue
       refreshedPreviews.current.add(page.id)
       window.aether.pages.requestPreview(page.id)
     }
-  }, [pages, zoomDisplay])
+  }, [pages])
 
   // Bascule vers la Toile (ce composant est démonté/remonté à chaque
   // changement de mode, cf App.tsx) : cadre intelligemment la caméra plutôt

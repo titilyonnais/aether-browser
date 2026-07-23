@@ -4,6 +4,13 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.59.1] — 2026-07-23
+
+### Corrigé
+
+- **Le rafraîchissement d'aperçu au zoom (Toile, v0.59.0) ne se déclenchait presque jamais en pratique** — le seuil comparait la largeur effective à l'écran à la résolution cible des aperçus (1600px), mais une carte à sa taille par défaut (360px) ne dépasse jamais 900px même au zoom maximal : la quasi-totalité des cartes ne se rafraîchissaient donc jamais. Remplacé par un rafraîchissement systématique (une fois par page) dès qu'une carte apparaît sur la Toile.
+- **Les cartes jamais ouvertes en mode Focus cette session restaient floues même après un rafraîchissement demandé** — `capture()` ne faisait rien en l'absence de vue vivante (le mode Toile n'en monte aucune). Une vue temporaire, invisible, est désormais créée le temps de la capture puis détruite si elle n'a pas d'autre raison de rester active.
+
 ## [0.59.0] — 2026-07-23
 
 ### Corrigé

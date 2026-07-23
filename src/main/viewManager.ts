@@ -1586,11 +1586,34 @@ export class ViewManager {
 
   // ─── Aperçus & contexte ────────────────────────────────────────────────────
 
+  /** Capture l'aperçu d'une page. Si aucune vue vivante n'existe (page posée
+   * sur la Toile mais jamais focalisée cette session, ou déchargée par
+   * `evictIfNeeded`) et `force` est vrai, en crée une TEMPORAIRE : `ensureLive`
+   * ne l'attache jamais visuellement (voir son commentaire — `addChildView`
+   * n'a lieu que dans `applyLayout`/`setVisible`), donc charger une page ainsi
+   * pour la capturer reste invisible pour l'utilisateur. Détruite juste après
+   * si elle n'a pas de raison de rester vivante (pas dans `visibleIds`),
+   * pour ne pas fausser le plafond `maxLivePages`. */
   async capture(id: PageId, force = false): Promise<void> {
-    const view = this.views.get(id)
-    if (!view) return
+    let view = this.views.get(id)
+    let temporary = false
+    if (!view) {
+      if (!force) return
+      const row = pagesRepo.get(id)
+      if (!row) return
+      view = this.ensureLive(row)
+      temporary = true
+      await this.pendingInitialLoad.get(id)
+      // Laisse le premier rendu peindre — même délai que la capture
+      // opportuniste après `did-stop-loading` (voir plus haut, `wire()`).
+      await new Promise((resolve) => setTimeout(resolve, 450))
+    }
     const version = await capturePreview(id, view, force)
     if (version !== null) this.delegate.onPreviewUpdated(id, version)
+    if (temporary && !this.visibleIds.includes(id)) {
+      this.destroyView(id, { keepPreview: true })
+      this.patchRuntime(id, { isLive: false, isLoading: false })
+    }
   }
 
   /** Extrait titre + texte de la page (données opaques, jamais évaluées). */
