@@ -165,6 +165,25 @@ export const CH = {
    * principale — celle-ci décide (onglet déjà ouvert → focus, sinon nouveau). */
   favoritesRequestOpen: 'favorites:request-open',
   favoritesManageRequested: 'favorites:manage-requested',
+  /** « Ouvrir dans un nouvel onglet »/« … dans une vue fractionnée » — toujours
+   * une carte NEUVE (contrairement à `favoriteOpenRequested`, qui réutilise un
+   * onglet déjà ouvert sur cette URL, façon Chrome). */
+  favoriteOpenInNewTabRequested: 'favorite:open-in-new-tab-requested',
+  favoriteOpenInSplitRequested: 'favorite:open-in-split-requested',
+  favoritesUpdate: 'favorites:update',
+  /** « Modifier… » depuis le menu contextuel — pas de saisie de texte possible
+   * dans un menu natif, la fenêtre principale doit demander titre/URL. */
+  favoriteUpdateRequested: 'favorite:update-requested',
+  favoriteCut: 'favorite:cut',
+  favoriteCopy: 'favorite:copy',
+  favoritePaste: 'favorite:paste',
+  /** « Ajouter une page… » depuis un menu contextuel — le main ne connaît pas
+   * la page active (concept renderer), la fenêtre principale doit la résoudre. */
+  favoriteAddPageRequested: 'favorite:add-page-requested',
+  favoritesShowBarContextMenu: 'favorites:show-bar-context-menu',
+  /** « Afficher la barre de favoris » depuis un menu natif — bascule un
+   * réglage, la fenêtre principale applique via son store de réglages. */
+  favoritesToggleBarRequested: 'favorites:toggle-bar-requested',
   // Dossiers de favoris (rangement)
   favoriteFoldersList: 'favorite-folders:list',
   favoriteFoldersCreate: 'favorite-folders:create',
@@ -173,6 +192,7 @@ export const CH = {
   favoriteFoldersUpdated: 'favorite-folders:updated',
   favoriteFoldersShowContextMenu: 'favorite-folders:show-context-menu',
   favoriteFolderRenameRequested: 'favorite-folders:rename-requested',
+  favoriteFoldersCreateRequested: 'favorite-folders:create-requested',
   favoritesShowOverflowMenu: 'favorites:show-overflow-menu',
   // Événements pages
   pageUpdated: 'page:updated',
@@ -209,6 +229,10 @@ export const CH = {
   siteClearOriginData: 'site:clear-origin-data',
   siteShowDataManager: 'site:show-data-manager',
   siteDataManagerRequested: 'site:data-manager-requested',
+  /** « Supprimer lorsque vous fermez toutes les fenêtres », par origine —
+   * menu 3 points d'une ligne de SiteDataOverlay.tsx. */
+  siteClearOnExitList: 'site:clear-on-exit-list',
+  siteClearOnExitToggle: 'site:clear-on-exit-toggle',
 
   // Page de réglages complète d'un site (15 catégories) — mêmes relais.
   siteShowSiteSettings: 'site:show-site-settings',
@@ -497,6 +521,10 @@ export interface AetherApi {
     /** « Ouvrir » depuis le menu contextuel — envoie l'URL, la fenêtre
      * principale décide (page déjà ouverte → focus, sinon nouvelle carte). */
     onOpenRequested(cb: (url: string) => void): Unsubscribe
+    /** « Ouvrir dans un nouvel onglet » — toujours une carte neuve. */
+    onOpenInNewTabRequested(cb: (url: string) => void): Unsubscribe
+    /** « Ouvrir dans une vue fractionnée » — toujours une carte neuve. */
+    onOpenInSplitRequested(cb: (url: string) => void): Unsubscribe
     /** Depuis le popup natif du contenu d'un dossier (fenêtre séparée) :
      * demande à la fenêtre principale d'ouvrir/focaliser cette URL. */
     requestOpen(url: string): void
@@ -506,6 +534,25 @@ export interface AetherApi {
     onUpdated(cb: (favorites: Favorite[]) => void): Unsubscribe
     /** Menu natif listant les favoris/dossiers en débordement de la barre (flèche finale). */
     showOverflowMenu(entries: FavoritesOverflowEntry[]): void
+    /** Modifie le titre et/ou l'URL d'un favori (menu contextuel « Modifier… »). */
+    update(id: string, patch: { title?: string; url?: string }): Promise<void>
+    /** « Modifier… » depuis le menu contextuel — la fenêtre principale demande
+     * titre/URL (pas de saisie de texte possible dans un menu natif). */
+    onUpdateRequested(cb: (id: string) => void): Unsubscribe
+    /** Place ce favori dans le presse-papiers (mode coupe — rien ne bouge
+     * tant que `paste` n'est pas appelé). */
+    cut(id: string): void
+    /** Place ce favori dans le presse-papiers (mode copie). */
+    copy(id: string): void
+    /** Colle le contenu du presse-papiers dans ce conteneur (`null` = racine). */
+    paste(folderId: string | null): void
+    /** « Ajouter une page… » depuis un menu contextuel — la fenêtre principale
+     * résout la page active (concept renderer) et l'ajoute à ce conteneur. */
+    onAddPageRequested(cb: (folderId: string | null) => void): Unsubscribe
+    /** Affiche le menu contextuel « espace vide » de la barre de favoris. */
+    showBarContextMenu(anchor: LocalRect): void
+    /** « Afficher la barre de favoris » depuis un menu natif — bascule le réglage. */
+    onToggleBarRequested(cb: (next: boolean) => void): Unsubscribe
   }
   favoriteFolders: {
     list(): Promise<FavoriteFolder[]>
@@ -520,6 +567,9 @@ export interface AetherApi {
     /** « Renommer » depuis ce menu — pas de saisie de texte possible dans un
      * menu natif, la fenêtre principale doit demander le nouveau nom. */
     onRenameRequested(cb: (id: string) => void): Unsubscribe
+    /** « Ajouter un dossier… » depuis un menu contextuel — la fenêtre
+     * principale demande le nom (pas de saisie de texte dans un menu natif). */
+    onCreateRequested(cb: () => void): Unsubscribe
   }
   site: {
     /** Infos HTTPS/certificat/permissions pour l'origine de la page donnée. */
@@ -552,6 +602,11 @@ export interface AetherApi {
     getEmbeddedOrigins(id: PageId): Promise<string[]>
     /** Efface cookies + stockage d'UNE origine précise (pas toute la partition). */
     clearOriginData(origin: string): Promise<void>
+    /** Origines du profil actif flaggées « supprimer à la fermeture de
+     * toutes les fenêtres » — pour cocher les cases déjà actives à l'ouverture. */
+    listClearOnExit(): Promise<string[]>
+    /** Bascule le drapeau pour cette origine — retourne le NOUVEL état. */
+    toggleClearOnExit(origin: string): Promise<boolean>
   }
   /** Vue d'ensemble des autorisations par site (Réglages › Confidentialité) —
    * scopée par ORIGINE directement, pas de PageId disponible depuis Réglages. */

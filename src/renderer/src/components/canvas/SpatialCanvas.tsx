@@ -26,6 +26,10 @@ import { PageListBubble } from './PageListBubble'
 const ZOOM_MIN = 0.22
 const ZOOM_MAX = 2.5
 const GRID_STEP = 26
+/** Largeur cible des aperçus JPEG (voir main/previews.ts `TARGET_WIDTH`) —
+ * au-delà, la carte agrandit un bitmap plus petit qu'elle-même via
+ * `transform: scale()` et devient visiblement floue/pixélisée. */
+const PREVIEW_TARGET_WIDTH = 1600
 
 export function SpatialCanvas() {
   const t = useT()
@@ -56,6 +60,10 @@ export function SpatialCanvas() {
   const animFrame = useRef<number | null>(null)
   const [zoomDisplay, setZoomDisplay] = useState(1)
   const [panning, setPanning] = useState(false)
+  /** Cartes ayant déjà déclenché un rafraîchissement d'aperçu haute résolution
+   * — une seule requête par page suffit (l'aperçu capturé reste net jusqu'à
+   * la prochaine navigation, qui recapture de toute façon). */
+  const refreshedPreviews = useRef<Set<string>>(new Set())
 
   /** Applique la caméra au DOM (transform + grille de points). */
   const apply = useCallback((): void => {
@@ -86,6 +94,20 @@ export function SpatialCanvas() {
     () => debounce(() => setZoomDisplay(camera.current.zoom), 90),
     []
   )
+
+  // Rafraîchit l'aperçu (haute résolution, voir main/previews.ts) des cartes
+  // dont la largeur effective à l'écran (largeur monde × zoom) dépasse la
+  // résolution native déjà capturée — sans ça, zoomer agrandit juste le petit
+  // bitmap existant et le résultat reste flou. Une seule requête par page
+  // (`refreshedPreviews`), pas à chaque cran de zoom.
+  useEffect(() => {
+    for (const page of pages) {
+      if (refreshedPreviews.current.has(page.id)) continue
+      if (page.canvas.w * zoomDisplay <= PREVIEW_TARGET_WIDTH) continue
+      refreshedPreviews.current.add(page.id)
+      window.aether.pages.requestPreview(page.id)
+    }
+  }, [pages, zoomDisplay])
 
   // Bascule vers la Toile (ce composant est démonté/remonté à chaque
   // changement de mode, cf App.tsx) : cadre intelligemment la caméra plutôt

@@ -4,6 +4,23 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.59.0] — 2026-07-23
+
+### Corrigé
+
+- **Ouvrir un deuxième nouvel onglet ne faisait plus rien** — le bouton « + » re-naviguait silencieusement la carte « Nouvel onglet » déjà active vers elle-même au lieu d'en créer une nouvelle, dès qu'un premier nouvel onglet vierge était déjà ouvert.
+- **La mise à jour n'affichait plus la petite barre de progression d'avant** — l'assistant d'installation complet (Réparer/Supprimer, introduit en v0.56.0) s'invitait aussi pendant les mises à jour automatiques. Deux installeurs distincts sont désormais publiés à chaque release : l'assistant complet pour le téléchargement manuel, un « un clic » silencieux dédié exclusivement à l'auto-updater.
+- **Sélecteur de profil (haut à droite) pas centré au repos**, ne se recentrant qu'au survol — corrigé.
+- **Le sélecteur de profil ne se refermait pas en recliquant dessus** alors qu'il était déjà ouvert — un second menu s'empilait silencieusement par-dessus le premier.
+- **Aperçus flous/pixélisés en zoomant sur une carte en mode Toile** — les captures sont désormais faites à une résolution et une qualité plus élevées, et rafraîchies automatiquement pour les cartes déjà ouvertes quand le zoom dépasse la résolution capturée.
+
+### Ajouté
+
+- **Bouton « Voir le certificat »** dans le popover du cadenas (section « La connexion est sécurisée ») — remplace un petit lien texte discret par une vraie rangée pleine largeur, cohérente avec le reste du menu.
+- **Menu « ⋮ » par site** dans « Gérer les données des sites sur l'appareil » — deux nouvelles actions par origine : ne pas autoriser l'enregistrement des données (bloque les cookies pour ce site), et supprimer ses données à la fermeture de toutes les fenêtres.
+- **Menu contextuel des favoris complet, façon Chrome** — sur un favori : ouvrir dans un nouvel onglet/une nouvelle fenêtre/une vue fractionnée/une fenêtre de navigation privée, modifier son titre/URL, couper/copier/coller, ajouter une page/un dossier, afficher ou non la barre de favoris. Sur un espace vraiment vide de la barre : tout ouvrir (variantes fenêtre/navigation privée), coller, ajouter une page/un dossier, afficher la barre.
+- **Menus contextuels dans le panneau Constellation (mode Focus)** — clic droit sur un point (page) : mêmes actions que la bande d'onglets. Clic droit sur un espace : « Fermer tous les onglets » (l'espace reste, vide) et « Fusionner avec… » (déplace les pages vers un autre espace puis dissout celui-ci).
+
 ## [0.58.0] — 2026-07-23
 
 ### Ajouté

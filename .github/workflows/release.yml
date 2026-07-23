@@ -60,9 +60,41 @@ jobs:
         run: |
           TAG="v${{ needs.check-version.outputs.version }}"
           gh release create "$TAG" --draft --title "$TAG" --notes "" --repo titilyonnais/aether-browser || echo "Existe déjà — poursuite normale."
-      - run: npm run release
+      - run: npx electron-vite build
+      # Deux installeurs Windows distincts, DEUX invocations electron-builder
+      # séparées (electron-builder ne permet pas deux configs NSIS différentes
+      # en un seul appel — `nsis:` est un objet global par nom de cible, pas
+      # par entrée de tableau) — voir electron-builder.yml/.updater.yml pour
+      # le pourquoi complet. `--publish never` sur LES DEUX : chaque build
+      # écrit son propre `latest.yml` (électron-builder le fait pour tout
+      # build NSIS non-portable, indépendamment de `oneClick`) — les publier
+      # tous les deux ferait gagner celui qui uploade en dernier (course),
+      # exactement le genre de fragilité que la création anticipée de la
+      # release visait déjà à éliminer. On choisit nous-mêmes, explicitement,
+      # quel fichier de chaque build atterrit dans la release.
+      - name: Build — installeur assistant (téléchargement manuel)
+        run: npx electron-builder --config electron-builder.yml --publish never
+      - name: Build — installeur un clic (auto-updater uniquement)
+        run: npx electron-builder --config electron-builder.updater.yml --publish never
+      # Un seul SHA256SUMS.txt combinant les empreintes des deux builds —
+      # sans ça, seul le dernier `gh release upload` déciderait quel fichier
+      # de check-sums survit dans la release.
+      - name: Combiner les empreintes SHA-256
+        shell: bash
+        run: cat release/SHA256SUMS.txt release-updater/SHA256SUMS.txt > SHA256SUMS-combined.txt
+      - name: Publier les artefacts sur la release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ needs.check-version.outputs.version }}"
+          gh release upload "$TAG" --repo titilyonnais/aether-browser --clobber \
+            "release/Aether-Setup-${{ needs.check-version.outputs.version }}.exe" \
+            "release/Aether-Portable-${{ needs.check-version.outputs.version }}.exe" \
+            "release-updater/Aether-Setup-${{ needs.check-version.outputs.version }}-updater.exe" \
+            "release-updater/Aether-Setup-${{ needs.check-version.outputs.version }}-updater.exe.blockmap" \
+            "release-updater/latest.yml" \
+            "SHA256SUMS-combined.txt#SHA256SUMS.txt"
       # electron-builder publie en BROUILLON (releaseType: draft, electron-builder.yml)
       # — étape séparée pour la rendre réellement visible.
       - name: Publier la release

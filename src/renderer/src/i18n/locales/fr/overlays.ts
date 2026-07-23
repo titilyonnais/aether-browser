@@ -26,6 +26,9 @@ export const overlays: Record<string, string> = {
   'overlays.siteData.clear': 'Supprimer',
   'overlays.siteData.cleared': 'Données supprimées',
   'overlays.siteData.confirmClear': 'Supprimer toutes les données stockées pour {{origin}} ?',
+  'overlays.siteData.moreActions': 'Plus d’actions',
+  'overlays.siteData.blockCookies': 'Ne pas autoriser l’enregistrement des données',
+  'overlays.siteData.clearOnExit': 'Supprimer lorsque vous fermez toutes les fenêtres',
 
   // Téléchargements
   'overlays.downloads.title': 'Téléchargements',

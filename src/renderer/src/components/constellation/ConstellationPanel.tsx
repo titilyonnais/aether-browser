@@ -447,6 +447,10 @@ function ConstellationGraph() {
                 onPointerUp={onNodePointerUp}
                 onPointerEnter={() => setHovered({ id: n.page.id, x: p.x, y: p.y })}
                 onPointerLeave={() => setHovered(null)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  window.aether.pages.showContextMenu(n.page.id, { x: e.clientX, y: e.clientY, width: 0, height: 0 })
+                }}
               >
                 {isActive && <circle r={11} className="node-ring" fill="none" stroke={hueColor(hue, 0.5)} strokeWidth={1} />}
                 <circle

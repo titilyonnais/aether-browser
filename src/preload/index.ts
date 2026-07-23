@@ -134,10 +134,20 @@ const api: AetherApi = {
     reorder: (orderedIds: string[]) => ipcRenderer.invoke(CH.favoritesReorder, orderedIds),
     showContextMenu: (id: string, anchor: LocalRect) => ipcRenderer.send(CH.favoriteShowContextMenu, id, anchor),
     onOpenRequested: (cb) => on(CH.favoriteOpenRequested, cb),
+    onOpenInNewTabRequested: (cb) => on(CH.favoriteOpenInNewTabRequested, cb),
+    onOpenInSplitRequested: (cb) => on(CH.favoriteOpenInSplitRequested, cb),
     requestOpen: (url: string) => ipcRenderer.send(CH.favoritesRequestOpen, url),
     onManageRequested: (cb) => on(CH.favoritesManageRequested, cb),
     onUpdated: (cb) => on(CH.favoritesUpdated, cb),
-    showOverflowMenu: (entries) => ipcRenderer.send(CH.favoritesShowOverflowMenu, entries)
+    showOverflowMenu: (entries) => ipcRenderer.send(CH.favoritesShowOverflowMenu, entries),
+    update: (id: string, patch: { title?: string; url?: string }) => ipcRenderer.invoke(CH.favoritesUpdate, id, patch),
+    onUpdateRequested: (cb) => on(CH.favoriteUpdateRequested, cb),
+    cut: (id: string) => ipcRenderer.send(CH.favoriteCut, id),
+    copy: (id: string) => ipcRenderer.send(CH.favoriteCopy, id),
+    paste: (folderId: string | null) => ipcRenderer.send(CH.favoritePaste, folderId),
+    onAddPageRequested: (cb) => on(CH.favoriteAddPageRequested, cb),
+    showBarContextMenu: (anchor: LocalRect) => ipcRenderer.send(CH.favoritesShowBarContextMenu, anchor),
+    onToggleBarRequested: (cb) => on(CH.favoritesToggleBarRequested, cb)
   },
   favoriteFolders: {
     list: () => ipcRenderer.invoke(CH.favoriteFoldersList),
@@ -146,7 +156,8 @@ const api: AetherApi = {
     remove: (id: string) => ipcRenderer.invoke(CH.favoriteFoldersRemove, id),
     onUpdated: (cb) => on(CH.favoriteFoldersUpdated, cb),
     showContextMenu: (id: string, anchor: LocalRect) => ipcRenderer.send(CH.favoriteFoldersShowContextMenu, id, anchor),
-    onRenameRequested: (cb) => on(CH.favoriteFolderRenameRequested, cb)
+    onRenameRequested: (cb) => on(CH.favoriteFolderRenameRequested, cb),
+    onCreateRequested: (cb) => on(CH.favoriteFoldersCreateRequested, cb)
   },
   site: {
     info: (id: PageId) => ipcRenderer.invoke(CH.siteInfo, id),
@@ -161,7 +172,9 @@ const api: AetherApi = {
     showSiteSettings: (id: PageId) => ipcRenderer.send(CH.siteShowSiteSettings, id),
     onSiteSettingsRequested: (cb) => on(CH.siteSettingsRequested, cb),
     getEmbeddedOrigins: (id: PageId) => ipcRenderer.invoke(CH.siteEmbeddedOrigins, id),
-    clearOriginData: (origin: string) => ipcRenderer.invoke(CH.siteClearOriginData, origin)
+    clearOriginData: (origin: string) => ipcRenderer.invoke(CH.siteClearOriginData, origin),
+    listClearOnExit: () => ipcRenderer.invoke(CH.siteClearOnExitList),
+    toggleClearOnExit: (origin: string) => ipcRenderer.invoke(CH.siteClearOnExitToggle, origin)
   },
   sitePermissions: {
     list: () => ipcRenderer.invoke(CH.sitePermissionsList),

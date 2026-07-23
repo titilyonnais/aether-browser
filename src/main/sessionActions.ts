@@ -4,6 +4,9 @@
  * d'import entre index.ts (bootstrap) et ipc.ts (handlers).
  */
 import { dialog, session, type BrowserWindow } from 'electron'
+import { profilesRepo } from './db/repositories'
+import { getClearOnExitOrigins } from './settings'
+import { webPartitionForProfile } from './webSession'
 
 type StorageKind =
   | 'cookies'
@@ -56,6 +59,25 @@ export async function clearOriginData(partition: string, origin: string): Promis
     'filesystem'
   ]
   await session.fromPartition(partition).clearStorageData({ origin, storages })
+}
+
+/**
+ * Efface les données des origines flaggées « supprimer à la fermeture de
+ * toutes les fenêtres » (SiteDataOverlay.tsx), pour chaque profil NON privé
+ * (un profil privé est déjà en mémoire, sa partition disparaît toute seule).
+ * Appelée par `window-all-closed` (`main/index.ts`) AVANT `app.quit()` — pas
+ * pendant/après, pour ne jamais faire la course avec `closeDatabase()`.
+ */
+export async function performClearOnExit(): Promise<void> {
+  for (const profile of profilesRepo.list()) {
+    if (profile.isPrivate) continue
+    const origins = getClearOnExitOrigins(profile.id)
+    if (origins.length === 0) continue
+    const partition = webPartitionForProfile(profile.id, false)
+    for (const origin of origins) {
+      await clearOriginData(partition, origin)
+    }
+  }
 }
 
 /** Sélecteur de dossier natif (réglage du dossier de téléchargement). */

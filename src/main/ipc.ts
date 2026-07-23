@@ -80,6 +80,7 @@ import {
   setExtensionEnabled
 } from './extensions'
 import { openExtensionPopup, resizeExtensionPopup } from './extensionPopupWindow'
+import { clearFavoritesClipboard, getFavoritesClipboard, setFavoritesClipboard } from './favoritesClipboard'
 import { readFlags, relaunchApp, writeFlags } from './flags'
 import { createChildWindow } from './mainWindow'
 import { sendBugReport } from './mailer'
@@ -111,12 +112,14 @@ import {
   applySettingsPatch,
   getActiveProfileId,
   getActiveSpaceId,
+  getClearOnExitOrigins,
   getFocusState,
   getSettings,
   resetSettings,
   setActiveProfileId,
   setActiveSpaceId,
-  setFocusState
+  setFocusState,
+  toggleClearOnExitOrigin
 } from './settings'
 import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
 import { ViewManager } from './viewManager'
@@ -444,11 +447,12 @@ export function attachWindowLifecycleEvents(win: BrowserWindow): void {
  * fenêtre ne charge, pour qu'il apparaisse dans son tout premier
  * `stateInitial()`. Sans `initialUrl` (menu « Nouvelle fenêtre »), la
  * fenêtre s'ouvre simplement sur les espaces déjà existants du profil —
- * espaces/pages sont partagés par PROFIL, pas par fenêtre. */
+ * espaces/pages sont partagés par PROFIL, pas par fenêtre. Un tableau ouvre
+ * plusieurs onglets d'un coup (« Tout ouvrir » depuis la barre de favoris). */
 function createSecondaryContentWindow(
   profileId: ProfileId,
   isPrivate: boolean,
-  initialUrl: string | undefined,
+  initialUrl: string | string[] | undefined,
   router: AiRouter
 ): BrowserWindow {
   const cascadeOffset = 32 * ((allWindowContexts().length % 6) + 1)
@@ -460,12 +464,15 @@ function createSecondaryContentWindow(
   registerWindowContext({ win, views })
   attachWindowLifecycleEvents(win)
 
-  if (initialUrl && isAllowedUrl(initialUrl)) {
+  const initialUrls = (Array.isArray(initialUrl) ? initialUrl : initialUrl ? [initialUrl] : []).filter(isAllowedUrl)
+  if (initialUrls.length > 0) {
     const spaces = spacesRepo.listByProfile(profileId)
     const spaceId = getActiveSpaceId(profileId) ?? spaces[0]?.id
     if (spaceId) {
-      const row = pagesRepo.create({ spaceId, url: initialUrl, parentId: null, canvas: placeCard(spaceId, null) })
-      views.ensureLive(row)
+      for (const url of initialUrls) {
+        const row = pagesRepo.create({ spaceId, url, parentId: null, canvas: placeCard(spaceId, null) })
+        views.ensureLive(row)
+      }
     }
   }
 
@@ -499,7 +506,7 @@ function createSecondaryContentWindow(
  * privée » n'affecte jamais la fenêtre courante). Partagé entre le menu
  * principal (`CH.profileCreatePrivate`) et le menu contextuel d'un lien
  * (`onOpenInNewWindow`, ci-dessous). */
-function createPrivateWindow(router: AiRouter, initialUrl?: string): { win: BrowserWindow; profile: Profile } {
+function createPrivateWindow(router: AiRouter, initialUrl?: string | string[]): { win: BrowserWindow; profile: Profile } {
   const profile = profilesRepo.create('Navigation privée', 262, { icon: '🕶', color: '#20202c' }, { isPrivate: true })
   spacesRepo.create('Espace privé', 262, profile.id)
   const win = createSecondaryContentWindow(profile.id, true, initialUrl, router)
@@ -783,15 +790,30 @@ export function registerIpc(router: AiRouter): void {
   // la fenêtre principale (`*Requested`), qui exécute la même logique que les
   // boutons du menu (rechargement complet du workspace, stores…), impossible
   // à reproduire depuis ce process ou depuis un popup sans store partagé.
+  // Fenêtres (par id) où le menu natif du sélecteur de profil est actuellement
+  // affiché — `Menu.closePopup` est une méthode d'INSTANCE (pas statique),
+  // donc on garde la référence exacte du menu ouvert, pas juste un booléen.
+  const openProfileMenus = new Map<number, Menu>()
   ipcMain.on(CH.profileShowMenu, (e, rawAnchor: LocalRect) => {
     const { win, views } = resolveWindowContext(e)
     const anchor = safeValidate(localRectSchema, rawAnchor, 'profile:show-menu')
     if (!anchor) return
+    // Un menu natif n'a pas d'état « ouvert » côté renderer — sans ce suivi,
+    // recliquer sur la pastille alors que le menu est déjà affiché en
+    // ROUVRAIT un second par-dessus (perçu comme « ça ne se ferme pas »).
+    // Le `callback` (déclenché à la fermeture, quelle qu'en soit la raison)
+    // retire l'entrée dans tous les cas.
+    const openMenu = openProfileMenus.get(win.id)
+    if (openMenu) {
+      openMenu.closePopup(win)
+      openProfileMenus.delete(win.id)
+      return
+    }
     const winBounds = win.getBounds()
     const x = Math.round(winBounds.x + anchor.x)
     const y = Math.round(winBounds.y + anchor.y + anchor.height + 6)
     const activeId = activeProfileOf(views)
-    Menu.buildFromTemplate([
+    const menu = Menu.buildFromTemplate([
       { label: 'Profils', enabled: false },
       { type: 'separator' },
       ...profilesRepo.list().map((p) => ({
@@ -808,7 +830,9 @@ export function registerIpc(router: AiRouter): void {
         click: () => sendTo(win, CH.profileStartPrivateRequested)
       },
       { label: 'Gérer les profils…', click: () => sendTo(win, CH.profileManageRequested) }
-    ]).popup({ window: win, x, y })
+    ])
+    openProfileMenus.set(win.id, menu)
+    menu.popup({ window: win, x, y, callback: () => openProfileMenus.delete(win.id) })
   })
 
   // ─── Espaces ───────────────────────────────────────────────────────────────
@@ -893,7 +917,28 @@ export function registerIpc(router: AiRouter): void {
     const space = spacesRepo.get(id)
     const profileId = activeProfileOf(views)
     if (!space || spacesRepo.profileOf(id) !== profileId) return
-    const spaceCount = spacesRepo.listByProfile(profileId).length
+    const otherSpaces = spacesRepo.listByProfile(profileId).filter((s) => s.id !== id)
+    const spaceCount = otherSpaces.length + 1
+    const hasPages = pagesRepo.listBySpace(id).length > 0
+    const closeAllTabs = (): void => {
+      for (const page of pagesRepo.listBySpace(id)) {
+        views.closePage(page.id)
+        pagesRepo.remove(page.id)
+        sendTo(win, CH.pageRemoved, page.id)
+      }
+    }
+    // Déplace toutes les pages vers l'espace cible puis dissout l'espace
+    // source EN RÉUTILISANT le relais habituel (`CH.spaceRemoveRequested` →
+    // `removeSpace()` côté renderer → `CH.spaceRemove`, même chemin que
+    // « Dissoudre ») — aucune page ne s'y trouve plus, rien d'autre à fermer.
+    const mergeInto = (targetId: SpaceId) => (): void => {
+      for (const page of pagesRepo.listBySpace(id)) {
+        pagesRepo.setSpace(page.id, targetId)
+        const row = pagesRepo.get(page.id)
+        if (row) sendTo(win, CH.pageUpdated, buildPageMeta(views, row))
+      }
+      sendTo(win, CH.spaceRemoveRequested, id)
+    }
     showContextMenuPopover(
       win,
       anchor,
@@ -913,6 +958,17 @@ export function registerIpc(router: AiRouter): void {
         { kind: 'separator' },
         { kind: 'item', id: 'duplicate', label: 'Dupliquer l’espace' },
         { kind: 'item', id: 'new-space', label: 'Nouvel espace' },
+        { kind: 'separator' },
+        { kind: 'item', id: 'close-all-tabs', label: 'Fermer tous les onglets', disabled: !hasPages },
+        {
+          kind: 'submenu',
+          id: 'merge-into',
+          label: 'Fusionner avec…',
+          rows:
+            otherSpaces.length === 0
+              ? [{ kind: 'item', id: 'merge-none', label: 'Aucun autre espace', disabled: true }]
+              : otherSpaces.map((s) => ({ kind: 'item', id: `merge-${s.id}`, label: s.name }))
+        },
         { kind: 'separator' },
         { kind: 'item', id: 'dissolve', label: 'Dissoudre l’espace', disabled: spaceCount <= 1, danger: true }
       ],
@@ -937,6 +993,20 @@ export function registerIpc(router: AiRouter): void {
           const created = spacesRepo.create('Nouvel espace', SPACE_HUES[count % SPACE_HUES.length], profileId)
           sendTo(win, CH.spaceUpdated, created)
         },
+        'close-all-tabs': () => {
+          if (!hasPages) return
+          const confirmed = dialog.showMessageBoxSync(win, {
+            type: 'warning',
+            buttons: ['Annuler', 'Fermer'],
+            defaultId: 0,
+            cancelId: 0,
+            title: 'Fermer tous les onglets',
+            message: `Fermer tous les onglets de « ${space.name} » ?`,
+            detail: 'L’espace reste ouvert, vide.'
+          })
+          if (confirmed === 1) closeAllTabs()
+        },
+        ...Object.fromEntries(otherSpaces.map((s) => [`merge-${s.id}`, mergeInto(s.id)])),
         dissolve: () => {
           const confirmed = dialog.showMessageBoxSync(win, {
             type: 'warning',
@@ -1151,6 +1221,40 @@ export function registerIpc(router: AiRouter): void {
     broadcastToPopover(CH.favoritesUpdated, favorites)
   }
 
+  // Presse-papiers de favoris (Couper/Copier/Coller) — un seul slot process-wide,
+  // voir favoritesClipboard.ts. « Coller » ajoute toujours à la fin du conteneur
+  // cible (pas de positionnement fin avant/après un favori précis).
+  const pasteFavoriteInto = (profileId: ProfileId, folderId: string | null): void => {
+    const clip = getFavoritesClipboard(profileId)
+    if (!clip) return
+    const source = favoritesRepo.get(clip.id)
+    if (!source) return
+    if (clip.mode === 'cut') {
+      favoritesRepo.setFolder(clip.id, folderId)
+      clearFavoritesClipboard()
+    } else {
+      const created = favoritesRepo.create(profileId, {
+        url: source.url,
+        title: source.title,
+        faviconUrl: source.favicon_url,
+        spaceId: source.space_id
+      })
+      if (folderId) favoritesRepo.setFolder(created.id, folderId)
+    }
+    sendFavorites(profileId)
+  }
+
+  ipcMain.handle(CH.favoritesUpdate, (e, id: string, patch: { title?: string; url?: string }) => {
+    const profileId = activeProfileOf(resolveWindowContext(e).views)
+    favoritesRepo.update(id, { title: patch?.title, url: patch?.url })
+    sendFavorites(profileId)
+  })
+  ipcMain.on(CH.favoriteCut, (e, id: string) => setFavoritesClipboard(id, 'cut', activeProfileOf(resolveWindowContext(e).views)))
+  ipcMain.on(CH.favoriteCopy, (e, id: string) => setFavoritesClipboard(id, 'copy', activeProfileOf(resolveWindowContext(e).views)))
+  ipcMain.on(CH.favoritePaste, (e, folderId: string | null) =>
+    pasteFavoriteInto(activeProfileOf(resolveWindowContext(e).views), folderId)
+  )
+
   ipcMain.handle(CH.favoritesList, (e) => favoritesRepo.listByProfile(activeProfileOf(resolveWindowContext(e).views)).map(toFavorite))
 
   ipcMain.handle(
@@ -1204,6 +1308,18 @@ export function registerIpc(router: AiRouter): void {
       sendFavorites(profileId)
     }
     const openManage = (): void => sendTo(win, CH.favoritesManageRequested)
+    const openNewTab = (): void => sendTo(win, CH.favoriteOpenInNewTabRequested, row.url)
+    const openNewWindow = (): void => void createSecondaryContentWindow(profileId, false, row.url, router)
+    const openSplit = (): void => sendTo(win, CH.favoriteOpenInSplitRequested, row.url)
+    const openPrivateWindow = (): void => void createPrivateWindow(router, row.url)
+    const editFavorite = (): void => sendTo(win, CH.favoriteUpdateRequested, id)
+    const cutFavorite = (): void => setFavoritesClipboard(id, 'cut', profileId)
+    const copyFavorite = (): void => setFavoritesClipboard(id, 'copy', profileId)
+    const pasteFavorite = (): void => pasteFavoriteInto(profileId, row.folder_id)
+    const addPage = (): void => sendTo(win, CH.favoriteAddPageRequested, row.folder_id)
+    const addFolder = (): void => sendTo(win, CH.favoriteFoldersCreateRequested)
+    const toggleBar = (): void => sendTo(win, CH.favoritesToggleBarRequested, !getSettings().showFavoritesBar)
+    const canPaste = getFavoritesClipboard(profileId) !== null
 
     // Appelé depuis le popup du contenu d'un dossier (fenêtre séparée) : ses
     // coordonnées locales ne décrivent rien dans la fenêtre principale, donc
@@ -1213,6 +1329,15 @@ export function registerIpc(router: AiRouter): void {
       const point = screen.getCursorScreenPoint()
       Menu.buildFromTemplate([
         { label: 'Ouvrir', click: () => sendTo(win, CH.favoriteOpenRequested, row.url) },
+        { label: 'Ouvrir dans un nouvel onglet', click: openNewTab },
+        { label: 'Ouvrir dans une nouvelle fenêtre', click: openNewWindow },
+        { label: 'Ouvrir dans une vue fractionnée', click: openSplit },
+        { label: 'Ouvrir dans une fenêtre de navigation privée', click: openPrivateWindow },
+        { type: 'separator' },
+        { label: 'Modifier…', click: editFavorite },
+        { label: 'Couper', click: cutFavorite },
+        { label: 'Copier', click: copyFavorite },
+        { label: 'Coller', enabled: canPaste, click: pasteFavorite },
         { type: 'separator' },
         { label: 'Copier le lien', click: () => clipboard.writeText(row.url) },
         {
@@ -1229,6 +1354,12 @@ export function registerIpc(router: AiRouter): void {
             { label: 'Nouveau dossier…', click: openManage }
           ]
         },
+        { type: 'separator' },
+        { label: 'Ajouter une page…', click: addPage },
+        { label: 'Ajouter un dossier…', click: addFolder },
+        { type: 'separator' },
+        { label: 'Afficher la barre de favoris', type: 'checkbox', checked: getSettings().showFavoritesBar, click: toggleBar },
+        { type: 'separator' },
         { label: 'Retirer des favoris', click: removeFavorite },
         { type: 'separator' },
         { label: 'Gérer les favoris…', click: openManage }
@@ -1241,6 +1372,15 @@ export function registerIpc(router: AiRouter): void {
       anchor,
       [
         { kind: 'item', id: 'open', label: 'Ouvrir' },
+        { kind: 'item', id: 'open-new-tab', label: 'Ouvrir dans un nouvel onglet' },
+        { kind: 'item', id: 'open-new-window', label: 'Ouvrir dans une nouvelle fenêtre' },
+        { kind: 'item', id: 'open-split', label: 'Ouvrir dans une vue fractionnée' },
+        { kind: 'item', id: 'open-private', label: 'Ouvrir dans une fenêtre de navigation privée' },
+        { kind: 'separator' },
+        { kind: 'item', id: 'edit', label: 'Modifier…' },
+        { kind: 'item', id: 'cut', label: 'Couper' },
+        { kind: 'item', id: 'copy', label: 'Copier' },
+        { kind: 'item', id: 'paste', label: 'Coller', disabled: !canPaste },
         { kind: 'separator' },
         { kind: 'item', id: 'copy-link', label: 'Copier le lien' },
         {
@@ -1254,18 +1394,85 @@ export function registerIpc(router: AiRouter): void {
             { kind: 'item', id: 'move-new', label: 'Nouveau dossier…' }
           ]
         },
+        { kind: 'separator' },
+        { kind: 'item', id: 'add-page', label: 'Ajouter une page…' },
+        { kind: 'item', id: 'add-folder', label: 'Ajouter un dossier…' },
+        { kind: 'separator' },
+        { kind: 'item', id: 'toggle-bar', label: 'Afficher la barre de favoris', checked: getSettings().showFavoritesBar },
+        { kind: 'separator' },
         { kind: 'item', id: 'remove', label: 'Retirer des favoris', danger: true },
         { kind: 'separator' },
         { kind: 'item', id: 'manage', label: 'Gérer les favoris…' }
       ],
       {
         open: () => sendTo(win, CH.favoriteOpenRequested, row.url),
+        'open-new-tab': openNewTab,
+        'open-new-window': openNewWindow,
+        'open-split': openSplit,
+        'open-private': openPrivateWindow,
+        edit: editFavorite,
+        cut: cutFavorite,
+        copy: copyFavorite,
+        paste: pasteFavorite,
         'copy-link': () => clipboard.writeText(row.url),
         'move-none': moveTo(null),
         ...Object.fromEntries(folders.map((f) => [`move-${f.id}`, moveTo(f.id)])),
         'move-new': openManage,
+        'add-page': addPage,
+        'add-folder': addFolder,
+        'toggle-bar': toggleBar,
         remove: removeFavorite,
         manage: openManage
+      }
+    )
+  })
+
+  // Clic droit sur un espace VRAIMENT vide de la barre (pas un favori/dossier) :
+  // menu simplifié — seulement ce qui a un sens sans cible précise (décision
+  // utilisateur, voir le plan de cette session). Toujours dans la fenêtre
+  // principale (jamais depuis le popup natif d'un dossier) — un simple
+  // `showContextMenuPopover` suffit, pas besoin du repli menu natif.
+  ipcMain.on(CH.favoritesShowBarContextMenu, (e, rawAnchor: LocalRect) => {
+    const { win, views } = resolveWindowContext(e)
+    const profileId = activeProfileOf(views)
+    const anchor = safeValidate(localRectSchema, rawAnchor, 'favorites:show-bar-context-menu')
+    if (!anchor) return
+    const rootUrls = favoritesRepo
+      .listByProfile(profileId)
+      .filter((f) => !f.folder_id)
+      .map((f) => f.url)
+    const hasFavorites = rootUrls.length > 0
+    const addPage = (): void => sendTo(win, CH.favoriteAddPageRequested, null)
+    const addFolder = (): void => sendTo(win, CH.favoriteFoldersCreateRequested)
+    const toggleBar = (): void => sendTo(win, CH.favoritesToggleBarRequested, !getSettings().showFavoritesBar)
+    const pasteHere = (): void => pasteFavoriteInto(profileId, null)
+    const canPaste = getFavoritesClipboard(profileId) !== null
+
+    showContextMenuPopover(
+      win,
+      anchor,
+      [
+        { kind: 'item', id: 'open-all', label: 'Tout ouvrir', disabled: !hasFavorites },
+        { kind: 'item', id: 'open-all-window', label: 'Tout ouvrir dans une nouvelle fenêtre', disabled: !hasFavorites },
+        { kind: 'item', id: 'open-all-private', label: 'Tout ouvrir dans une fenêtre de navigation privée', disabled: !hasFavorites },
+        { kind: 'separator' },
+        { kind: 'item', id: 'paste', label: 'Coller', disabled: !canPaste },
+        { kind: 'separator' },
+        { kind: 'item', id: 'add-page', label: 'Ajouter une page…' },
+        { kind: 'item', id: 'add-folder', label: 'Ajouter un dossier…' },
+        { kind: 'separator' },
+        { kind: 'item', id: 'toggle-bar', label: 'Afficher la barre de favoris', checked: getSettings().showFavoritesBar }
+      ],
+      {
+        'open-all': () => {
+          for (const url of rootUrls) sendTo(win, CH.favoriteOpenInNewTabRequested, url)
+        },
+        'open-all-window': () => void createSecondaryContentWindow(profileId, false, rootUrls, router),
+        'open-all-private': () => void createPrivateWindow(router, rootUrls),
+        paste: pasteHere,
+        'add-page': addPage,
+        'add-folder': addFolder,
+        'toggle-bar': toggleBar
       }
     )
   })
@@ -1440,6 +1647,14 @@ export function registerIpc(router: AiRouter): void {
     await clearOriginData(partition, origin)
     invalidateSiteDataCache(partition)
   })
+
+  ipcMain.handle(CH.siteClearOnExitList, (e): string[] =>
+    getClearOnExitOrigins(activeProfileOf(resolveWindowContext(e).views))
+  )
+
+  ipcMain.handle(CH.siteClearOnExitToggle, (e, origin: string): boolean =>
+    toggleClearOnExitOrigin(activeProfileOf(resolveWindowContext(e).views), String(origin))
+  )
 
   // ─── Registre de données par site (« Tous les sites ») ─────────────────────
 

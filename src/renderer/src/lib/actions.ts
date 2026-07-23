@@ -156,6 +156,10 @@ export async function initBridge(): Promise<void> {
   // Menu contextuel natif des favoris (voir FavoritesBar.tsx) — même relais
   // que pour les profils : le menu vit dans le main, les actions ici.
   window.aether.favorites.onOpenRequested((url) => void openFavoriteUrl(url))
+  // « Ouvrir dans un nouvel onglet »/« … dans une vue fractionnée » — toujours
+  // une carte neuve, contrairement à `onOpenRequested` (voir `openUrl` ci-dessus).
+  window.aether.favorites.onOpenInNewTabRequested((url) => void openUrl(url, { target: 'focus' }))
+  window.aether.favorites.onOpenInSplitRequested((url) => void openUrl(url, { target: 'split' }))
   window.aether.favorites.onManageRequested(() => useUiStore.getState().openOverlay('favorites'))
   window.aether.favorites.onUpdated((favorites) => useFavoritesStore.getState().hydrate(favorites))
   window.aether.favoriteFolders.onUpdated((folders) => useFavoriteFoldersStore.getState().hydrate(folders))
@@ -165,6 +169,44 @@ export async function initBridge(): Promise<void> {
     const folder = useFavoriteFoldersStore.getState().folders.find((f) => f.id === id)
     const name = window.prompt(tShell('shell.favoritesBar.renameFolder'), folder?.name ?? '')
     if (name && name.trim()) void window.aether.favoriteFolders.rename(id, name.trim())
+  })
+  // « Ajouter un dossier… » depuis un menu contextuel — même patron que le
+  // renommage ci-dessus (pas de saisie de texte possible dans un menu natif).
+  window.aether.favoriteFolders.onCreateRequested(() => {
+    const name = window.prompt(tShell('shell.favoritesBar.renameFolder'), '')
+    if (name && name.trim()) void window.aether.favoriteFolders.create(name.trim())
+  })
+  // « Modifier… » un favori depuis son menu contextuel — deux saisies
+  // successives (titre puis URL), même précédent que le renommage de dossier.
+  window.aether.favorites.onUpdateRequested((id) => {
+    const favorite = useFavoritesStore.getState().favorites.find((f) => f.id === id)
+    if (!favorite) return
+    const title = window.prompt(tShell('shell.favoritesBar.editTitle'), favorite.title)
+    if (title === null) return
+    const url = window.prompt(tShell('shell.favoritesBar.editUrl'), favorite.url)
+    if (url === null) return
+    const trimmedUrl = url.trim()
+    if (!trimmedUrl) return
+    void window.aether.favorites.update(id, { title: title.trim() || favorite.title, url: trimmedUrl })
+  })
+  // « Ajouter une page… » depuis un menu contextuel — ajoute la page active
+  // (concept renderer, le main ne la connaît pas) comme favori de ce conteneur.
+  window.aether.favorites.onAddPageRequested((folderId) => {
+    const page = getActivePage()
+    if (!page) return
+    void window.aether.favorites.add({
+      url: page.url,
+      title: page.title,
+      faviconUrl: page.faviconUrl,
+      spaceId: page.spaceId
+    }).then((created) => {
+      if (folderId) void window.aether.favorites.setFolder(created.id, folderId)
+    })
+  })
+  // « Afficher la barre de favoris » depuis un menu natif — le main calcule
+  // déjà la valeur cible (inverse du réglage courant), on l'applique telle quelle.
+  window.aether.favorites.onToggleBarRequested((next) => {
+    void useSettingsStore.getState().patch({ showFavoritesBar: next })
   })
 
   // Hydratation initiale.
@@ -320,8 +362,12 @@ export async function openUrl(
   // n'a aucun historique, rendant la flèche Retour inutilisable après une
   // recherche. Ne s'applique qu'à un newtab jamais navigué, en mode focus —
   // une recherche depuis une page déjà chargée garde le comportement normal
-  // (nouvelle carte, façon canvas spatial).
-  if (target === 'focus') {
+  // (nouvelle carte, façon canvas spatial). `url !== 'aether://newtab'` :
+  // bug corrigé — sans cette condition, ouvrir un DEUXIÈME nouvel onglet
+  // (l'URL entrante est ELLE-MÊME 'aether://newtab') re-naviguait la carte
+  // newtab déjà active vers elle-même au lieu d'en créer une nouvelle,
+  // rendant le bouton « + » silencieusement inopérant après le premier clic.
+  if (target === 'focus' && url !== 'aether://newtab') {
     const activePage = getActivePage()
     if (activePage?.url === 'aether://newtab') {
       window.aether.pages.navigate(activePage.id, url)

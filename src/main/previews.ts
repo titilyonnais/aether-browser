@@ -11,7 +11,12 @@ import { pagesRepo } from './db/repositories'
 import { previewsDir } from './protocol'
 
 const MIN_INTERVAL_MS = 2500
-const TARGET_WIDTH = 1000
+// 1600px/85 (au lieu de 1000px/74) : le mode Toile zoome les cartes jusqu'à
+// ×2.5 (SpatialCanvas.tsx, ZOOM_MAX) via `transform: scale()` — un aperçu
+// figé à 1000px devenait visiblement flou/pixélisé une fois agrandi. La marge
+// déjà prévue pour l'éviction (MAX_TOTAL_BYTES/MAX_FILE_COUNT) absorbe la
+// hausse de poids par fichier.
+const TARGET_WIDTH = 1600
 /** Bornes de l'éviction (voir `cleanupPreviews`) — au-delà, les aperçus les
  * plus anciens (mtime) sont supprimés en premier, jusqu'à repasser sous les
  * deux limites. Généreux pour un usage normal (un aperçu pèse ~20-80 Ko) tout
@@ -54,7 +59,7 @@ export async function capturePreview(
       size.width > TARGET_WIDTH
         ? image.resize({ width: TARGET_WIDTH, quality: 'good' })
         : image
-    const jpeg = resized.toJPEG(74)
+    const jpeg = resized.toJPEG(85)
     if (jpeg.length === 0) return null
 
     ensureDir()

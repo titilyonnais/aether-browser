@@ -162,6 +162,7 @@ function FavoriteChip({
         onClick={() => !forMeasure && void openFavoriteUrl(favorite.url)}
         onContextMenu={(e) => {
           e.preventDefault()
+          e.stopPropagation()
           window.aether.favorites.showContextMenu(favorite.id, { x: e.clientX, y: e.clientY, width: 0, height: 0 })
         }}
         className="no-drag flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-ink-dim transition-colors hover:bg-white/[0.06]"
@@ -212,6 +213,7 @@ function FolderChip({
       }}
       onContextMenu={(e) => {
         e.preventDefault()
+        e.stopPropagation()
         window.aether.favoriteFolders.showContextMenu(folder.id, { x: e.clientX, y: e.clientY, width: 0, height: 0 })
       }}
       onDragOver={(e) => {
@@ -471,6 +473,10 @@ export function FavoritesBar() {
         className="drag relative flex h-8 items-center gap-1 px-2"
         onDragOver={(e) => dragOverContainer('root', rowRef.current, e)}
         onDrop={(e) => dropOnContainerEnd('root', rowRef.current, e)}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          window.aether.favorites.showBarContextMenu({ x: e.clientX, y: e.clientY, width: 0, height: 0 })
+        }}
       >
         {/* Rangée de mesure invisible : même markup, jamais tronquée, sert à
             calculer combien d'entrées tiennent avant de basculer dans le menu. */}

@@ -474,6 +474,41 @@ export function tryConsumeAiCloudBudget(): boolean {
   return true
 }
 
+// ─── Origines à effacer à la fermeture de toutes les fenêtres ──────────────
+// Même patron `state.*` que le budget IA ci-dessus — un flag PAR PROFIL, pas
+// un réglage soumis à `resetSettings()` : « Gérer les données des sites sur
+// l'appareil » (SiteDataOverlay.tsx), option « Supprimer lorsque vous fermez
+// toutes les fenêtres » par origine.
+
+function getClearOnExitOrigins(profileId: string): string[] {
+  const raw = kvRepo.get(`state.clearOnExitOrigins.${profileId}`)
+  if (!raw) return []
+  try {
+    return JSON.parse(raw) as string[]
+  } catch {
+    return []
+  }
+}
+
+export function isClearOnExitOrigin(profileId: string, origin: string): boolean {
+  return getClearOnExitOrigins(profileId).includes(origin)
+}
+
+/** Bascule le drapeau pour cette origine — retourne le NOUVEL état. */
+export function toggleClearOnExitOrigin(profileId: string, origin: string): boolean {
+  const current = getClearOnExitOrigins(profileId)
+  const next = current.includes(origin)
+    ? current.filter((o) => o !== origin)
+    : [...current, origin]
+  kvRepo.set(`state.clearOnExitOrigins.${profileId}`, JSON.stringify(next))
+  return next.includes(origin)
+}
+
+/** Utilisé par `performClearOnExit()` (`sessionActions.ts`) à la fermeture de
+ * la dernière fenêtre — exporté séparément de `toggleClearOnExitOrigin` pour
+ * ne pas obliger l'appelant à connaître une origine précise à l'avance. */
+export { getClearOnExitOrigins }
+
 // ─── Divers état applicatif ──────────────────────────────────────────────────
 
 export function getActiveProfileId(): string | null {

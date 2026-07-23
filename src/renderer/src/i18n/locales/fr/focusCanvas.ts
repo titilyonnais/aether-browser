@@ -110,7 +110,7 @@ export const focusCanvas: Record<string, string> = {
     'Les informations échangées avec ce site (identifiants, moyens de paiement) restent chiffrées pendant leur transport, ce qui empêche un tiers de les intercepter en clair.',
   'focusCanvas.siteInfo.securityDetailBodyInsecure':
     'Les informations échangées avec ce site circulent SANS chiffrement — évitez d’y saisir des identifiants ou des moyens de paiement.',
-  'focusCanvas.siteInfo.learnMore': 'En savoir plus',
+  'focusCanvas.siteInfo.viewCertificate': 'Voir le certificat',
   // Vue détail « Cookies et données des sites »
   'focusCanvas.siteInfo.cookiesDetailBody':
     'Un site utilise ses cookies pour vous reconnaître d’une visite à l’autre (connexion conservée, préférences). Le réglage général se change dans les paramètres du navigateur.',

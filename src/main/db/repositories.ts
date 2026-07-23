@@ -325,6 +325,16 @@ export const pagesRepo = {
     getDb().prepare('UPDATE pages SET muted = ? WHERE id = ?').run(muted ? 1 : 0, id)
   },
 
+  /** Déplace une page vers un autre espace (« Fusionner avec… »), en fin de
+   * liste de l'espace cible — sa position d'origine n'aurait aucun sens là-bas. */
+  setSpace(id: PageId, spaceId: SpaceId): void {
+    const db = getDb()
+    const nextPosition = (
+      db.prepare('SELECT COALESCE(MAX(position),-1)+1 AS p FROM pages WHERE space_id = ?').get(spaceId) as { p: number }
+    ).p
+    db.prepare('UPDATE pages SET space_id = ?, position = ? WHERE id = ?').run(spaceId, nextPosition, id)
+  },
+
   /** Réordonne les pages d'un espace selon la liste d'ids fournie (bande de pages). */
   reorder(spaceId: SpaceId, orderedIds: PageId[]): void {
     const stmt = getDb().prepare('UPDATE pages SET position = ? WHERE id = ? AND space_id = ?')
@@ -482,6 +492,25 @@ export const favoritesRepo = {
 
   removeByUrl(profileId: ProfileId, url: string): void {
     getDb().prepare('DELETE FROM favorites WHERE profile_id = ? AND url = ?').run(profileId, url)
+  },
+
+  /** Modifie le titre et/ou l'URL d'un favori (menu contextuel « Modifier… »). */
+  update(id: string, patch: { title?: string; url?: string }): void {
+    const sets: string[] = []
+    const params: unknown[] = []
+    if (patch.title !== undefined) {
+      sets.push('title = ?')
+      params.push(patch.title)
+    }
+    if (patch.url !== undefined) {
+      sets.push('url = ?')
+      params.push(patch.url)
+    }
+    if (sets.length === 0) return
+    params.push(id)
+    getDb()
+      .prepare(`UPDATE favorites SET ${sets.join(', ')} WHERE id = ?`)
+      .run(...params)
   },
 
   /** Range (ou sort avec `null`) un favori. En sortant d'un dossier, on lui

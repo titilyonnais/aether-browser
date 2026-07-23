@@ -13,6 +13,7 @@ import { createMainWindow } from './mainWindow'
 import { cleanupPreviews } from './previews'
 import { installAetherProtocol, registerAetherScheme } from './protocol'
 import { isQuitting } from './quitState'
+import { performClearOnExit } from './sessionActions'
 import { getSettings, seedE2eDefaultsFromEnv, seedSmtpConfigFromEnv } from './settings'
 import { checkForUpdates, initUpdater } from './updater'
 import { ViewManager } from './viewManager'
@@ -138,7 +139,14 @@ if (!gotLock) {
     })
   })
 
-  app.on('window-all-closed', () => app.quit())
+  // Retarde `app.quit()` jusqu'à ce que le nettoyage « supprimer à la
+  // fermeture de toutes les fenêtres » (SiteDataOverlay.tsx) soit terminé —
+  // PAS une tentative d'intercepter une fermeture déjà en cours (aucun
+  // `event.preventDefault()`), juste ne pas encore déclencher la cascade
+  // `will-quit` → `closeDatabase()` tant que ce nettoyage async n'a pas fini.
+  app.on('window-all-closed', () => {
+    void performClearOnExit().finally(() => app.quit())
+  })
   // `will-quit` (PAS `before-quit`) : ce dernier se déclenche AVANT la fermeture
   // des fenêtres, donc avant leurs handlers `close` (minimizeOnClose ci-dessus,
   // sauvegarde de l'état fenêtre dans mainWindow.ts) — qui ont encore besoin de

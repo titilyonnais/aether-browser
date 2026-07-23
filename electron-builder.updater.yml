@@ -1,0 +1,50 @@
+# Configuration electron-builder — build « un clic » DÉDIÉ À L'AUTO-UPDATER.
+#
+# Pourquoi ce fichier existe : `electron-builder.yml` (assistant complet —
+# Bienvenue/CGU/Installer/Terminer, + détection « déjà installé » →
+# Réparer/Supprimer, voir build/installer.nsh) est ce que distribue le
+# téléchargement manuel. Mais `electron-updater` (src/main/updater.ts,
+# `quitAndInstall()` sans argument → jamais silencieux, `isSilent` par défaut
+# `false`) invoque ce MÊME installeur lors d'une mise à jour — avec
+# `oneClick: false`, ça fait tourner l'assistant complet de façon visible et
+# interactive PENDANT une mise à jour, montrant la page Réparer/Supprimer
+# (puisqu'une mise à jour trouve TOUJOURS une installation existante) au lieu
+# de la petite fenêtre « mise à jour en cours » + barre de progression
+# d'avant v0.56.0. electron-builder ne permet PAS deux configurations NSIS
+# différentes dans un seul appel (`nsis:` est un objet global par nom de
+# cible, confirmé en lisant `NsisTarget.js` — pas par entrée de tableau) :
+# ce fichier est donc une INVOCATION SÉPARÉE d'electron-builder
+# (`--config electron-builder.updater.yml`), avec `oneClick: true` — le
+# template `oneClick.nsh` d'electron-builder (petite fenêtre de progression,
+# pas de page cliquable), exactement le comportement souhaité pour une mise
+# à jour silencieuse-ish.
+#
+# `extends` hérite tout le reste tel quel — appId, perMachine, icon,
+# signtoolOptions, publish… — CRITIQUE : un appId ou un perMachine différent
+# de l'assistant ferait pointer la mise à jour vers une autre clé de
+# registre/un autre emplacement que l'installation existante.
+extends: electron-builder.yml
+directories:
+  output: release-updater
+win:
+  target:
+    # PAS de cible portable ici — l'auto-updater n'a aucune raison de
+    # reconstruire/publier un exécutable portable à chaque mise à jour.
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: true
+  artifactName: ${productName}-Setup-${version}-updater.${ext}
+  # `include: null` — ANNULE explicitement l'héritage de `build/installer.nsh`
+  # (page personnalisée Réparer/Supprimer). Contrairement à ce qu'on pourrait
+  # attendre, electron-builder charge ce fichier INCONDITIONNELLEMENT dès
+  # qu'il est configuré (`computeCommonInstallerScriptHeader`, gate sur
+  # `!this.isPortable` seulement — PAS sur `oneClick`), pas seulement pour
+  # l'installeur assisté. Sans ce `null`, le build échoue réellement (vérifié
+  # en pratique) : `AetherWelcomePageCreate` est défini mais jamais invoqué
+  # dans le template un-clic (qui n'insère jamais `customWelcomePage`),
+  # NSIS le traite comme un avertissement « fonction non référencée », et
+  # electron-builder traite tout avertissement comme une erreur fatale.
+  include: null
+  license: null

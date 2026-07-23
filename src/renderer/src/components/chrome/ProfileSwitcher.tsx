@@ -31,7 +31,7 @@ export function ProfileSwitcher() {
         const r = el.getBoundingClientRect()
         window.aether.profiles.showMenu({ x: r.x, y: r.y, width: r.width, height: r.height })
       }}
-      className="no-drag rounded-full transition-transform hover:scale-105"
+      className="no-drag grid h-8 w-8 place-items-center rounded-full transition-transform hover:scale-105"
     >
       <ProfileAvatar profile={active} size={28} />
     </button>

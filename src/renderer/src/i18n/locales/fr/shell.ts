@@ -23,6 +23,8 @@ export const shell: Record<string, string> = {
   'shell.favoritesBar.more': 'Autres favoris',
   'shell.favoritesBar.folderTitle': '{{name}} ({{count}})',
   'shell.favoritesBar.renameFolder': 'Renommer le dossier',
+  'shell.favoritesBar.editTitle': 'Titre du favori',
+  'shell.favoritesBar.editUrl': 'Adresse du favori',
 
   'shell.profileSwitcher.title': 'Profil : {{name}}',
 
