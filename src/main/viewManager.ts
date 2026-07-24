@@ -1648,7 +1648,14 @@ export class ViewManager {
     }
     const version = await capturePreview(id, view, force)
     if (version !== null) this.delegate.onPreviewUpdated(id, version)
-    if (temporary && !this.visibleIds.includes(id)) {
+    // `canvasPinnedIds` aussi, pas seulement `visibleIds` : sans ce garde-fou,
+    // réveiller une carte sur la Toile PENDANT qu'une capture temporaire de
+    // cette même page est encore en vol (déclenchée par le rafraîchissement
+    // d'aperçu au montage, voir SpatialCanvas.tsx) faisait détruire la vue
+    // qu'on venait tout juste de réveiller dès que ce timer différé se
+    // terminait — la carte redevenait « endormie » sans action de
+    // l'utilisateur, qui devait alors cliquer une seconde fois pour que ça tienne.
+    if (temporary && !this.visibleIds.includes(id) && !this.canvasPinnedIds.has(id)) {
       this.destroyView(id, { keepPreview: true })
       this.patchRuntime(id, { isLive: false, isLoading: false })
     }

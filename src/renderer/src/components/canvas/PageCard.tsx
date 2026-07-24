@@ -22,10 +22,10 @@ const MIN_H = 115
 const MAX_W = 1440
 const MAX_H = 1040
 /** Distance de déclenchement de l'aimantation, en pixels ÉCRAN (convertie en
- * unités monde selon le zoom courant). Coin à coin uniquement — pas de repli
- * grille (donnait une sensation de « suivre un quadrillage », plus du tout
- * fluide) ni de repère visuel (non désiré, l'aimantation doit rester discrète). */
-const SNAP_THRESHOLD_PX = 14
+ * unités monde selon le zoom courant). Ni repli grille (donnait une
+ * sensation de « suivre un quadrillage », plus du tout fluide) ni repère
+ * visuel (non désiré, l'aimantation doit rester discrète). */
+const SNAP_THRESHOLD_PX = 10
 
 interface Rect {
   x: number
@@ -34,32 +34,53 @@ interface Rect {
   h: number
 }
 
-/** Aimante `rect` (déjà déplacé) dès qu'un de ses 4 coins s'approche d'un
- * coin d'une carte voisine — les DEUX axes doivent être dans le seuil
- * simultanément (sinon un simple survol d'un bord lointain suffirait à
- * accrocher), façon deux aimants qui s'attirent en se rapprochant plutôt
- * qu'un alignement de règle sur toute la largeur/hauteur. */
+/** Aimante `rect` (déjà déplacé) sur les bords (gauche/droite pour X, haut/
+ * bas pour Y) des cartes voisines les plus proches — chaque axe évalué
+ * INDÉPENDAMMENT, pas de centre, pas de couplage entre les deux axes.
+ *
+ * Une première version couplait les deux axes à la paire de COINS la plus
+ * proche globalement : dès qu'une paire légèrement plus proche apparaissait
+ * (un tout petit mouvement de souris suffisait), la carte sautait d'un coup
+ * vers ce nouveau point d'ancrage — perçu comme des « téléportations ». En
+ * évaluant x et y séparément, chaque axe ne dépend que de SA propre distance
+ * la plus proche, sans jamais être entraîné par un changement sur l'autre
+ * axe — nettement plus stable. Ça fonctionne aussi quelle que soit la
+ * différence de taille entre les deux cartes (un bord reste un bord, qu'il
+ * appartienne à une petite ou une grande carte), contrairement à un
+ * aimantage coin à coin strict qui exigeait un vrai coin à proximité. */
 function computeSnap(rect: Rect, siblings: Rect[], thresholdWorld: number): { dx: number; dy: number } {
-  const corners = (r: Rect): { x: number; y: number }[] => [
-    { x: r.x, y: r.y },
-    { x: r.x + r.w, y: r.y },
-    { x: r.x, y: r.y + r.h },
-    { x: r.x + r.w, y: r.y + r.h }
-  ]
-  const draggedCorners = corners(rect)
-  let best: { dist: number; dx: number; dy: number } | null = null
+  let bestDx = 0
+  let bestDxDist = thresholdWorld
+  let bestDy = 0
+  let bestDyDist = thresholdWorld
+
+  const xEdges = [rect.x, rect.x + rect.w]
+  const yEdges = [rect.y, rect.y + rect.h]
+
   for (const s of siblings) {
-    for (const sc of corners(s)) {
-      for (const dc of draggedCorners) {
-        const dx = sc.x - dc.x
-        const dy = sc.y - dc.y
-        if (Math.abs(dx) > thresholdWorld || Math.abs(dy) > thresholdWorld) continue
-        const dist = Math.hypot(dx, dy)
-        if (!best || dist < best.dist) best = { dist, dx, dy }
+    const sxEdges = [s.x, s.x + s.w]
+    const syEdges = [s.y, s.y + s.h]
+    for (const xe of xEdges) {
+      for (const sxe of sxEdges) {
+        const dist = Math.abs(xe - sxe)
+        if (dist < bestDxDist) {
+          bestDxDist = dist
+          bestDx = sxe - xe
+        }
+      }
+    }
+    for (const ye of yEdges) {
+      for (const sye of syEdges) {
+        const dist = Math.abs(ye - sye)
+        if (dist < bestDyDist) {
+          bestDyDist = dist
+          bestDy = sye - ye
+        }
       }
     }
   }
-  return best ? { dx: best.dx, dy: best.dy } : { dx: 0, dy: 0 }
+
+  return { dx: bestDx, dy: bestDy }
 }
 /** Hauteur réservée (coordonnées monde, donc mise à l'échelle avec le zoom
  * caméra comme le reste de la carte) pour la bande d'identité en bas — seule
@@ -243,18 +264,6 @@ export const PageCard = memo(
           />
         )}
 
-        {/* Barre de chargement */}
-        {page.isLoading && (
-          <div className="absolute inset-x-0 top-0 h-[2px] overflow-hidden">
-            <div
-              className="h-full w-1/3 animate-shimmer"
-              style={{
-                background:
-                  'linear-gradient(90deg, transparent, rgba(169,201,236,0.9), transparent)'
-              }}
-            />
-          </div>
-        )}
 
         {/* Voile bas + identité — devient interactive en permanence une fois
             éveillée (les actions au survol du haut sont alors recouvertes

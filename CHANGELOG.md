@@ -4,6 +4,23 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.61.3] — 2026-07-24
+
+### Corrigé
+
+- **Réveiller une carte demandait de cliquer deux fois** (la première tentative faisait un
+  mouvement bizarre) — une capture d'aperçu différée, déclenchée en arrière-plan à l'apparition de
+  la carte, pouvait détruire la vue tout juste réveillée si elle se terminait pendant que la carte
+  venait d'être activée. La destruction ignore désormais les cartes réveillées sur la Toile.
+- **Aimantation instable, avec des « téléportations »** — la première version couplait les deux
+  axes à la paire de coins la plus proche : un tout petit mouvement de souris pouvait faire changer
+  cette paire et faire sauter la carte d'un coup. Chaque axe (horizontal, vertical) s'aimante
+  maintenant indépendamment sur les bords des cartes voisines, sans jamais entraîner l'autre axe —
+  fonctionne aussi correctement quelle que soit la différence de taille entre les deux cartes.
+- **Lumière blanche défilant sur les contours des cartes** — c'était la barre de progression de
+  chargement (undulation « shimmer »), bien plus visible depuis que les cartes peuvent être
+  réveillées et réellement naviguées. Retirée des cartes de la Toile.
+
 ## [0.61.2] — 2026-07-24
 
 ### Corrigé
