@@ -7,7 +7,20 @@
 import { useLayoutEffect, useRef } from 'react'
 import type { PageId } from '@shared/types'
 
-export function useViewBounds(pageId: PageId | null, enabled: boolean) {
+export function useViewBounds(
+  pageId: PageId | null,
+  enabled: boolean,
+  /** Élément dont le rectangle sert de zone de recadrage — voir la Toile
+   * (SpatialCanvas.tsx), où une carte peut être partiellement ou totalement
+   * hors du viewport pannable/zoomable. Sans ça, la vue continuerait d'être
+   * positionnée à son rectangle RÉEL (une WebContentsView compose
+   * indépendamment de tout `overflow:hidden` DOM), débordant par-dessus le
+   * reste de l'interface. Masquage tout-ou-rien plutôt que recadrage partiel :
+   * `setBounds` fixe à la fois la position ET la taille de rendu interne de
+   * la page — réduire seulement le rectangle ferait apparaître un contenu
+   * réduit/déformé plutôt que réellement rogné. */
+  clipToRef?: { current: HTMLElement | null }
+) {
   const ref = useRef<HTMLDivElement | null>(null)
 
   useLayoutEffect(() => {
@@ -18,14 +31,30 @@ export function useViewBounds(pageId: PageId | null, enabled: boolean) {
     let last = ''
     const tick = (): void => {
       const r = el.getBoundingClientRect()
-      const key = `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`
-      if (key !== last && r.width > 0 && r.height > 0) {
+      let x = r.x
+      let y = r.y
+      let width = r.width
+      let height = r.height
+      let forceSend = false
+      if (clipToRef?.current) {
+        const c = clipToRef.current.getBoundingClientRect()
+        const fullyInside = r.left >= c.left && r.top >= c.top && r.right <= c.right && r.bottom <= c.bottom
+        if (!fullyInside) {
+          x = 0
+          y = 0
+          width = 0
+          height = 0
+          forceSend = true
+        }
+      }
+      const key = `${Math.round(x)},${Math.round(y)},${Math.round(width)},${Math.round(height)}`
+      if (key !== last && (forceSend || (width > 0 && height > 0))) {
         last = key
         window.aether.pages.setBounds(pageId, {
-          x: Math.round(r.x),
-          y: Math.round(r.y),
-          width: Math.round(r.width),
-          height: Math.round(r.height)
+          x: Math.round(x),
+          y: Math.round(y),
+          width: Math.round(width),
+          height: Math.round(height)
         })
       }
       raf = requestAnimationFrame(tick)
@@ -41,7 +70,7 @@ export function useViewBounds(pageId: PageId | null, enabled: boolean) {
       // qu'arrêter les mises à jour, jamais masquer ce qui est déjà affiché.
       window.aether.pages.setBounds(pageId, { x: 0, y: 0, width: 0, height: 0 })
     }
-  }, [pageId, enabled])
+  }, [pageId, enabled, clipToRef])
 
   return ref
 }

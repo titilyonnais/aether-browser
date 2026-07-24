@@ -8,6 +8,7 @@ import { motion } from 'framer-motion'
 import { ArrowUpRight, Power, X } from 'lucide-react'
 import { memo, useRef } from 'react'
 import type { PageId, PageMeta } from '@shared/types'
+import { NewTabPage } from '@/components/focus/NewTabPage'
 import { Favicon } from '@/components/ui/Favicon'
 import { useViewBounds } from '@/hooks/useViewBounds'
 import { useT } from '@/i18n/useT'
@@ -20,6 +21,89 @@ const MIN_W = 160
 const MIN_H = 115
 const MAX_W = 1440
 const MAX_H = 1040
+/** Distance de déclenchement de l'aimantation, en pixels ÉCRAN (convertie en
+ * unités monde selon le zoom courant) — même ordre de grandeur que les
+ * outils d'alignement type Figma/Sketch. */
+const SNAP_THRESHOLD_PX = 8
+/** Repli grille (unités monde) quand aucune autre carte n'offre d'alignement. */
+const SNAP_GRID = 20
+/** Épaisseur visuelle des guides, en pixels ÉCRAN (compensée par le zoom
+ * courant pour rester fine à tout niveau de zoom). */
+const GUIDE_THICKNESS_PX = 1.5
+
+interface Rect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+interface SnapGuideX {
+  at: number
+  y1: number
+  y2: number
+}
+
+interface SnapGuideY {
+  at: number
+  x1: number
+  x2: number
+}
+
+/** Aimante `rect` (déjà déplacé) sur les bords/centres des `siblings` les
+ * plus proches, à défaut sur la grille — indépendamment sur chaque axe. */
+function computeSnap(
+  rect: Rect,
+  siblings: Rect[],
+  thresholdWorld: number
+): { dx: number; dy: number; guideX: SnapGuideX | null; guideY: SnapGuideY | null } {
+  let bestDx = 0
+  let bestDxDist = thresholdWorld
+  let guideX: SnapGuideX | null = null
+  let bestDy = 0
+  let bestDyDist = thresholdWorld
+  let guideY: SnapGuideY | null = null
+
+  const xEdges = [rect.x, rect.x + rect.w / 2, rect.x + rect.w]
+  const yEdges = [rect.y, rect.y + rect.h / 2, rect.y + rect.h]
+
+  for (const s of siblings) {
+    const sxEdges = [s.x, s.x + s.w / 2, s.x + s.w]
+    const syEdges = [s.y, s.y + s.h / 2, s.y + s.h]
+    for (const xe of xEdges) {
+      for (const sxe of sxEdges) {
+        const dist = Math.abs(xe - sxe)
+        if (dist < bestDxDist) {
+          bestDxDist = dist
+          bestDx = sxe - xe
+          guideX = { at: sxe, y1: Math.min(rect.y, s.y), y2: Math.max(rect.y + rect.h, s.y + s.h) }
+        }
+      }
+    }
+    for (const ye of yEdges) {
+      for (const sye of syEdges) {
+        const dist = Math.abs(ye - sye)
+        if (dist < bestDyDist) {
+          bestDyDist = dist
+          bestDy = sye - ye
+          guideY = { at: sye, x1: Math.min(rect.x, s.x), x2: Math.max(rect.x + rect.w, s.x + s.w) }
+        }
+      }
+    }
+  }
+
+  // Repli grille — seulement si aucune autre carte n'a déjà proposé un alignement.
+  if (!guideX) {
+    const nearest = Math.round(rect.x / SNAP_GRID) * SNAP_GRID
+    if (Math.abs(nearest - rect.x) < thresholdWorld) bestDx = nearest - rect.x
+  }
+  if (!guideY) {
+    const nearest = Math.round(rect.y / SNAP_GRID) * SNAP_GRID
+    if (Math.abs(nearest - rect.y) < thresholdWorld) bestDy = nearest - rect.y
+  }
+
+  return { dx: bestDx, dy: bestDy, guideX, guideY }
+}
 /** Hauteur réservée (coordonnées monde, donc mise à l'échelle avec le zoom
  * caméra comme le reste de la carte) pour la bande d'identité en bas — seule
  * zone du DOM que la vue native N'OCCUPE PAS quand la carte est éveillée
@@ -35,10 +119,33 @@ interface PageCardProps {
   getZoom: () => number
   awake: boolean
   onToggleAwake: (id: PageId) => void
+  /** Conteneur visible de la Toile (SpatialCanvas.tsx) — sert à masquer la
+   * vue native tant que la carte n'est pas ENTIÈREMENT dans le viewport
+   * pannable/zoomable (voir useViewBounds). */
+  viewportRef: { current: HTMLElement | null }
+  /** Toutes les pages de l'espace actif (soi-même inclus) — sert à
+   * l'aimantation sur les bords/centres des autres cartes pendant un glisser. */
+  allPages: PageMeta[]
+  /** Guides d'alignement partagés (SpatialCanvas.tsx) — mutés directement en
+   * style pendant le geste, jamais via React (voir le patron déjà établi
+   * pour la caméra/le glisser lui-même). */
+  guideXRef: { current: HTMLDivElement | null }
+  guideYRef: { current: HTMLDivElement | null }
 }
 
 export const PageCard = memo(
-  function PageCard({ page, index, selected, getZoom, awake, onToggleAwake }: PageCardProps) {
+  function PageCard({
+    page,
+    index,
+    selected,
+    getZoom,
+    awake,
+    onToggleAwake,
+    viewportRef,
+    allPages,
+    guideXRef,
+    guideYRef
+  }: PageCardProps) {
     const t = useT()
     // Ref DOM pour écrire directement le style pendant le geste (voir plus
     // bas) — même patron que la caméra de SpatialCanvas.tsx (`apply()`) :
@@ -69,6 +176,36 @@ export const PageCard = memo(
       }
     }
 
+    /** Affiche/masque les deux guides partagés — épaisseur compensée par le
+     * zoom pour rester visuellement fine à tout niveau. */
+    const applyGuides = (guideX: SnapGuideX | null, guideY: SnapGuideY | null, zoom: number): void => {
+      const thickness = GUIDE_THICKNESS_PX / zoom
+      const gx = guideXRef.current
+      if (gx) {
+        if (guideX) {
+          gx.style.display = 'block'
+          gx.style.left = `${guideX.at - thickness / 2}px`
+          gx.style.top = `${guideX.y1}px`
+          gx.style.width = `${thickness}px`
+          gx.style.height = `${guideX.y2 - guideX.y1}px`
+        } else {
+          gx.style.display = 'none'
+        }
+      }
+      const gy = guideYRef.current
+      if (gy) {
+        if (guideY) {
+          gy.style.display = 'block'
+          gy.style.top = `${guideY.at - thickness / 2}px`
+          gy.style.left = `${guideY.x1}px`
+          gy.style.height = `${thickness}px`
+          gy.style.width = `${guideY.x2 - guideY.x1}px`
+        } else {
+          gy.style.display = 'none'
+        }
+      }
+    }
+
     const onPointerMove = (e: React.PointerEvent): void => {
       const drag = dragRef.current
       if (!drag) return
@@ -79,8 +216,17 @@ export const PageCard = memo(
       drag.moved = true
       const el = cardRef.current
       if (drag.mode === 'move') {
-        drag.final = { ...drag.orig, x: drag.orig.x + dx, y: drag.orig.y + dy }
-        if (el) el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`
+        const siblings = allPages.filter((p) => p.id !== page.id).map((p) => p.canvas)
+        const snap = computeSnap(
+          { x: drag.orig.x + dx, y: drag.orig.y + dy, w: drag.orig.w, h: drag.orig.h },
+          siblings,
+          SNAP_THRESHOLD_PX / zoom
+        )
+        const finalDx = dx + snap.dx
+        const finalDy = dy + snap.dy
+        drag.final = { ...drag.orig, x: drag.orig.x + finalDx, y: drag.orig.y + finalDy }
+        if (el) el.style.transform = `translate3d(${finalDx}px, ${finalDy}px, 0)`
+        applyGuides(snap.guideX, snap.guideY, zoom)
       } else {
         const w = Math.min(MAX_W, Math.max(MIN_W, drag.orig.w + dx))
         const h = Math.min(MAX_H, Math.max(MIN_H, drag.orig.h + dy))
@@ -101,6 +247,7 @@ export const PageCard = memo(
       // sans ça, le prochain rendu React (nouveaux `left`/`top`) s'ajouterait
       // au `translate3d` encore présent et ferait sauter la carte d'un cran.
       if (cardRef.current) cardRef.current.style.transform = ''
+      applyGuides(null, null, 1)
       if (drag.moved) {
         usePagesStore.getState().updateCanvasLocal(page.id, drag.final)
         window.aether.pages.updateCanvas(page.id, drag.final)
@@ -112,11 +259,18 @@ export const PageCard = memo(
     const preview = previewUrl(page.id, page.previewVersion)
     const domain = domainOf(page.url)
     const hue = hueFromString(domain)
-    // Même patron que PageSlot.tsx (mode Focus) : `getBoundingClientRect()`
-    // résout déjà les transforms CSS ancêtres (translate/scale de la Toile),
-    // donc ce placeholder continue de rapporter les bonnes coordonnées écran
-    // pendant le pan/zoom, sans logique de calcul de bornes supplémentaire.
-    const boundsRef = useViewBounds(page.id, awake)
+    // Même patron que PageSlot.tsx (mode Focus) : un nouvel onglet vierge
+    // reste un composant React (jamais une vraie WebContentsView — voir
+    // ViewManager.ensureLive), sans quoi le réveiller affichait une page
+    // vide (le document minimal servi par le protocole `aether:`).
+    const isNewTab = page.url.startsWith('aether://newtab')
+    const viewEnabled = awake && !isNewTab
+    // `getBoundingClientRect()` résout déjà les transforms CSS ancêtres
+    // (translate/scale de la Toile), donc ce placeholder continue de
+    // rapporter les bonnes coordonnées écran pendant le pan/zoom — le
+    // recadrage (`viewportRef`) masque la vue tant que la carte n'est pas
+    // entièrement dans le viewport visible (voir useViewBounds).
+    const boundsRef = useViewBounds(page.id, viewEnabled, viewportRef)
 
     return (
       <motion.div
@@ -167,7 +321,12 @@ export const PageCard = memo(
               </div>
             </div>
           ))}
-        {awake && (
+        {awake && isNewTab && (
+          <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ bottom: AWAKE_FOOTER_H }}>
+            <NewTabPage pageId={page.id} />
+          </div>
+        )}
+        {awake && !isNewTab && (
           <div
             ref={boundsRef}
             className="pointer-events-none absolute inset-x-0 top-0"
@@ -221,7 +380,7 @@ export const PageCard = memo(
                   e.stopPropagation()
                   onToggleAwake(page.id)
                 }}
-                className="grid h-6 w-6 place-items-center rounded-md border border-glacier/40 bg-glacier/20 text-glacier"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-glacier/40 bg-glacier/20 text-glacier"
               >
                 <Power size={12} strokeWidth={1.8} />
               </button>
@@ -233,7 +392,7 @@ export const PageCard = memo(
                   e.stopPropagation()
                   focusPage(page.id)
                 }}
-                className="grid h-6 w-6 place-items-center rounded-md border border-white/[0.12] bg-black/55 text-ink-dim hover:text-ink"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.12] bg-black/55 text-ink-dim hover:text-ink"
               >
                 <ArrowUpRight size={12} strokeWidth={1.8} />
               </button>
@@ -245,7 +404,7 @@ export const PageCard = memo(
                   e.stopPropagation()
                   void closePage(page.id)
                 }}
-                className="grid h-6 w-6 place-items-center rounded-md border border-white/[0.12] bg-black/55 text-ink-dim hover:text-red-200"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.12] bg-black/55 text-ink-dim hover:text-red-200"
               >
                 <X size={12} strokeWidth={1.8} />
               </button>
@@ -254,7 +413,7 @@ export const PageCard = memo(
         </div>
 
         {/* Actions au survol */}
-        <div className="absolute right-2.5 top-2.5 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <div className="absolute right-2.5 top-2.5 flex shrink-0 gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <button
             type="button"
             title={t('focusCanvas.pageCard.wakeCard')}
@@ -263,7 +422,7 @@ export const PageCard = memo(
               e.stopPropagation()
               onToggleAwake(page.id)
             }}
-            className="grid h-7 w-7 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim backdrop-blur-md transition-colors hover:text-ink"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim backdrop-blur-md transition-colors hover:text-ink"
           >
             <Power size={13} strokeWidth={1.8} />
           </button>
@@ -275,7 +434,7 @@ export const PageCard = memo(
               e.stopPropagation()
               focusPage(page.id)
             }}
-            className="grid h-7 w-7 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim backdrop-blur-md transition-colors hover:text-ink"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim backdrop-blur-md transition-colors hover:text-ink"
           >
             <ArrowUpRight size={13} strokeWidth={1.8} />
           </button>
@@ -287,7 +446,7 @@ export const PageCard = memo(
               e.stopPropagation()
               void closePage(page.id)
             }}
-            className="grid h-7 w-7 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim backdrop-blur-md transition-colors hover:text-red-200"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim backdrop-blur-md transition-colors hover:text-red-200"
           >
             <X size={13} strokeWidth={1.8} />
           </button>

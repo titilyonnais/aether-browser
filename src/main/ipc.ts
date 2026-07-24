@@ -794,6 +794,10 @@ export function registerIpc(router: AiRouter): void {
   // affiché — `Menu.closePopup` est une méthode d'INSTANCE (pas statique),
   // donc on garde la référence exacte du menu ouvert, pas juste un booléen.
   const openProfileMenus = new Map<number, Menu>()
+  // Fenêtres où le menu vient tout juste de se fermer TOUT SEUL (voir
+  // commentaire ci-dessous) — sert de garde anti-réouverture instantanée.
+  const profileMenuClosedAt = new Map<number, number>()
+  const PROFILE_MENU_REOPEN_GUARD_MS = 250
   ipcMain.on(CH.profileShowMenu, (e, rawAnchor: LocalRect) => {
     const { win, views } = resolveWindowContext(e)
     const anchor = safeValidate(localRectSchema, rawAnchor, 'profile:show-menu')
@@ -807,6 +811,17 @@ export function registerIpc(router: AiRouter): void {
     if (openMenu) {
       openMenu.closePopup(win)
       openProfileMenus.delete(win.id)
+      return
+    }
+    // Recliquer sur la pastille alors que le menu est affiché est, du point
+    // de vue d'Electron, un clic EN DEHORS du popup (même s'il touche son
+    // propre déclencheur) — le menu se ferme donc TOUT SEUL (son `callback`
+    // tourne) AVANT que ce même clic n'atteigne le gestionnaire React et ne
+    // redemande l'ouverture. Sans cette garde, ce clic « rouvrait » aussitôt
+    // un nouveau menu, rendant le second clic (censé fermer) inopérant.
+    const closedAt = profileMenuClosedAt.get(win.id)
+    if (closedAt !== undefined && Date.now() - closedAt < PROFILE_MENU_REOPEN_GUARD_MS) {
+      profileMenuClosedAt.delete(win.id)
       return
     }
     const winBounds = win.getBounds()
@@ -832,7 +847,15 @@ export function registerIpc(router: AiRouter): void {
       { label: 'Gérer les profils…', click: () => sendTo(win, CH.profileManageRequested) }
     ])
     openProfileMenus.set(win.id, menu)
-    menu.popup({ window: win, x, y, callback: () => openProfileMenus.delete(win.id) })
+    menu.popup({
+      window: win,
+      x,
+      y,
+      callback: () => {
+        openProfileMenus.delete(win.id)
+        profileMenuClosedAt.set(win.id, Date.now())
+      }
+    })
   })
 
   // ─── Espaces ───────────────────────────────────────────────────────────────

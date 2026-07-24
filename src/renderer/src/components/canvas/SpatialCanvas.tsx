@@ -44,6 +44,13 @@ export function SpatialCanvas() {
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const worldRef = useRef<HTMLDivElement | null>(null)
+  // Guides d'aimantation (repères d'alignement type Figma) — deux éléments
+  // permanents, mutés directement en style par PageCard pendant un glisser
+  // (même patron imité que la caméra/le drag : aucun état React, donc aucun
+  // re-rendu pendant le geste). Vivent en coordonnées MONDE, comme les
+  // cartes, à l'intérieur de `worldRef` — le pan/zoom les affecte gratuitement.
+  const guideXRef = useRef<HTMLDivElement | null>(null)
+  const guideYRef = useRef<HTMLDivElement | null>(null)
   const camera = useRef<CanvasView>({ x: 0, y: 0, zoom: 1 })
   const panRef = useRef<{ px: number; py: number; camX: number; camY: number; moved: boolean } | null>(null)
   /** rAF en cours d'une interpolation `animateTo` — annulé avant d'en démarrer
@@ -386,8 +393,16 @@ export function SpatialCanvas() {
             getZoom={getZoom}
             awake={awakeRef.current.has(page.id)}
             onToggleAwake={toggleAwake}
+            viewportRef={containerRef}
+            allPages={pages}
+            guideXRef={guideXRef}
+            guideYRef={guideYRef}
           />
         ))}
+        {/* Guides d'aimantation — cachés par défaut, affichés/positionnés
+            directement par PageCard pendant un glisser. */}
+        <div ref={guideXRef} className="pointer-events-none absolute hidden bg-glacier/70" style={{ boxShadow: '0 0 6px rgba(169,201,236,0.55)' }} />
+        <div ref={guideYRef} className="pointer-events-none absolute hidden bg-glacier/70" style={{ boxShadow: '0 0 6px rgba(169,201,236,0.55)' }} />
       </div>
 
       {pages.length === 0 && (

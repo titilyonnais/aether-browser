@@ -4,6 +4,33 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.61.0] — 2026-07-24
+
+### Ajouté
+
+- **Aimantation des cartes sur la Toile** — en déplaçant une carte, elle s'aligne désormais
+  automatiquement sur les bords/centres des cartes voisines (avec repères visuels, façon Figma), ou
+  à défaut sur la grille de fond.
+
+### Corrigé
+
+- **Icônes des actions de carte (Toile) pas bien centrées** — `shrink-0` manquant sur les boutons,
+  pouvant les laisser se comprimer hors de leur carré.
+- **Le sélecteur de profil se rouvrait instantanément en recliquant dessus pour le fermer** — ce
+  reclic est, du point de vue d'Electron, un clic EN DEHORS du menu natif (même sur son propre
+  déclencheur), qui se fermait donc tout seul juste avant que la demande de fermeture explicite
+  n'arrive, la faisant repartir pour une réouverture immédiate. Une courte garde anti-réouverture
+  résout la course.
+- **Réveiller un nouvel onglet vierge sur la Toile affichait une page noire** — `aether://newtab`
+  est un composant React (jamais une vraie page web, voir le mode Focus), pas branché dans le
+  nouveau mode « carte interactive ». Réveiller un tel onglet affiche désormais la vraie page de
+  nouvel onglet, comme en mode Focus.
+- **Une carte éveillée débordait par-dessus toute l'interface en zoomant/déplaçant la vue** — une
+  vue native compose indépendamment de tout découpage CSS (`overflow: hidden`) : dès que la carte
+  sortait partiellement du cadre visible de la Toile, sa vue continuait de s'afficher à son
+  rectangle réel, qui pouvait chevaucher n'importe quel autre panneau. Elle se masque désormais
+  entièrement tant que la carte n'est pas intégralement dans le cadre visible.
+
 ## [0.60.0] — 2026-07-24
 
 ### Ajouté
