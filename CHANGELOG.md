@@ -4,6 +4,17 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.61.1] — 2026-07-24
+
+### Corrigé
+
+- **La vérification des mises à jour affichait un échec brut et technique (dump JSON des en-têtes
+  HTTP) sur une simple coupure réseau/passerelle GitHub temporaire** (ex. 502/503/504) — ce type
+  d'erreur, déjà observé sur les assets GitHub Releases juste après publication, se résout
+  généralement de lui-même en réessayant quelques secondes plus tard. La vérification retente
+  désormais discrètement (2 fois, avec délai croissant) avant d'afficher un message clair et
+  compréhensible en cas d'échec persistant.
+
 ## [0.61.0] — 2026-07-24
 
 ### Ajouté
