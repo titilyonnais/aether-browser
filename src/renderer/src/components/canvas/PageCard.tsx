@@ -139,6 +139,11 @@ export const PageCard = memo(
       orig: { x: number; y: number; w: number; h: number }
       moved: boolean
       final: { x: number; y: number; w: number; h: number }
+      /** Rectangles des AUTRES cartes, figés au début du geste — recalculés à
+       * chaque pointermove sinon (un `filter`+`map` créant N objets par
+       * évènement, jusqu'à ~1000/s sur une souris haute fréquence), ce qui
+       * générait assez de déchets pour provoquer des micro-freezes de GC. */
+      siblings: Rect[]
     } | null>(null)
 
     const beginGesture = (e: React.PointerEvent, mode: 'move' | 'resize'): void => {
@@ -147,8 +152,8 @@ export const PageCard = memo(
       ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
       // Promeut la carte sur sa propre couche de composition GPU le temps du
       // geste — sans ça, chaque déplacement re-peint une carte lourde (ombres,
-      // flou d'arrière-plan, éventuelle vue vivante), d'où les saccades. Retiré
-      // au relâchement pour ne pas garder une couche figée en permanence.
+      // éventuelle vue vivante), d'où les saccades. Retiré au relâchement pour
+      // ne pas garder une couche figée en permanence.
       if (cardRef.current) cardRef.current.style.willChange = 'transform'
       dragRef.current = {
         mode,
@@ -156,7 +161,8 @@ export const PageCard = memo(
         startY: e.clientY,
         orig: { ...page.canvas },
         moved: false,
-        final: { ...page.canvas }
+        final: { ...page.canvas },
+        siblings: mode === 'move' ? allPages.filter((p) => p.id !== page.id).map((p) => p.canvas) : []
       }
     }
 
@@ -169,10 +175,9 @@ export const PageCard = memo(
       if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 4) return
       drag.moved = true
       if (drag.mode === 'move') {
-        const siblings = allPages.filter((p) => p.id !== page.id).map((p) => p.canvas)
         const snap = computeSnap(
           { x: drag.orig.x + dx, y: drag.orig.y + dy, w: drag.orig.w, h: drag.orig.h },
-          siblings,
+          drag.siblings,
           SNAP_THRESHOLD_PX / zoom
         )
         const finalDx = dx + snap.dx
@@ -371,7 +376,7 @@ export const PageCard = memo(
               e.stopPropagation()
               onToggleAwake(page.id)
             }}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim backdrop-blur-md transition-colors hover:text-ink"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim transition-colors hover:text-ink"
           >
             <Power size={13} strokeWidth={1.8} />
           </button>
@@ -383,7 +388,7 @@ export const PageCard = memo(
               e.stopPropagation()
               focusPage(page.id)
             }}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim backdrop-blur-md transition-colors hover:text-ink"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim transition-colors hover:text-ink"
           >
             <ArrowUpRight size={13} strokeWidth={1.8} />
           </button>
@@ -395,7 +400,7 @@ export const PageCard = memo(
               e.stopPropagation()
               void closePage(page.id)
             }}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim backdrop-blur-md transition-colors hover:text-red-200"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim transition-colors hover:text-red-200"
           >
             <X size={13} strokeWidth={1.8} />
           </button>

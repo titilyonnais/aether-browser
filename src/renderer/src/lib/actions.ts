@@ -23,6 +23,7 @@ import { useSearchEnginesStore } from '@/stores/searchEngines'
 import { useSettingsStore } from '@/stores/settings'
 import { useSpacesStore } from '@/stores/spaces'
 import { useUiStore } from '@/stores/ui'
+import { isNewTabUrl } from './pageLabel'
 import { debounce, domainOf, uuid } from './utils'
 
 // ─── Traduction (hors composants) ────────────────────────────────────────────
@@ -358,18 +359,22 @@ export async function openUrl(
 
   // Rechercher depuis un nouvel onglet vierge doit se comporter comme Chrome :
   // la même carte navigue vers le résultat, elle n'est pas remplacée par une
-  // nouvelle — sans quoi la carte newtab reste orpheline ET la nouvelle carte
-  // n'a aucun historique, rendant la flèche Retour inutilisable après une
-  // recherche. Ne s'applique qu'à un newtab jamais navigué, en mode focus —
-  // une recherche depuis une page déjà chargée garde le comportement normal
-  // (nouvelle carte, façon canvas spatial). `url !== 'aether://newtab'` :
-  // bug corrigé — sans cette condition, ouvrir un DEUXIÈME nouvel onglet
-  // (l'URL entrante est ELLE-MÊME 'aether://newtab') re-naviguait la carte
-  // newtab déjà active vers elle-même au lieu d'en créer une nouvelle,
-  // rendant le bouton « + » silencieusement inopérant après le premier clic.
-  if (target === 'focus' && url !== 'aether://newtab') {
+  // nouvelle — sans quoi la carte newtab reste orpheline (onglets « Page
+  // d'accueil » qui s'accumulent) ET la nouvelle carte n'a aucun historique,
+  // rendant la flèche Retour inutilisable après une recherche. Ne s'applique
+  // qu'à un nouvel onglet, en mode focus — une recherche depuis une page déjà
+  // chargée garde le comportement normal (nouvelle carte, façon canvas spatial).
+  //
+  // `isNewTabUrl` (préfixe) plutôt qu'une égalité stricte à 'aether://newtab' :
+  // une fois la vue chargée, le schéma standard `aether:` NORMALISE l'URL en
+  // 'aether://newtab/' (barre oblique finale) — l'égalité stricte échouait donc
+  // dès que la page d'accueil avait fini de charger, ce qui créait un nouvel
+  // onglet au lieu de naviguer en place, et laissait le retour grisé. `!isNewTabUrl(url)`
+  // (au lieu de `!== 'aether://newtab'`) garde le bouton « + » fonctionnel pour
+  // ouvrir un DEUXIÈME nouvel onglet.
+  if (target === 'focus' && !isNewTabUrl(url)) {
     const activePage = getActivePage()
-    if (activePage?.url === 'aether://newtab') {
+    if (activePage && isNewTabUrl(activePage.url)) {
       window.aether.pages.navigate(activePage.id, url)
       scheduleAffinityRefresh()
       return activePage

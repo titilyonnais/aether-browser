@@ -1330,7 +1330,10 @@ export class ViewManager {
     if (!row) return
     // On QUITTE un nouvel onglet vierge (recherche/URL depuis la page
     // d'accueil) : `aether://newtab` doit rester une entrée « retour ».
-    const leavingNewTab = row.url === 'aether://newtab' && url !== 'aether://newtab'
+    // `startsWith` (pas égalité stricte) : le schéma standard `aether:`
+    // normalise l'URL committée en 'aether://newtab/' (barre oblique finale).
+    const isNewTab = (u: string): boolean => u.startsWith('aether://newtab')
+    const leavingNewTab = isNewTab(row.url) && !isNewTab(url)
     pagesRepo.updateNavigation(id, url)
 
     const existing = this.views.get(id)

@@ -4,6 +4,24 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.62.1] — 2026-07-24
+
+### Corrigé
+
+- **Le bouton « retour » restait grisé après une recherche depuis la page d'accueil** (vraie cause) —
+  le schéma standard `aether:` normalise l'URL en `aether://newtab/` (barre oblique finale) une fois
+  la page chargée, si bien que la comparaison stricte à `'aether://newtab'` échouait : l'appli créait
+  un NOUVEL onglet au lieu de naviguer la page d'accueil en place (d'où aussi les onglets « Page
+  d'accueil » qui s'accumulaient). La détection utilise désormais un préfixe, donc la recherche
+  navigue bien en place et `aether://newtab` reste une vraie entrée « retour ».
+- **La barre d'adresse affichait encore « newtab »** au lieu de « Nouvel onglet » / « Page d'accueil »
+  — dernier emplacement resté sur l'ancien libellé, corrigé.
+- **Micro-freezes en glissant une carte de la Toile** — deux causes résiduelles traitées : le flou
+  d'arrière-plan (`backdrop-blur`) des boutons d'action, recalculé à chaque frame pendant le
+  mouvement, est retiré ; et les rectangles des cartes voisines (pour l'aimantation) sont désormais
+  calculés une seule fois au début du geste au lieu d'à chaque évènement souris (l'allocation
+  répétée saturait le ramasse-miettes).
+
 ## [0.62.0] — 2026-07-24
 
 ### Corrigé

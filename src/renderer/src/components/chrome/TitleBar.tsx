@@ -27,6 +27,7 @@ import { remainingSeconds, useDownloadSpeed } from '@/hooks/useDownloadSpeed'
 import { useOverflowFade } from '@/hooks/useOverflowFade'
 import { useT } from '@/i18n/useT'
 import { getActivePageId } from '@/lib/actions'
+import { pageLabel, pageSubtitle } from '@/lib/pageLabel'
 import { cn, domainOf, formatBytes, formatDuration } from '@/lib/utils'
 import { useDownloadsStore } from '@/stores/downloads'
 import { usePagesStore } from '@/stores/pages'
@@ -110,14 +111,14 @@ export function TitleBar() {
               className="min-w-0 overflow-hidden whitespace-nowrap text-ink-dim"
               style={titleOverflow.overflowing ? fadeMaskStyle : undefined}
             >
-              {activePage.title || domainOf(activePage.url)}
+              {pageLabel(activePage)}
             </span>
             <span
               ref={domainOverflow.ref}
               className="min-w-0 overflow-hidden whitespace-nowrap font-mono text-[10px] text-ink-faint/80"
               style={domainOverflow.overflowing ? fadeMaskStyle : undefined}
             >
-              {domainOf(activePage.url)}
+              {pageSubtitle(activePage)}
             </span>
           </>
         ) : (
