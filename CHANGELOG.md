@@ -4,6 +4,18 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.61.5] — 2026-07-24
+
+### Corrigé
+
+- **Glisser une carte de la Toile décollait son contenu de son cadre** (cadre vide laissé sur place,
+  contenu rogné/détaché, vue vivante disparue) — le correctif précédent (v0.61.4) appliquait la
+  transformation de déplacement à un élément INTÉRIEUR (contenu seul), si bien que seul le contenu
+  bougeait pendant que le cadre (bordure/fond) restait figé. Restructuré proprement : un conteneur
+  extérieur ordinaire porte désormais la position, la taille ET le déplacement de la carte entière
+  (cadre + contenu ensemble), tandis que l'animation d'apparition (framer-motion) est isolée sur un
+  élément intérieur dédié — les deux ne partagent plus jamais la même propriété `transform`.
+
 ## [0.61.4] — 2026-07-24
 
 ### Corrigé
