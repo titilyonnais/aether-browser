@@ -109,12 +109,26 @@ interface PageCardProps {
 export const PageCard = memo(
   function PageCard({ page, index, selected, getZoom, awake, onToggleAwake, viewportRef, allPages }: PageCardProps) {
     const t = useT()
-    // Ref DOM pour écrire directement le style pendant le geste (voir plus
-    // bas) — même patron que la caméra de SpatialCanvas.tsx (`apply()`) :
-    // aucune écriture dans le store tant que le geste n'est pas terminé,
-    // pour éviter que `SpatialCanvas` (abonné à TOUT `pages`, voir son
-    // `usePagesStore((s) => s.pages)`) ne se re-rende à chaque pointermove.
-    const cardRef = useRef<HTMLDivElement | null>(null)
+    // Deux refs DOM distinctes pour écrire directement le style pendant le
+    // geste (voir plus bas) — même patron que la caméra de SpatialCanvas.tsx
+    // (`apply()`) : aucune écriture dans le store tant que le geste n'est pas
+    // terminé, pour éviter que `SpatialCanvas` (abonné à TOUT `pages`, voir
+    // son `usePagesStore((s) => s.pages)`) ne se re-rende à chaque pointermove.
+    //
+    // `outerRef` (le `motion.div` racine) reçoit `width`/`height` pendant un
+    // redimensionnement — sans risque, framer-motion ne gère que `opacity`/
+    // `scale` sur cet élément, jamais ces propriétés. `moveRef` (un `<div>`
+    // ORDINAIRE, imbriqué) reçoit `transform` pendant un déplacement — JAMAIS
+    // sur le `motion.div` lui-même : framer-motion possède et réaffirme SA
+    // PROPRE valeur de `transform` (pour `scale`) via sa propre boucle de
+    // rendu, indépendante du cycle de rendu React — un re-rendu déclenché par
+    // N'IMPORTE QUELLE prop (ex. le titre d'une page vivante qui change en
+    // tâche de fond) pouvait donc écraser silencieusement notre `translate3d`
+    // imité EN PLEIN GLISSER, faisant sauter la carte entre sa position
+    // « repartie de zéro » et sa position réelle plusieurs fois par seconde —
+    // perçu comme des « téléportations » erratiques pendant qu'on la tenait.
+    const outerRef = useRef<HTMLDivElement | null>(null)
+    const moveRef = useRef<HTMLDivElement | null>(null)
     const dragRef = useRef<{
       mode: 'move' | 'resize'
       startX: number
@@ -146,7 +160,6 @@ export const PageCard = memo(
       const dy = (e.clientY - drag.startY) / zoom
       if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 4) return
       drag.moved = true
-      const el = cardRef.current
       if (drag.mode === 'move') {
         const siblings = allPages.filter((p) => p.id !== page.id).map((p) => p.canvas)
         const snap = computeSnap(
@@ -157,14 +170,14 @@ export const PageCard = memo(
         const finalDx = dx + snap.dx
         const finalDy = dy + snap.dy
         drag.final = { ...drag.orig, x: drag.orig.x + finalDx, y: drag.orig.y + finalDy }
-        if (el) el.style.transform = `translate3d(${finalDx}px, ${finalDy}px, 0)`
+        if (moveRef.current) moveRef.current.style.transform = `translate3d(${finalDx}px, ${finalDy}px, 0)`
       } else {
         const w = Math.min(MAX_W, Math.max(MIN_W, drag.orig.w + dx))
         const h = Math.min(MAX_H, Math.max(MIN_H, drag.orig.h + dy))
         drag.final = { ...drag.orig, w, h }
-        if (el) {
-          el.style.width = `${w}px`
-          el.style.height = `${h}px`
+        if (outerRef.current) {
+          outerRef.current.style.width = `${w}px`
+          outerRef.current.style.height = `${h}px`
         }
       }
     }
@@ -177,7 +190,7 @@ export const PageCard = memo(
       // Efface l'écriture imitée dans le MÊME tick que la mise à jour store —
       // sans ça, le prochain rendu React (nouveaux `left`/`top`) s'ajouterait
       // au `translate3d` encore présent et ferait sauter la carte d'un cran.
-      if (cardRef.current) cardRef.current.style.transform = ''
+      if (moveRef.current) moveRef.current.style.transform = ''
       if (drag.moved) {
         usePagesStore.getState().updateCanvasLocal(page.id, drag.final)
         window.aether.pages.updateCanvas(page.id, drag.final)
@@ -204,18 +217,11 @@ export const PageCard = memo(
 
     return (
       <motion.div
-        ref={cardRef}
+        ref={outerRef}
         data-card
         initial={{ opacity: 0, scale: 0.965 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ type: 'spring', stiffness: 300, damping: 32, delay: Math.min(index * 0.025, 0.25) }}
-        onPointerDown={(e) => beginGesture(e, 'move')}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onDoubleClick={(e) => {
-          e.stopPropagation()
-          focusPage(page.id)
-        }}
         className={cn(
           'group absolute overflow-hidden rounded-2xl border bg-mist transition-[border-color,box-shadow] duration-300',
           selected
@@ -229,6 +235,20 @@ export const PageCard = memo(
           height: page.canvas.h
         }}
       >
+        {/* `moveRef` : élément ORDINAIRE (pas de framer-motion) — voir le
+            commentaire sur `moveRef` plus haut pour pourquoi `transform` ne
+            doit jamais être écrit sur le `motion.div` lui-même. */}
+        <div
+          ref={moveRef}
+          className="absolute inset-0"
+          onPointerDown={(e) => beginGesture(e, 'move')}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onDoubleClick={(e) => {
+            e.stopPropagation()
+            focusPage(page.id)
+          }}
+        >
         {/* Aperçu statique, ou placeholder de bornes pour la vue native une fois éveillée */}
         {!awake &&
           (preview ? (
@@ -381,6 +401,7 @@ export const PageCard = memo(
           <svg width="20" height="20" viewBox="0 0 20 20" className="text-ink-faint">
             <path d="M15 9v6H9" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
+        </div>
         </div>
       </motion.div>
     )

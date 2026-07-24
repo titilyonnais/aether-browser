@@ -4,6 +4,17 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.61.4] — 2026-07-24
+
+### Corrigé
+
+- **Glisser une carte de la Toile faisait sauter sa position de façon erratique** (« téléportations »
+  pendant qu'on la tenait, bouton/élément inattendu affiché par moments) — le déplacement écrivait
+  directement `transform` sur le `motion.div` (framer-motion) de la carte, qui réaffirme sa propre
+  valeur de cette propriété à chaque re-rendu (mount, changement d'un titre de page en tâche de
+  fond…), effaçant la position en cours de glisser plusieurs fois par seconde. Le déplacement
+  s'écrit désormais sur un élément DOM ordinaire imbriqué, jamais géré par framer-motion.
+
 ## [0.61.3] — 2026-07-24
 
 ### Corrigé
