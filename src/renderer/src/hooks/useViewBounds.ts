@@ -15,10 +15,12 @@ export function useViewBounds(
    * hors du viewport pannable/zoomable. Sans ça, la vue continuerait d'être
    * positionnée à son rectangle RÉEL (une WebContentsView compose
    * indépendamment de tout `overflow:hidden` DOM), débordant par-dessus le
-   * reste de l'interface. Masquage tout-ou-rien plutôt que recadrage partiel :
-   * `setBounds` fixe à la fois la position ET la taille de rendu interne de
-   * la page — réduire seulement le rectangle ferait apparaître un contenu
-   * réduit/déformé plutôt que réellement rogné. */
+   * reste de l'interface. On envoie l'INTERSECTION avec cette zone plutôt
+   * que de tout masquer dès que ça déborde un peu (`setBounds` fixe aussi la
+   * taille de rendu interne de la page, donc le contenu apparaît compressé
+   * proportionnellement pendant un débordement — un défaut mineur, largement
+   * préférable à un rectangle noir géant le temps de dézoomer). Seule une
+   * carte ENTIÈREMENT hors champ (aucun recouvrement du tout) est masquée. */
   clipToRef?: { current: HTMLElement | null }
 ) {
   const ref = useRef<HTMLDivElement | null>(null)
@@ -38,14 +40,22 @@ export function useViewBounds(
       let forceSend = false
       if (clipToRef?.current) {
         const c = clipToRef.current.getBoundingClientRect()
-        const fullyInside = r.left >= c.left && r.top >= c.top && r.right <= c.right && r.bottom <= c.bottom
-        if (!fullyInside) {
+        const ix = Math.max(r.left, c.left)
+        const iy = Math.max(r.top, c.top)
+        const iw = Math.min(r.right, c.right) - ix
+        const ih = Math.min(r.bottom, c.bottom) - iy
+        if (iw <= 0 || ih <= 0) {
           x = 0
           y = 0
           width = 0
           height = 0
-          forceSend = true
+        } else {
+          x = ix
+          y = iy
+          width = iw
+          height = ih
         }
+        forceSend = true
       }
       const key = `${Math.round(x)},${Math.round(y)},${Math.round(width)},${Math.round(height)}`
       if (key !== last && (forceSend || (width > 0 && height > 0))) {

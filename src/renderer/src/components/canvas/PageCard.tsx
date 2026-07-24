@@ -22,14 +22,10 @@ const MIN_H = 115
 const MAX_W = 1440
 const MAX_H = 1040
 /** Distance de déclenchement de l'aimantation, en pixels ÉCRAN (convertie en
- * unités monde selon le zoom courant) — même ordre de grandeur que les
- * outils d'alignement type Figma/Sketch. */
-const SNAP_THRESHOLD_PX = 8
-/** Repli grille (unités monde) quand aucune autre carte n'offre d'alignement. */
-const SNAP_GRID = 20
-/** Épaisseur visuelle des guides, en pixels ÉCRAN (compensée par le zoom
- * courant pour rester fine à tout niveau de zoom). */
-const GUIDE_THICKNESS_PX = 1.5
+ * unités monde selon le zoom courant). Coin à coin uniquement — pas de repli
+ * grille (donnait une sensation de « suivre un quadrillage », plus du tout
+ * fluide) ni de repère visuel (non désiré, l'aimantation doit rester discrète). */
+const SNAP_THRESHOLD_PX = 14
 
 interface Rect {
   x: number
@@ -38,71 +34,32 @@ interface Rect {
   h: number
 }
 
-interface SnapGuideX {
-  at: number
-  y1: number
-  y2: number
-}
-
-interface SnapGuideY {
-  at: number
-  x1: number
-  x2: number
-}
-
-/** Aimante `rect` (déjà déplacé) sur les bords/centres des `siblings` les
- * plus proches, à défaut sur la grille — indépendamment sur chaque axe. */
-function computeSnap(
-  rect: Rect,
-  siblings: Rect[],
-  thresholdWorld: number
-): { dx: number; dy: number; guideX: SnapGuideX | null; guideY: SnapGuideY | null } {
-  let bestDx = 0
-  let bestDxDist = thresholdWorld
-  let guideX: SnapGuideX | null = null
-  let bestDy = 0
-  let bestDyDist = thresholdWorld
-  let guideY: SnapGuideY | null = null
-
-  const xEdges = [rect.x, rect.x + rect.w / 2, rect.x + rect.w]
-  const yEdges = [rect.y, rect.y + rect.h / 2, rect.y + rect.h]
-
+/** Aimante `rect` (déjà déplacé) dès qu'un de ses 4 coins s'approche d'un
+ * coin d'une carte voisine — les DEUX axes doivent être dans le seuil
+ * simultanément (sinon un simple survol d'un bord lointain suffirait à
+ * accrocher), façon deux aimants qui s'attirent en se rapprochant plutôt
+ * qu'un alignement de règle sur toute la largeur/hauteur. */
+function computeSnap(rect: Rect, siblings: Rect[], thresholdWorld: number): { dx: number; dy: number } {
+  const corners = (r: Rect): { x: number; y: number }[] => [
+    { x: r.x, y: r.y },
+    { x: r.x + r.w, y: r.y },
+    { x: r.x, y: r.y + r.h },
+    { x: r.x + r.w, y: r.y + r.h }
+  ]
+  const draggedCorners = corners(rect)
+  let best: { dist: number; dx: number; dy: number } | null = null
   for (const s of siblings) {
-    const sxEdges = [s.x, s.x + s.w / 2, s.x + s.w]
-    const syEdges = [s.y, s.y + s.h / 2, s.y + s.h]
-    for (const xe of xEdges) {
-      for (const sxe of sxEdges) {
-        const dist = Math.abs(xe - sxe)
-        if (dist < bestDxDist) {
-          bestDxDist = dist
-          bestDx = sxe - xe
-          guideX = { at: sxe, y1: Math.min(rect.y, s.y), y2: Math.max(rect.y + rect.h, s.y + s.h) }
-        }
-      }
-    }
-    for (const ye of yEdges) {
-      for (const sye of syEdges) {
-        const dist = Math.abs(ye - sye)
-        if (dist < bestDyDist) {
-          bestDyDist = dist
-          bestDy = sye - ye
-          guideY = { at: sye, x1: Math.min(rect.x, s.x), x2: Math.max(rect.x + rect.w, s.x + s.w) }
-        }
+    for (const sc of corners(s)) {
+      for (const dc of draggedCorners) {
+        const dx = sc.x - dc.x
+        const dy = sc.y - dc.y
+        if (Math.abs(dx) > thresholdWorld || Math.abs(dy) > thresholdWorld) continue
+        const dist = Math.hypot(dx, dy)
+        if (!best || dist < best.dist) best = { dist, dx, dy }
       }
     }
   }
-
-  // Repli grille — seulement si aucune autre carte n'a déjà proposé un alignement.
-  if (!guideX) {
-    const nearest = Math.round(rect.x / SNAP_GRID) * SNAP_GRID
-    if (Math.abs(nearest - rect.x) < thresholdWorld) bestDx = nearest - rect.x
-  }
-  if (!guideY) {
-    const nearest = Math.round(rect.y / SNAP_GRID) * SNAP_GRID
-    if (Math.abs(nearest - rect.y) < thresholdWorld) bestDy = nearest - rect.y
-  }
-
-  return { dx: bestDx, dy: bestDy, guideX, guideY }
+  return best ? { dx: best.dx, dy: best.dy } : { dx: 0, dy: 0 }
 }
 /** Hauteur réservée (coordonnées monde, donc mise à l'échelle avec le zoom
  * caméra comme le reste de la carte) pour la bande d'identité en bas — seule
@@ -124,28 +81,12 @@ interface PageCardProps {
    * pannable/zoomable (voir useViewBounds). */
   viewportRef: { current: HTMLElement | null }
   /** Toutes les pages de l'espace actif (soi-même inclus) — sert à
-   * l'aimantation sur les bords/centres des autres cartes pendant un glisser. */
+   * l'aimantation coin à coin sur les autres cartes pendant un glisser. */
   allPages: PageMeta[]
-  /** Guides d'alignement partagés (SpatialCanvas.tsx) — mutés directement en
-   * style pendant le geste, jamais via React (voir le patron déjà établi
-   * pour la caméra/le glisser lui-même). */
-  guideXRef: { current: HTMLDivElement | null }
-  guideYRef: { current: HTMLDivElement | null }
 }
 
 export const PageCard = memo(
-  function PageCard({
-    page,
-    index,
-    selected,
-    getZoom,
-    awake,
-    onToggleAwake,
-    viewportRef,
-    allPages,
-    guideXRef,
-    guideYRef
-  }: PageCardProps) {
+  function PageCard({ page, index, selected, getZoom, awake, onToggleAwake, viewportRef, allPages }: PageCardProps) {
     const t = useT()
     // Ref DOM pour écrire directement le style pendant le geste (voir plus
     // bas) — même patron que la caméra de SpatialCanvas.tsx (`apply()`) :
@@ -176,36 +117,6 @@ export const PageCard = memo(
       }
     }
 
-    /** Affiche/masque les deux guides partagés — épaisseur compensée par le
-     * zoom pour rester visuellement fine à tout niveau. */
-    const applyGuides = (guideX: SnapGuideX | null, guideY: SnapGuideY | null, zoom: number): void => {
-      const thickness = GUIDE_THICKNESS_PX / zoom
-      const gx = guideXRef.current
-      if (gx) {
-        if (guideX) {
-          gx.style.display = 'block'
-          gx.style.left = `${guideX.at - thickness / 2}px`
-          gx.style.top = `${guideX.y1}px`
-          gx.style.width = `${thickness}px`
-          gx.style.height = `${guideX.y2 - guideX.y1}px`
-        } else {
-          gx.style.display = 'none'
-        }
-      }
-      const gy = guideYRef.current
-      if (gy) {
-        if (guideY) {
-          gy.style.display = 'block'
-          gy.style.top = `${guideY.at - thickness / 2}px`
-          gy.style.left = `${guideY.x1}px`
-          gy.style.height = `${thickness}px`
-          gy.style.width = `${guideY.x2 - guideY.x1}px`
-        } else {
-          gy.style.display = 'none'
-        }
-      }
-    }
-
     const onPointerMove = (e: React.PointerEvent): void => {
       const drag = dragRef.current
       if (!drag) return
@@ -226,7 +137,6 @@ export const PageCard = memo(
         const finalDy = dy + snap.dy
         drag.final = { ...drag.orig, x: drag.orig.x + finalDx, y: drag.orig.y + finalDy }
         if (el) el.style.transform = `translate3d(${finalDx}px, ${finalDy}px, 0)`
-        applyGuides(snap.guideX, snap.guideY, zoom)
       } else {
         const w = Math.min(MAX_W, Math.max(MIN_W, drag.orig.w + dx))
         const h = Math.min(MAX_H, Math.max(MIN_H, drag.orig.h + dy))
@@ -247,7 +157,6 @@ export const PageCard = memo(
       // sans ça, le prochain rendu React (nouveaux `left`/`top`) s'ajouterait
       // au `translate3d` encore présent et ferait sauter la carte d'un cran.
       if (cardRef.current) cardRef.current.style.transform = ''
-      applyGuides(null, null, 1)
       if (drag.moved) {
         usePagesStore.getState().updateCanvasLocal(page.id, drag.final)
         window.aether.pages.updateCanvas(page.id, drag.final)

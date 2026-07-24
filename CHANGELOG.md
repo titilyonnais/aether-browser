@@ -4,6 +4,22 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.61.2] — 2026-07-24
+
+### Corrigé
+
+- **Le menu du sélecteur de profil s'affichait dans le style natif de Windows/Chrome**, pas celui
+  d'ÆTHER — remplacé par la même bulle DOM (glass-strong) que tous les autres menus contextuels de
+  l'appli. Corrige au passage, plus proprement, le bascule ouvert/fermé au reclic.
+- **Le contenu d'une carte éveillée devenait tout noir en zoomant la Toile vers l'avant** — la vue
+  native se masquait entièrement dès qu'elle dépassait le cadre visible d'un seul pixel (recadrage
+  tout-ou-rien). Elle affiche désormais la portion réellement visible, recadrée, plutôt que de
+  disparaître complètement.
+- **Aimantation des cartes revue** — elle ne se déclenche plus que lorsque deux COINS de cartes
+  s'approchent l'un de l'autre (façon deux aimants), sans repère visuel affiché. Le repli sur la
+  grille de fond a été retiré : il donnait l'impression que la carte « suivait un quadrillage »
+  pendant tout le glisser, au lieu de rester fluide.
+
 ## [0.61.1] — 2026-07-24
 
 ### Corrigé

@@ -790,72 +790,37 @@ export function registerIpc(router: AiRouter): void {
   // la fenêtre principale (`*Requested`), qui exécute la même logique que les
   // boutons du menu (rechargement complet du workspace, stores…), impossible
   // à reproduire depuis ce process ou depuis un popup sans store partagé.
-  // Fenêtres (par id) où le menu natif du sélecteur de profil est actuellement
-  // affiché — `Menu.closePopup` est une méthode d'INSTANCE (pas statique),
-  // donc on garde la référence exacte du menu ouvert, pas juste un booléen.
-  const openProfileMenus = new Map<number, Menu>()
-  // Fenêtres où le menu vient tout juste de se fermer TOUT SEUL (voir
-  // commentaire ci-dessous) — sert de garde anti-réouverture instantanée.
-  const profileMenuClosedAt = new Map<number, number>()
-  const PROFILE_MENU_REOPEN_GUARD_MS = 250
+  // Bulle DOM (glass-strong, comme tous les autres menus contextuels de
+  // l'appli) plutôt qu'un menu natif façon Chrome — `showContextMenuPopover`
+  // gère déjà son propre affichage/positionnement ; le bascule ouvert/fermé
+  // au reclic est géré côté RENDERER (ProfileSwitcher.tsx, même patron que
+  // TranslatePopoverButton.tsx : état `open` local + `stopPropagation` pour
+  // éviter le détecteur de clic extérieur global d'App.tsx).
   ipcMain.on(CH.profileShowMenu, (e, rawAnchor: LocalRect) => {
     const { win, views } = resolveWindowContext(e)
     const anchor = safeValidate(localRectSchema, rawAnchor, 'profile:show-menu')
     if (!anchor) return
-    // Un menu natif n'a pas d'état « ouvert » côté renderer — sans ce suivi,
-    // recliquer sur la pastille alors que le menu est déjà affiché en
-    // ROUVRAIT un second par-dessus (perçu comme « ça ne se ferme pas »).
-    // Le `callback` (déclenché à la fermeture, quelle qu'en soit la raison)
-    // retire l'entrée dans tous les cas.
-    const openMenu = openProfileMenus.get(win.id)
-    if (openMenu) {
-      openMenu.closePopup(win)
-      openProfileMenus.delete(win.id)
-      return
-    }
-    // Recliquer sur la pastille alors que le menu est affiché est, du point
-    // de vue d'Electron, un clic EN DEHORS du popup (même s'il touche son
-    // propre déclencheur) — le menu se ferme donc TOUT SEUL (son `callback`
-    // tourne) AVANT que ce même clic n'atteigne le gestionnaire React et ne
-    // redemande l'ouverture. Sans cette garde, ce clic « rouvrait » aussitôt
-    // un nouveau menu, rendant le second clic (censé fermer) inopérant.
-    const closedAt = profileMenuClosedAt.get(win.id)
-    if (closedAt !== undefined && Date.now() - closedAt < PROFILE_MENU_REOPEN_GUARD_MS) {
-      profileMenuClosedAt.delete(win.id)
-      return
-    }
-    const winBounds = win.getBounds()
-    const x = Math.round(winBounds.x + anchor.x)
-    const y = Math.round(winBounds.y + anchor.y + anchor.height + 6)
     const activeId = activeProfileOf(views)
-    const menu = Menu.buildFromTemplate([
-      { label: 'Profils', enabled: false },
-      { type: 'separator' },
-      ...profilesRepo.list().map((p) => ({
-        label: p.name,
-        type: 'checkbox' as const,
-        checked: p.id === activeId,
-        click: () => sendTo(win, CH.profileSwitchRequested, p.id)
-      })),
-      { type: 'separator' },
-      { label: 'Nouveau profil', click: () => sendTo(win, CH.profileCreateRequested) },
+    const profiles = profilesRepo.list()
+    showContextMenuPopover(
+      win,
+      { x: anchor.x, y: anchor.y + anchor.height + 6, width: anchor.width, height: anchor.height },
+      [
+        ...profiles.map((p): ContextMenuRow => ({ kind: 'item', id: `switch-${p.id}`, label: p.name, checked: p.id === activeId })),
+        { kind: 'separator' },
+        { kind: 'item', id: 'new-profile', label: 'Nouveau profil' },
+        { kind: 'item', id: 'private', label: 'Navigation privée', accelerator: 'Ctrl+Shift+N' },
+        { kind: 'separator' },
+        { kind: 'item', id: 'manage', label: 'Gérer les profils…' }
+      ],
       {
-        label: 'Navigation privée',
-        accelerator: 'Ctrl+Shift+N',
-        click: () => sendTo(win, CH.profileStartPrivateRequested)
+        ...Object.fromEntries(profiles.map((p) => [`switch-${p.id}`, () => sendTo(win, CH.profileSwitchRequested, p.id)])),
+        'new-profile': () => sendTo(win, CH.profileCreateRequested),
+        private: () => sendTo(win, CH.profileStartPrivateRequested),
+        manage: () => sendTo(win, CH.profileManageRequested)
       },
-      { label: 'Gérer les profils…', click: () => sendTo(win, CH.profileManageRequested) }
-    ])
-    openProfileMenus.set(win.id, menu)
-    menu.popup({
-      window: win,
-      x,
-      y,
-      callback: () => {
-        openProfileMenus.delete(win.id)
-        profileMenuClosedAt.set(win.id, Date.now())
-      }
-    })
+      'Profils'
+    )
   })
 
   // ─── Espaces ───────────────────────────────────────────────────────────────
