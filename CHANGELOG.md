@@ -4,6 +4,34 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.60.0] — 2026-07-24
+
+### Ajouté
+
+- **Rendre une carte interactive directement sur la Toile** — nouveau bouton « Rendre interactive »
+  (actions au survol d'une carte) qui réveille une vraie page vivante et navigable à même la carte,
+  sans quitter le mode Toile ni passer par le mode Focus. Un bouton « Remettre en veille » (bande
+  d'identité) revient à l'aperçu statique — capture un aperçu frais au passage.
+
+### Corrigé
+
+- **Icône du sélecteur de profil toujours décentrée au repos** (v0.59.x) — deux causes traitées :
+  absence de `line-height` explicite sur le glyphe (l'ancien centrage ne centrait que la boîte de
+  ligne, pas l'encre du glyphe) et bascule de couche de composition au survol (le bouton reste
+  désormais en permanence sur sa propre couche, repos et survol utilisent le même rendu).
+- **Zoom de la Toile trop restreint** — plafond relevé de 250% à 300% ; zoom arrière quasi illimité
+  (4% au lieu de 22%, ~25× plus de surface visible).
+- **Amplitude de redimensionnement des cartes trop faible** — plage élargie (160×115 minimum,
+  1440×1040 maximum, contre 260×180/780×580 avant).
+- **Flou persistant en zoomant sur une carte (aperçu ET boutons), net seulement au clic** — la
+  toile restait figée sur une couche de composition bitmap en permanence ; elle ne l'est désormais
+  que pendant le geste actif, et se re-rastérise proprement (sans clic nécessaire) une fois le
+  zoom/pan stabilisé.
+- **Glisser-déposer d'une carte saccadé** — chaque mouvement de souris réécrivait l'intégralité du
+  store des pages, provoquant un nouveau rendu de toute la Toile à chaque frame. Le déplacement/
+  redimensionnement s'écrit désormais directement dans le DOM pendant le geste (comme le pan/zoom
+  de la caméra), le store n'étant mis à jour qu'une seule fois au relâchement.
+
 ## [0.59.1] — 2026-07-23
 
 ### Corrigé

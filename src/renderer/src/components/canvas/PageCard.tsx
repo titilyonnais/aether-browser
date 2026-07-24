@@ -5,37 +5,54 @@
  * les deltas étant divisés par le zoom caméra pour rester en coordonnées monde.
  */
 import { motion } from 'framer-motion'
-import { ArrowUpRight, X } from 'lucide-react'
+import { ArrowUpRight, Power, X } from 'lucide-react'
 import { memo, useRef } from 'react'
-import type { PageMeta } from '@shared/types'
+import type { PageId, PageMeta } from '@shared/types'
 import { Favicon } from '@/components/ui/Favicon'
+import { useViewBounds } from '@/hooks/useViewBounds'
 import { useT } from '@/i18n/useT'
 import { closePage, focusPage } from '@/lib/actions'
 import { cn, domainOf, hueFromString, previewUrl } from '@/lib/utils'
 import { usePagesStore } from '@/stores/pages'
 import { useUiStore } from '@/stores/ui'
 
-const MIN_W = 260
-const MIN_H = 180
-const MAX_W = 780
-const MAX_H = 580
+const MIN_W = 160
+const MIN_H = 115
+const MAX_W = 1440
+const MAX_H = 1040
+/** Hauteur réservée (coordonnées monde, donc mise à l'échelle avec le zoom
+ * caméra comme le reste de la carte) pour la bande d'identité en bas — seule
+ * zone du DOM que la vue native N'OCCUPE PAS quand la carte est éveillée
+ * (une WebContentsView compose toujours au-dessus du DOM, quel que soit le
+ * z-index), donc seule zone où boutons/glisser-déposer restent cliquables
+ * une fois la carte réveillée. */
+const AWAKE_FOOTER_H = 56
 
 interface PageCardProps {
   page: PageMeta
   index: number
   selected: boolean
   getZoom: () => number
+  awake: boolean
+  onToggleAwake: (id: PageId) => void
 }
 
 export const PageCard = memo(
-  function PageCard({ page, index, selected, getZoom }: PageCardProps) {
+  function PageCard({ page, index, selected, getZoom, awake, onToggleAwake }: PageCardProps) {
     const t = useT()
+    // Ref DOM pour écrire directement le style pendant le geste (voir plus
+    // bas) — même patron que la caméra de SpatialCanvas.tsx (`apply()`) :
+    // aucune écriture dans le store tant que le geste n'est pas terminé,
+    // pour éviter que `SpatialCanvas` (abonné à TOUT `pages`, voir son
+    // `usePagesStore((s) => s.pages)`) ne se re-rende à chaque pointermove.
+    const cardRef = useRef<HTMLDivElement | null>(null)
     const dragRef = useRef<{
       mode: 'move' | 'resize'
       startX: number
       startY: number
       orig: { x: number; y: number; w: number; h: number }
       moved: boolean
+      final: { x: number; y: number; w: number; h: number }
     } | null>(null)
 
     const beginGesture = (e: React.PointerEvent, mode: 'move' | 'resize'): void => {
@@ -47,7 +64,8 @@ export const PageCard = memo(
         startX: e.clientX,
         startY: e.clientY,
         orig: { ...page.canvas },
-        moved: false
+        moved: false,
+        final: { ...page.canvas }
       }
     }
 
@@ -59,19 +77,18 @@ export const PageCard = memo(
       const dy = (e.clientY - drag.startY) / zoom
       if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 4) return
       drag.moved = true
-      const store = usePagesStore.getState()
+      const el = cardRef.current
       if (drag.mode === 'move') {
-        store.updateCanvasLocal(page.id, {
-          ...page.canvas,
-          x: drag.orig.x + dx,
-          y: drag.orig.y + dy
-        })
+        drag.final = { ...drag.orig, x: drag.orig.x + dx, y: drag.orig.y + dy }
+        if (el) el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`
       } else {
-        store.updateCanvasLocal(page.id, {
-          ...page.canvas,
-          w: Math.min(MAX_W, Math.max(MIN_W, drag.orig.w + dx)),
-          h: Math.min(MAX_H, Math.max(MIN_H, drag.orig.h + dy))
-        })
+        const w = Math.min(MAX_W, Math.max(MIN_W, drag.orig.w + dx))
+        const h = Math.min(MAX_H, Math.max(MIN_H, drag.orig.h + dy))
+        drag.final = { ...drag.orig, w, h }
+        if (el) {
+          el.style.width = `${w}px`
+          el.style.height = `${h}px`
+        }
       }
     }
 
@@ -80,10 +97,13 @@ export const PageCard = memo(
       dragRef.current = null
       if (!drag) return
       e.stopPropagation()
-      const current = usePagesStore.getState().pages[page.id]
-      if (!current) return
+      // Efface l'écriture imitée dans le MÊME tick que la mise à jour store —
+      // sans ça, le prochain rendu React (nouveaux `left`/`top`) s'ajouterait
+      // au `translate3d` encore présent et ferait sauter la carte d'un cran.
+      if (cardRef.current) cardRef.current.style.transform = ''
       if (drag.moved) {
-        window.aether.pages.updateCanvas(page.id, current.canvas)
+        usePagesStore.getState().updateCanvasLocal(page.id, drag.final)
+        window.aether.pages.updateCanvas(page.id, drag.final)
       } else if (drag.mode === 'move') {
         useUiStore.getState().select(page.id)
       }
@@ -92,9 +112,15 @@ export const PageCard = memo(
     const preview = previewUrl(page.id, page.previewVersion)
     const domain = domainOf(page.url)
     const hue = hueFromString(domain)
+    // Même patron que PageSlot.tsx (mode Focus) : `getBoundingClientRect()`
+    // résout déjà les transforms CSS ancêtres (translate/scale de la Toile),
+    // donc ce placeholder continue de rapporter les bonnes coordonnées écran
+    // pendant le pan/zoom, sans logique de calcul de bornes supplémentaire.
+    const boundsRef = useViewBounds(page.id, awake)
 
     return (
       <motion.div
+        ref={cardRef}
         data-card
         initial={{ opacity: 0, scale: 0.965 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -119,26 +145,34 @@ export const PageCard = memo(
           height: page.canvas.h
         }}
       >
-        {/* Aperçu ou matière d'attente */}
-        {preview ? (
-          <img
-            src={preview}
-            draggable={false}
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover object-top"
-            alt=""
-          />
-        ) : (
-          <div
-            className="pointer-events-none absolute inset-0 grid place-items-center"
-            style={{
-              background: `linear-gradient(155deg, hsl(${hue} 26% 13%) 0%, hsl(${hue} 20% 7%) 100%)`
-            }}
-          >
-            <div className="flex flex-col items-center gap-3 pb-6">
-              <Favicon url={page.url} faviconUrl={page.faviconUrl} size={30} />
-              <span className="font-mono text-[11px] text-ink-faint">{domain}</span>
+        {/* Aperçu statique, ou placeholder de bornes pour la vue native une fois éveillée */}
+        {!awake &&
+          (preview ? (
+            <img
+              src={preview}
+              draggable={false}
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover object-top"
+              alt=""
+            />
+          ) : (
+            <div
+              className="pointer-events-none absolute inset-0 grid place-items-center"
+              style={{
+                background: `linear-gradient(155deg, hsl(${hue} 26% 13%) 0%, hsl(${hue} 20% 7%) 100%)`
+              }}
+            >
+              <div className="flex flex-col items-center gap-3 pb-6">
+                <Favicon url={page.url} faviconUrl={page.faviconUrl} size={30} />
+                <span className="font-mono text-[11px] text-ink-faint">{domain}</span>
+              </div>
             </div>
-          </div>
+          ))}
+        {awake && (
+          <div
+            ref={boundsRef}
+            className="pointer-events-none absolute inset-x-0 top-0"
+            style={{ bottom: AWAKE_FOOTER_H }}
+          />
         )}
 
         {/* Barre de chargement */}
@@ -154,26 +188,85 @@ export const PageCard = memo(
           </div>
         )}
 
-        {/* Voile bas + identité */}
+        {/* Voile bas + identité — devient interactive en permanence une fois
+            éveillée (les actions au survol du haut sont alors recouvertes
+            par la vue native). */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2.5 p-3.5">
+        <div
+          className={cn(
+            'absolute inset-x-0 bottom-0 flex items-center gap-2.5 p-3.5',
+            !awake && 'pointer-events-none'
+          )}
+        >
           <Favicon url={page.url} faviconUrl={page.faviconUrl} size={15} />
-          <div className="min-w-0 flex-1">
+          <div className="pointer-events-none min-w-0 flex-1">
             <p className="fade-truncate text-[12.5px] font-medium leading-tight text-ink">
               {page.title || t('focusCanvas.pageCard.untitled')}
             </p>
             <p className="fade-truncate font-mono text-[10px] leading-tight text-ink-dim/70">{domain}</p>
           </div>
-          {page.isLive && (
+          {page.isLive && !awake && (
             <span
               className="h-1.5 w-1.5 shrink-0 animate-pulse-dot rounded-full bg-glacier"
               title={t('focusCanvas.pageCard.liveIndicator')}
             />
           )}
+          {awake && (
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                title={t('focusCanvas.pageCard.sleepCard')}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleAwake(page.id)
+                }}
+                className="grid h-6 w-6 place-items-center rounded-md border border-glacier/40 bg-glacier/20 text-glacier"
+              >
+                <Power size={12} strokeWidth={1.8} />
+              </button>
+              <button
+                type="button"
+                title={t('focusCanvas.pageCard.openFocus')}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  focusPage(page.id)
+                }}
+                className="grid h-6 w-6 place-items-center rounded-md border border-white/[0.12] bg-black/55 text-ink-dim hover:text-ink"
+              >
+                <ArrowUpRight size={12} strokeWidth={1.8} />
+              </button>
+              <button
+                type="button"
+                title={t('focusCanvas.pageCard.closePage')}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void closePage(page.id)
+                }}
+                className="grid h-6 w-6 place-items-center rounded-md border border-white/[0.12] bg-black/55 text-ink-dim hover:text-red-200"
+              >
+                <X size={12} strokeWidth={1.8} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Actions au survol */}
         <div className="absolute right-2.5 top-2.5 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <button
+            type="button"
+            title={t('focusCanvas.pageCard.wakeCard')}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleAwake(page.id)
+            }}
+            className="grid h-7 w-7 place-items-center rounded-lg border border-white/[0.12] bg-black/55 text-ink-dim backdrop-blur-md transition-colors hover:text-ink"
+          >
+            <Power size={13} strokeWidth={1.8} />
+          </button>
           <button
             type="button"
             title={t('focusCanvas.pageCard.openFocus')}
@@ -216,5 +309,8 @@ export const PageCard = memo(
     )
   },
   (prev, next) =>
-    prev.page === next.page && prev.selected === next.selected && prev.index === next.index
+    prev.page === next.page &&
+    prev.selected === next.selected &&
+    prev.index === next.index &&
+    prev.awake === next.awake
 )

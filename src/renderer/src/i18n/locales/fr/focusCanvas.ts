@@ -161,6 +161,8 @@ export const focusCanvas: Record<string, string> = {
   'focusCanvas.pageCard.openFocus': 'Ouvrir en mode Focus',
   'focusCanvas.pageCard.closePage': 'Fermer la page',
   'focusCanvas.pageCard.resize': 'Redimensionner',
+  'focusCanvas.pageCard.wakeCard': 'Rendre interactive',
+  'focusCanvas.pageCard.sleepCard': 'Remettre en veille',
 
   // PageListBubble
   'focusCanvas.pageListBubble.countOne': '{{count}} page',

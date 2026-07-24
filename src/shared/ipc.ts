@@ -120,6 +120,10 @@ export const CH = {
   pageStop: 'page:stop',
   pageSetVisible: 'page:set-visible',
   pageSetBounds: 'page:set-bounds',
+  /** Réveille/rendort une page directement sur la Toile (mode canvas) — vue
+   * vivante interactive à même la carte, sans passer par le mode Focus. */
+  pageWakeCanvas: 'page:wake-canvas',
+  pageSleepCanvas: 'page:sleep-canvas',
   pageOverlay: 'page:overlay',
   pageUpdateCanvas: 'page:update-canvas',
   pageRequestPreview: 'page:request-preview',
@@ -450,6 +454,11 @@ export interface AetherApi {
     setVisible(ids: PageId[]): void
     /** Positionne la vue native d'une page (coordonnées fenêtre). */
     setBounds(id: PageId, bounds: Bounds): void
+    /** Réveille une page directement sur la Toile (vue vivante, hors Focus). */
+    wakeCanvas(id: PageId): void
+    /** Rendort une page réveillée sur la Toile (capture un aperçu frais,
+     * détruit la vue si elle n'est pas par ailleurs nécessaire). */
+    sleepCanvas(id: PageId): void
     /** Un overlay UI est ouvert → masquer/rétablir les vues natives. */
     setOverlay(open: boolean): void
     updateCanvas(id: PageId, rect: CanvasRect): void

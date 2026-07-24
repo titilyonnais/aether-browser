@@ -364,6 +364,10 @@ export class ViewManager {
   private bounds = new Map<PageId, Bounds>()
   private attached = new Set<PageId>()
   private visibleIds: PageId[] = []
+  /** Pages réveillées directement sur la Toile (hors mode Focus, voir
+   * `wakeCanvasPage`/`sleepCanvasPage`) — vues vivantes normales, mais
+   * EXEMPTÉES de l'éviction LRU tant qu'elles restent dans cet ensemble. */
+  private canvasPinnedIds = new Set<PageId>()
   private overlayOpen = false
   /** Ordre d'utilisation (fin = plus récent) pour l'éviction LRU. */
   private lru: PageId[] = []
@@ -1020,6 +1024,36 @@ export class ViewManager {
     this.evictIfNeeded()
   }
 
+  /** Réveille une page directement sur la Toile (mode canvas) : vue vivante
+   * normale, mais exemptée de l'éviction LRU (voir `evictIfNeeded`) tant
+   * qu'elle reste éveillée. Les bornes arrivent ensuite via `setBounds`
+   * (voir `useViewBounds` côté renderer, déjà utilisé à l'identique en
+   * mode Focus — `getBoundingClientRect()` résout déjà les transforms CSS
+   * de la Toile, aucun calcul de bornes spécifique n'est nécessaire ici). */
+  wakeCanvasPage(id: PageId): void {
+    const row = pagesRepo.get(id)
+    if (!row) return
+    this.ensureLive(row)
+    this.canvasPinnedIds.add(id)
+    this.touchLru(id)
+    this.applyLayout()
+  }
+
+  /** Rendort une page réveillée sur la Toile : capture un aperçu frais (pour
+   * que la carte statique reflète le dernier état vu), puis détruit la vue
+   * si elle n'est pas par ailleurs nécessaire (ex. la même page ouverte en
+   * Focus, via `visibleIds`) — sinon la laisse vivante mais non épinglée. */
+  async sleepCanvasPage(id: PageId): Promise<void> {
+    if (!this.canvasPinnedIds.has(id)) return
+    this.canvasPinnedIds.delete(id)
+    if (this.views.has(id)) await this.capture(id, true)
+    this.applyLayout()
+    if (!this.visibleIds.includes(id)) {
+      this.destroyView(id, { keepPreview: true })
+      this.patchRuntime(id, { isLive: false, isLoading: false })
+    }
+  }
+
   setBounds(id: PageId, b: Bounds): void {
     this.fullBounds.set(id, b)
     const dockSide = this.devToolsDockSide.get(id)
@@ -1058,7 +1092,8 @@ export class ViewManager {
 
   private applyLayout(): void {
     for (const [id, view] of this.views) {
-      const shouldShow = !this.overlayOpen && this.visibleIds.includes(id) && this.bounds.has(id)
+      const shouldShow =
+        !this.overlayOpen && (this.visibleIds.includes(id) || this.canvasPinnedIds.has(id)) && this.bounds.has(id)
       if (shouldShow) {
         if (!this.attached.has(id)) {
           this.win.contentView.addChildView(view)
@@ -1083,12 +1118,15 @@ export class ViewManager {
     }
   }
 
-  /** Décharge les vues les moins récentes au-delà du plafond (économiseur de mémoire). */
+  /** Décharge les vues les moins récentes au-delà du plafond (économiseur de mémoire).
+   * Les pages épinglées par la Toile (`canvasPinnedIds`) sont exemptées, comme les
+   * pages visibles en mode Focus. */
   private evictIfNeeded(): void {
-    const max = Math.max(this.visibleIds.length, getSettings().maxLivePages)
+    const pinned = this.visibleIds.length + this.canvasPinnedIds.size
+    const max = Math.max(pinned, getSettings().maxLivePages)
     const liveCount = this.views.size
     if (liveCount <= max) return
-    const candidates = this.lru.filter((id) => !this.visibleIds.includes(id))
+    const candidates = this.lru.filter((id) => !this.visibleIds.includes(id) && !this.canvasPinnedIds.has(id))
     let toEvict = liveCount - max
     for (const id of candidates) {
       if (toEvict <= 0) break
@@ -1668,6 +1706,7 @@ export class ViewManager {
     }
     this.bounds.delete(id)
     this.lru = this.lru.filter((x) => x !== id)
+    this.canvasPinnedIds.delete(id)
     this.storeShimHosts.delete(id)
     this.storeShimScriptIds.delete(id)
     this.embeddedOriginsByPage.delete(id)

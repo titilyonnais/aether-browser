@@ -1068,6 +1068,9 @@ export function registerIpc(router: AiRouter): void {
     if (parsed) resolveWindowContext(e).views.setBounds(id, parsed)
   })
 
+  ipcMain.on(CH.pageWakeCanvas, (e, id: PageId) => resolveWindowContext(e).views.wakeCanvasPage(id))
+  ipcMain.on(CH.pageSleepCanvas, (e, id: PageId) => void resolveWindowContext(e).views.sleepCanvasPage(id))
+
   ipcMain.on(CH.pageOverlay, (e, open: boolean) => resolveWindowContext(e).views.setOverlay(Boolean(open)))
 
   ipcMain.on(CH.pageUpdateCanvas, (_e, id: PageId, rect: CanvasRect) => {

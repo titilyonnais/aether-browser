@@ -11,8 +11,8 @@
  * glisser le fond = pan · double-clic = nouvelle carte à cet endroit.
  */
 import { Maximize2, Minus, Orbit, Plus } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { CanvasView } from '@shared/types'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
+import type { CanvasView, PageId } from '@shared/types'
 import type { PageMeta } from '@shared/types'
 import { useT } from '@/i18n/useT'
 import { getActivePageId } from '@/lib/actions'
@@ -23,8 +23,8 @@ import { useUiStore } from '@/stores/ui'
 import { PageCard } from './PageCard'
 import { PageListBubble } from './PageListBubble'
 
-const ZOOM_MIN = 0.22
-const ZOOM_MAX = 2.5
+const ZOOM_MIN = 0.04
+const ZOOM_MAX = 3.0
 const GRID_STEP = 26
 
 export function SpatialCanvas() {
@@ -61,10 +61,85 @@ export function SpatialCanvas() {
    * la prochaine navigation, qui recapture de toute façon). */
   const refreshedPreviews = useRef<Set<string>>(new Set())
 
+  // Cartes actuellement « éveillées » (vue vivante interactive) sur la
+  // Toile — état purement local et éphémère : jamais persisté, remis à zéro
+  // à chaque démontage (bascule vers Focus, ce composant est démonté à
+  // chaque changement de mode) et à chaque changement d'espace, pour ne
+  // jamais laisser une vue vivante tourner « oubliée » côté main une fois
+  // qu'on a quitté ce qui l'a réveillée.
+  const awakeRef = useRef<Set<PageId>>(new Set())
+  const [, bumpAwake] = useReducer((n: number) => n + 1, 0)
+
+  const toggleAwake = useCallback((id: PageId): void => {
+    const set = awakeRef.current
+    if (set.has(id)) {
+      set.delete(id)
+      window.aether.pages.sleepCanvas(id)
+    } else {
+      set.add(id)
+      window.aether.pages.wakeCanvas(id)
+    }
+    bumpAwake()
+  }, [])
+
+  // Changement d'espace : les cartes éveillées de l'espace qu'on quitte
+  // disparaissent de `pages` (filtrées par spaceId) mais leur vue native
+  // resterait vivante et exemptée d'éviction indéfiniment côté main sans ceci.
+  useEffect(() => {
+    return () => {
+      for (const id of awakeRef.current) window.aether.pages.sleepCanvas(id)
+      awakeRef.current = new Set()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaceId])
+
+  // Démontage (bascule vers Focus) : même filet de sécurité.
+  useEffect(() => {
+    return () => {
+      for (const id of awakeRef.current) window.aether.pages.sleepCanvas(id)
+    }
+  }, [])
+
+  // Auto-guérison : une page éveillée dont la vue est morte (crash process,
+  // page fermée depuis un autre chemin) redevient « endormie » côté UI sans
+  // action de l'utilisateur — sinon le bouton resterait bloqué en état
+  // « réveillé » alors que plus rien de vivant ne tourne derrière.
+  useEffect(() => {
+    let changed = false
+    for (const id of Array.from(awakeRef.current)) {
+      const p = pagesMap[id]
+      if (!p || !p.isLive) {
+        awakeRef.current.delete(id)
+        changed = true
+      }
+    }
+    if (changed) bumpAwake()
+  }, [pagesMap])
+
+  // Retire `will-change: transform` un court instant après la fin du geste —
+  // le laisser en permanence (comme avant) fige `worldRef` sur une couche de
+  // composition bitmap que Chromium ne re-rastérise jamais à la résolution
+  // CSS finale pendant qu'elle existe, d'où le flou (aperçus JPEG ET boutons
+  // DOM/SVG des cartes) qui ne « débloquait » qu'au clic (autre évènement de
+  // peinture forçant un repaint). Repasser à `auto` une fois le geste posé
+  // force Chromium à abandonner cette couche et à re-rastériser proprement.
+  const settleRaster = useMemo(
+    () =>
+      debounce(() => {
+        if (worldRef.current) worldRef.current.style.willChange = 'auto'
+      }, 150),
+    []
+  )
+
   /** Applique la caméra au DOM (transform + grille de points). */
   const apply = useCallback((): void => {
     const { x, y, zoom } = camera.current
     if (worldRef.current) {
+      // Écriture idempotente : n'arme `will-change` qu'au DÉBUT d'un geste
+      // (pas à chaque tick de molette/pointermove), pour ne pas spammer le style.
+      if (worldRef.current.style.willChange !== 'transform') {
+        worldRef.current.style.willChange = 'transform'
+      }
       worldRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${zoom})`
     }
     if (containerRef.current) {
@@ -72,7 +147,8 @@ export function SpatialCanvas() {
       containerRef.current.style.backgroundSize = `${step}px ${step}px`
       containerRef.current.style.backgroundPosition = `${x}px ${y}px`
     }
-  }, [])
+    settleRaster()
+  }, [settleRaster])
 
   const persist = useMemo(
     () =>
@@ -300,7 +376,7 @@ export function SpatialCanvas() {
         cursor: panning ? 'grabbing' : 'default'
       }}
     >
-      <div ref={worldRef} className="absolute left-0 top-0 h-0 w-0 origin-top-left will-change-transform">
+      <div ref={worldRef} className="absolute left-0 top-0 h-0 w-0 origin-top-left">
         {pages.map((page, i) => (
           <PageCard
             key={page.id}
@@ -308,6 +384,8 @@ export function SpatialCanvas() {
             index={i}
             selected={page.id === selectedId}
             getZoom={getZoom}
+            awake={awakeRef.current.has(page.id)}
+            onToggleAwake={toggleAwake}
           />
         ))}
       </div>

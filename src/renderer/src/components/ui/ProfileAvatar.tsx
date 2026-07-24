@@ -25,6 +25,7 @@ export function ProfileAvatar({ profile, size }: { profile: Profile; size: numbe
           width: size,
           height: size,
           fontSize: size * 0.45,
+          lineHeight: 1,
           background: profile.avatarColor ? `${profile.avatarColor}29` : hueColor(profile.hue, 0.16, 40),
           color
         }}
@@ -37,7 +38,7 @@ export function ProfileAvatar({ profile, size }: { profile: Profile; size: numbe
   return (
     <span
       className="grid shrink-0 place-items-center rounded-full border border-white/15 text-ink-faint"
-      style={{ width: size, height: size, fontSize: size * 0.4 }}
+      style={{ width: size, height: size, fontSize: size * 0.4, lineHeight: 1 }}
     >
       {profile.name.charAt(0).toUpperCase()}
     </span>
