@@ -4,6 +4,28 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.62.0] — 2026-07-24
+
+### Corrigé
+
+- **Le bouton « retour » restait grisé après une recherche depuis un nouvel onglet** — impossible de
+  revenir à la page d'accueil, il fallait rouvrir un onglet. Quand la vue d'un nouvel onglet doit
+  être (re)créée au moment de la recherche, `aether://newtab` est désormais chargé et validé
+  D'ABORD, puis l'URL cible empilée par-dessus : le nouvel onglet devient une vraie entrée « retour ».
+- **Fermer l'onglet courant ne revenait pas au dernier onglet actif** — on tombait sur l'écran
+  « Par où commencer ? » alors que d'autres onglets restaient ouverts. Une pile des onglets
+  récemment utilisés fait désormais revenir au DERNIER onglet actif encore ouvert (ex. 3 onglets,
+  on passe de apple.fr à amazon.com, on ferme amazon.com → retour sur apple.fr).
+- **Glisser une carte de la Toile pouvait saccader** — la carte est maintenant promue sur sa propre
+  couche de composition GPU le temps du geste, évitant de re-peindre une carte lourde à chaque
+  déplacement.
+
+### Modifié
+
+- **La page de nouvel onglet s'appelle « Page d'accueil »** (au lieu de « newtab ») et son titre
+  « Nouvel onglet » (au lieu de « Sans titre »), partout : bande d'onglets, cartes de la Toile,
+  liste des pages, aperçus, constellation.
+
 ## [0.61.5] — 2026-07-24
 
 ### Corrigé

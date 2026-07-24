@@ -1,5 +1,9 @@
 /** Traductions FR — section "focusCanvas". */
 export const focusCanvas: Record<string, string> = {
+  // Nouvel onglet / page d'accueil (libellés partagés onglet/carte/liste)
+  'focusCanvas.newTab.label': 'Nouvel onglet',
+  'focusCanvas.newTab.home': 'Page d’accueil',
+
   // FocusView
   'focusCanvas.focusView.voidTitle': 'Par où commencer ?',
   'focusCanvas.focusView.voidSubtitle':

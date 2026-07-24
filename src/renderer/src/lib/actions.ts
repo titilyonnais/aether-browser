@@ -400,11 +400,24 @@ export async function openUrl(
   }
 }
 
+/** Pile d'utilisation récente des onglets (fin = plus récent), par espace —
+ * sert à revenir au DERNIER onglet actif quand on ferme l'onglet courant,
+ * plutôt que de retomber sur un Focus vide (cf. `closePage`). Purement en
+ * mémoire, jamais persistée. */
+const focusMru: PageId[] = []
+
+function noteFocusMru(id: PageId): void {
+  const i = focusMru.indexOf(id)
+  if (i !== -1) focusMru.splice(i, 1)
+  focusMru.push(id)
+}
+
 /** Amène une page dans le slot actif du mode Focus. */
 export function focusPage(id: PageId): void {
   const pages = usePagesStore.getState()
   const page = pages.pages[id]
   if (!page) return
+  noteFocusMru(id)
   const spaces = useSpacesStore.getState()
   if (page.spaceId !== spaces.activeSpaceId) {
     spaces.setActiveLocal(page.spaceId)
@@ -480,7 +493,12 @@ export async function toggleFavorite(id: PageId): Promise<void> {
 }
 
 export async function closePage(id: PageId): Promise<void> {
+  const wasFocusMode = useUiStore.getState().mode === 'focus'
+  const wasActive = getActivePageId() === id
+
   usePagesStore.getState().removeLocal(id)
+  const mruIdx = focusMru.indexOf(id)
+  if (mruIdx !== -1) focusMru.splice(mruIdx, 1)
   const ui = useUiStore.getState()
   if (ui.selectedPageId === id) ui.select(null)
   try {
@@ -490,19 +508,37 @@ export async function closePage(id: PageId): Promise<void> {
   }
   scheduleAffinityRefresh()
 
+  const activeSpaceId = useSpacesStore.getState().activeSpaceId
+  if (!activeSpaceId) return
+  const remaining = Object.values(usePagesStore.getState().pages).filter((p) => p.spaceId === activeSpaceId)
+
   // Ne jamais laisser l'espace actif totalement vide : sans la moindre page,
   // il n'y a plus aucun moyen d'en rouvrir une (le bouton « + » vit dans la
   // bande de pages, elle-même absente dès qu'il n'y a plus de page) — on
   // atterrit alors sur une page de nouvel onglet, comme à l'ouverture.
-  const activeSpaceId = useSpacesStore.getState().activeSpaceId
-  if (activeSpaceId) {
-    const stillHasPages = Object.values(usePagesStore.getState().pages).some(
-      (p) => p.spaceId === activeSpaceId
-    )
-    if (!stillHasPages) {
-      const newTabUrl = useSettingsStore.getState().settings?.newTabUrl ?? ''
-      void openUrl(newTabUrl.trim() || 'aether://newtab', { target: 'focus' })
+  if (remaining.length === 0) {
+    const newTabUrl = useSettingsStore.getState().settings?.newTabUrl ?? ''
+    void openUrl(newTabUrl.trim() || 'aether://newtab', { target: 'focus' })
+    return
+  }
+
+  // Fermer l'onglet COURANT en mode Focus doit revenir au DERNIER onglet
+  // actif encore ouvert (pile MRU), pas laisser un Focus vide (les slots ne
+  // contiennent plus rien après `removeLocal`) — sinon on tombait sur l'état
+  // « Par où commencer ? » alors que d'autres onglets restent ouverts.
+  if (wasFocusMode && wasActive && usePagesStore.getState().focusOf(activeSpaceId).slots.length === 0) {
+    const remainingIds = new Set(remaining.map((p) => p.id))
+    let next: PageId | null = null
+    for (let i = focusMru.length - 1; i >= 0; i--) {
+      if (remainingIds.has(focusMru[i])) {
+        next = focusMru[i]
+        break
+      }
     }
+    // Repli si la MRU ne connaît aucune page restante (ex. onglets restaurés au
+    // démarrage, jamais focalisés cette session) : la plus récemment créée.
+    if (!next) next = remaining.sort((a, b) => a.createdAt - b.createdAt)[remaining.length - 1].id
+    focusPage(next)
   }
 }
 

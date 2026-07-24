@@ -14,7 +14,8 @@ import type { PageId } from '@shared/types'
 import { Favicon } from '@/components/ui/Favicon'
 import { useT } from '@/i18n/useT'
 import { closePage, focusPage, openUrl, reorderPages, toggleMute } from '@/lib/actions'
-import { cn, domainOf } from '@/lib/utils'
+import { pageLabel } from '@/lib/pageLabel'
+import { cn } from '@/lib/utils'
 import { usePagesStore } from '@/stores/pages'
 import { useSettingsStore } from '@/stores/settings'
 import { useSpacesStore } from '@/stores/spaces'
@@ -230,7 +231,7 @@ export function PageStrip() {
             type="button"
             role="tab"
             aria-selected={active}
-            aria-label={page.title || domainOf(page.url)}
+            aria-label={pageLabel(page)}
             data-page-id={id}
             onClick={() => {
               if (drag.current?.active) return
@@ -267,7 +268,7 @@ export function PageStrip() {
             )}
           >
             <Favicon url={page.url} faviconUrl={page.faviconUrl} size={12} />
-            <span className="min-w-0 flex-1 fade-truncate">{page.title || domainOf(page.url)}</span>
+            <span className="min-w-0 flex-1 fade-truncate">{pageLabel(page)}</span>
             {page.muted && (
               <span
                 role="button"

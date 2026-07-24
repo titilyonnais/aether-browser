@@ -1328,14 +1328,27 @@ export class ViewManager {
   async navigate(id: PageId, url: string): Promise<void> {
     const row = pagesRepo.get(id)
     if (!row) return
+    // On QUITTE un nouvel onglet vierge (recherche/URL depuis la page
+    // d'accueil) : `aether://newtab` doit rester une entrée « retour ».
+    const leavingNewTab = row.url === 'aether://newtab' && url !== 'aether://newtab'
     pagesRepo.updateNavigation(id, url)
-    const view = this.ensureLive({ ...row, url })
-    // Si CETTE vue vient tout juste d'être créée (ex. nouvel onglet suivi
-    // d'une recherche quasi immédiate), attend que son tout premier
-    // chargement se soit réellement engagé avant de lancer le nôtre — sinon
-    // Chromium annule la navigation en cours au profit de la nouvelle et le
-    // premier chargement n'entre jamais dans l'historique (cf. commentaire
-    // sur `pendingInitialLoad`).
+
+    const existing = this.views.get(id)
+    const needsCreate = !existing || existing.webContents.isDestroyed()
+    // Si la vue doit être (re)créée alors qu'on quitte un nouvel onglet (vue
+    // jamais rendue vivante, ou évincée par le cache LRU), la charger
+    // DIRECTEMENT sur la cible ne laisserait AUCUNE entrée d'historique vers
+    // le nouvel onglet — bouton « retour » grisé. On la crée donc d'abord sur
+    // `aether://newtab`, on attend que ce chargement s'engage réellement, PUIS
+    // on empile la cible : `aether://newtab` devient une vraie entrée « retour ».
+    const view =
+      needsCreate && leavingNewTab
+        ? this.ensureLive({ ...row, url: 'aether://newtab' })
+        : this.ensureLive({ ...row, url })
+    // Attend que le tout premier chargement de la vue se soit réellement engagé
+    // avant de lancer le nôtre — sinon Chromium annule la navigation en cours
+    // au profit de la nouvelle et le premier chargement (le nouvel onglet ou la
+    // page initiale) n'entre jamais dans l'historique (cf. `pendingInitialLoad`).
     await this.pendingInitialLoad.get(id)
     if (!this.views.has(id) || this.views.get(id) !== view) return
     this.syncStoreShim(id, view.webContents, url)

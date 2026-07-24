@@ -19,6 +19,7 @@ import {
   renameSpace,
   switchSpace
 } from '@/lib/actions'
+import { pageLabel, pageSubtitle } from '@/lib/pageLabel'
 import { cn, domainOf, hueColor } from '@/lib/utils'
 import { useMuseStore } from '@/stores/muse'
 import { usePagesStore } from '@/stores/pages'
@@ -506,10 +507,8 @@ function ConstellationGraph() {
             top: Math.max(hovered.y - 52, 8)
           }}
         >
-          <p className="fade-truncate text-[11.5px] text-ink">
-            {hoveredPage.title || t('shell.constellation.untitled')}
-          </p>
-          <p className="fade-truncate font-mono text-[9.5px] text-ink-faint">{domainOf(hoveredPage.url)}</p>
+          <p className="fade-truncate text-[11.5px] text-ink">{pageLabel(hoveredPage)}</p>
+          <p className="fade-truncate font-mono text-[9.5px] text-ink-faint">{pageSubtitle(hoveredPage)}</p>
         </div>
       )}
 

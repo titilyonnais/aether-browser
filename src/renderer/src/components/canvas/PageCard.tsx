@@ -13,6 +13,7 @@ import { Favicon } from '@/components/ui/Favicon'
 import { useViewBounds } from '@/hooks/useViewBounds'
 import { useT } from '@/i18n/useT'
 import { closePage, focusPage } from '@/lib/actions'
+import { pageLabel, pageSubtitle } from '@/lib/pageLabel'
 import { cn, domainOf, hueFromString, previewUrl } from '@/lib/utils'
 import { usePagesStore } from '@/stores/pages'
 import { useUiStore } from '@/stores/ui'
@@ -144,6 +145,11 @@ export const PageCard = memo(
       if (e.button !== 0) return
       e.stopPropagation()
       ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+      // Promeut la carte sur sa propre couche de composition GPU le temps du
+      // geste — sans ça, chaque déplacement re-peint une carte lourde (ombres,
+      // flou d'arrière-plan, éventuelle vue vivante), d'où les saccades. Retiré
+      // au relâchement pour ne pas garder une couche figée en permanence.
+      if (cardRef.current) cardRef.current.style.willChange = 'transform'
       dragRef.current = {
         mode,
         startX: e.clientX,
@@ -192,7 +198,10 @@ export const PageCard = memo(
       // Efface l'écriture imitée dans le MÊME tick que la mise à jour store —
       // sans ça, le prochain rendu React (nouveaux `left`/`top`) s'ajouterait
       // au `translate3d` encore présent et ferait sauter la carte d'un cran.
-      if (cardRef.current) cardRef.current.style.transform = ''
+      if (cardRef.current) {
+        cardRef.current.style.transform = ''
+        cardRef.current.style.willChange = 'auto'
+      }
       if (drag.moved) {
         usePagesStore.getState().updateCanvasLocal(page.id, drag.final)
         window.aether.pages.updateCanvas(page.id, drag.final)
@@ -203,6 +212,8 @@ export const PageCard = memo(
 
     const preview = previewUrl(page.id, page.previewVersion)
     const domain = domainOf(page.url)
+    const displayTitle = pageLabel(page)
+    const displaySubtitle = pageSubtitle(page)
     const hue = hueFromString(domain)
     // Même patron que PageSlot.tsx (mode Focus) : un nouvel onglet vierge
     // reste un composant React (jamais une vraie WebContentsView — voir
@@ -269,7 +280,7 @@ export const PageCard = memo(
             >
               <div className="flex flex-col items-center gap-3 pb-6">
                 <Favicon url={page.url} faviconUrl={page.faviconUrl} size={30} />
-                <span className="font-mono text-[11px] text-ink-faint">{domain}</span>
+                <span className="font-mono text-[11px] text-ink-faint">{displaySubtitle}</span>
               </div>
             </div>
           ))}
@@ -299,10 +310,8 @@ export const PageCard = memo(
         >
           <Favicon url={page.url} faviconUrl={page.faviconUrl} size={15} />
           <div className="pointer-events-none min-w-0 flex-1">
-            <p className="fade-truncate text-[12.5px] font-medium leading-tight text-ink">
-              {page.title || t('focusCanvas.pageCard.untitled')}
-            </p>
-            <p className="fade-truncate font-mono text-[10px] leading-tight text-ink-dim/70">{domain}</p>
+            <p className="fade-truncate text-[12.5px] font-medium leading-tight text-ink">{displayTitle}</p>
+            <p className="fade-truncate font-mono text-[10px] leading-tight text-ink-dim/70">{displaySubtitle}</p>
           </div>
           {page.isLive && !awake && (
             <span

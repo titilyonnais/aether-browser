@@ -8,7 +8,8 @@ import { useState } from 'react'
 import type { PageMeta } from '@shared/types'
 import { Favicon } from '@/components/ui/Favicon'
 import { useT } from '@/i18n/useT'
-import { cn, domainOf } from '@/lib/utils'
+import { pageLabel } from '@/lib/pageLabel'
+import { cn } from '@/lib/utils'
 
 export function PageListBubble({
   pages,
@@ -76,9 +77,7 @@ export function PageListBubble({
                 )}
               >
                 <Favicon url={page.url} faviconUrl={page.faviconUrl} size={12} />
-                <span className="min-w-0 flex-1 fade-truncate text-[11.5px]">
-                  {page.title || domainOf(page.url)}
-                </span>
+                <span className="min-w-0 flex-1 fade-truncate text-[11.5px]">{pageLabel(page)}</span>
               </button>
             ))}
             {filtered.length === 0 && (

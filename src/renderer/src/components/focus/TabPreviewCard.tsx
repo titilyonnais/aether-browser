@@ -8,7 +8,8 @@ import { Volume2, VolumeX } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { PageId, PageMeta } from '@shared/types'
 import { translate, type Locale } from '@/i18n'
-import { domainOf, previewUrl } from '@/lib/utils'
+import { pageLabel, pageSubtitle } from '@/lib/pageLabel'
+import { previewUrl } from '@/lib/utils'
 
 interface TabPreviewCardProps {
   pageId: PageId
@@ -44,8 +45,8 @@ export function TabPreviewCard({ pageId, showPreview, locale }: TabPreviewCardPr
     <div className="popover-surface w-52 overflow-hidden rounded-xl">
       {preview && <img src={preview} className="h-32 w-full object-cover object-top" alt="" />}
       <div className="p-2">
-        <p className="truncate text-[11px] text-ink">{page.title || t('focusCanvas.tabPreview.untitled')}</p>
-        <p className="truncate font-mono text-[9.5px] text-ink-faint">{domainOf(page.url)}</p>
+        <p className="truncate text-[11px] text-ink">{pageLabel(page)}</p>
+        <p className="truncate font-mono text-[9.5px] text-ink-faint">{pageSubtitle(page)}</p>
         <div className="mt-1 flex items-center gap-1 text-[9.5px] text-ink-faint">
           {page.muted ? <VolumeX size={10} /> : <Volume2 size={10} className="opacity-40" />}
           <span>
