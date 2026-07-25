@@ -258,9 +258,7 @@ const api: AetherApi = {
     openNewWindow: () => ipcRenderer.send(CH.appNewWindow),
     sendReport: (subject: string, body: string, attachmentPaths?: string[], includeMetadata?: boolean) =>
       ipcRenderer.invoke(CH.reportSend, subject, body, attachmentPaths, includeMetadata),
-    chooseReportAttachments: () => ipcRenderer.invoke(CH.reportChooseAttachments),
-    chooseBackgroundImage: () => ipcRenderer.invoke(CH.backgroundChooseImage),
-    backgroundImageDataUrl: (filename: string) => ipcRenderer.invoke(CH.backgroundImageDataUrl, filename)
+    chooseReportAttachments: () => ipcRenderer.invoke(CH.reportChooseAttachments)
   },
   downloads: {
     list: () => ipcRenderer.invoke(CH.downloadsList),

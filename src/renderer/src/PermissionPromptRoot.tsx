@@ -48,9 +48,6 @@ export default function PermissionPromptRoot() {
 
   useEffect(() => {
     void window.aether.settings.get().then((s) => {
-      // Pas de store partagé avec la fenêtre principale (contexte JS séparé),
-      // même raison que PopoverRoot.tsx.
-      document.documentElement.dataset.theme = s.theme
       document.documentElement.style.setProperty('zoom', String(s.uiScale))
     })
   }, [])

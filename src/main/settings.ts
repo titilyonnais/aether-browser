@@ -36,10 +36,8 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   // courant. 0 = illimité, réglable dans Réglages › IA.
   aiCloudDailyLimit: 300,
   searchEngine: 'duckduckgo',
-  theme: 'dark',
   accent: 'glacier',
   accentCustom: '',
-  backgroundImage: null,
   showFavoritesBar: false,
   groupFavoritesBySpace: true,
   wideAddressBar: false,
@@ -227,10 +225,8 @@ export function getSettings(): AppSettings {
     xaiModel: getString('xaiModel'),
     aiCloudDailyLimit: getString('aiCloudDailyLimit'),
     searchEngine: getString('searchEngine'),
-    theme: getString('theme'),
     accent: getString('accent'),
     accentCustom: getString('accentCustom'),
-    backgroundImage: getString('backgroundImage'),
     showFavoritesBar: getString('showFavoritesBar'),
     groupFavoritesBySpace: getString('groupFavoritesBySpace'),
     wideAddressBar: getString('wideAddressBar'),
@@ -309,10 +305,8 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
     putValue('aiCloudDailyLimit', Math.max(0, Math.round(patch.aiCloudDailyLimit)))
   }
   if (patch.searchEngine !== undefined) putValue('searchEngine', patch.searchEngine)
-  if (patch.theme !== undefined) putValue('theme', patch.theme)
   if (patch.accent !== undefined) putValue('accent', patch.accent)
   if (patch.accentCustom !== undefined) putValue('accentCustom', patch.accentCustom)
-  if (patch.backgroundImage !== undefined) putValue('backgroundImage', patch.backgroundImage)
   if (patch.showFavoritesBar !== undefined) putValue('showFavoritesBar', patch.showFavoritesBar)
   if (patch.groupFavoritesBySpace !== undefined) {
     putValue('groupFavoritesBySpace', patch.groupFavoritesBySpace)

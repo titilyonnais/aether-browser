@@ -6,7 +6,7 @@
  */
 import { motion } from 'framer-motion'
 import { ArrowUpRight, Power, X } from 'lucide-react'
-import { memo, useRef } from 'react'
+import { memo, useRef, useState } from 'react'
 import type { PageId, PageMeta } from '@shared/types'
 import { NewTabPage } from '@/components/focus/NewTabPage'
 import { Favicon } from '@/components/ui/Favicon'
@@ -145,6 +145,17 @@ export const PageCard = memo(
        * générait assez de déchets pour provoquer des micro-freezes de GC. */
       siblings: Rect[]
     } | null>(null)
+    // Vraie pendant un geste de DÉPLACEMENT sur une carte ÉVEILLÉE — masque
+    // la WebContentsView native le temps du geste (voir `viewEnabled`
+    // ci-dessous). Une WebContentsView est positionnée par un aller-retour
+    // IPC ASYNCHRONE (`useViewBounds` → main → `setBounds`), indépendant du
+    // `transform` CSS imprimé ICI en synchrone sur `cardRef` : les deux
+    // dérivaient d'une frame ou plus l'un de l'autre pendant le glisser,
+    // perçu comme de petits glitchs/saccades (contenu qui « nage » derrière
+    // le cadre). Un simple `useState` suffit : seulement 2 re-rendus par
+    // geste (début/fin), jamais par `pointermove` — le déplacement lui-même
+    // reste entièrement impératif, comme le reste de ce composant.
+    const [dragging, setDragging] = useState(false)
 
     const beginGesture = (e: React.PointerEvent, mode: 'move' | 'resize'): void => {
       if (e.button !== 0) return
@@ -155,6 +166,7 @@ export const PageCard = memo(
       // éventuelle vue vivante), d'où les saccades. Retiré au relâchement pour
       // ne pas garder une couche figée en permanence.
       if (cardRef.current) cardRef.current.style.willChange = 'transform'
+      if (mode === 'move' && awake) setDragging(true)
       dragRef.current = {
         mode,
         startX: e.clientX,
@@ -198,6 +210,7 @@ export const PageCard = memo(
     const onPointerUp = (e: React.PointerEvent): void => {
       const drag = dragRef.current
       dragRef.current = null
+      setDragging(false)
       if (!drag) return
       e.stopPropagation()
       // Efface l'écriture imitée dans le MÊME tick que la mise à jour store —
@@ -225,7 +238,7 @@ export const PageCard = memo(
     // ViewManager.ensureLive), sans quoi le réveiller affichait une page
     // vide (le document minimal servi par le protocole `aether:`).
     const isNewTab = page.url.startsWith('aether://newtab')
-    const viewEnabled = awake && !isNewTab
+    const viewEnabled = awake && !isNewTab && !dragging
     // `getBoundingClientRect()` résout déjà les transforms CSS ancêtres
     // (translate/scale de la Toile), donc ce placeholder continue de
     // rapporter les bonnes coordonnées écran pendant le pan/zoom — le
@@ -293,6 +306,19 @@ export const PageCard = memo(
           <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ bottom: AWAKE_FOOTER_H }}>
             <NewTabPage pageId={page.id} />
           </div>
+        )}
+        {awake && !isNewTab && dragging && preview && (
+          // Aperçu figé PENDANT le geste — remplace la vue native masquée
+          // (voir `dragging`/`viewEnabled` ci-dessus), pour que cadre et
+          // contenu voyagent ensemble comme une carte endormie plutôt que de
+          // laisser un vide le temps du glisser.
+          <img
+            src={preview}
+            draggable={false}
+            className="pointer-events-none absolute inset-x-0 top-0 h-full w-full object-cover object-top"
+            style={{ bottom: AWAKE_FOOTER_H }}
+            alt=""
+          />
         )}
         {awake && !isNewTab && (
           <div

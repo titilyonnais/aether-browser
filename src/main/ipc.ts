@@ -50,7 +50,7 @@ import type {
 import { computeAffinities, queuePageEmbedding } from './ai/embeddings'
 import { classifyIntent } from './ai/intent'
 import type { AiRouter } from './ai/router'
-import { avatarImageDataUrl, chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
+import { chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
 import { getCertificateDetail } from './certificates'
 import { getNewTabNews, getNewTabWeather, getSearchSuggestions, searchNewTabCities } from './newtab'
 import { invalidateSiteDataCache, listSiteDataGroups, registrableDomain, siteDataGroupFor } from './siteDataRegistry'
@@ -1944,15 +1944,6 @@ export function registerIpc(router: AiRouter): void {
     }
   )
 
-  ipcMain.handle(CH.backgroundChooseImage, async (e): Promise<{ filename: string; dataUrl: string } | null> => {
-    const filename = await chooseAndSaveAvatarImage(resolveWindowContext(e).win)
-    if (!filename) return null
-    const dataUrl = avatarImageDataUrl(filename)
-    return dataUrl ? { filename, dataUrl } : null
-  })
-
-  ipcMain.handle(CH.backgroundImageDataUrl, (_e, filename: string) => avatarImageDataUrl(String(filename ?? '')))
-
   ipcMain.on(CH.appSetTitle, (e, title: string) => {
     resolveWindowContext(e).win.setTitle(String(title ?? '').trim().slice(0, 80) || 'ÆTHER')
   })
@@ -2162,16 +2153,6 @@ function applySideEffects(views: ViewManager, patch: SettingsPatch, before: AppS
   if (patch.spellcheckLanguages !== undefined) {
     const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
     applySpellcheckLanguages(webPartitionForProfile(activeProfileOf(views), isPrivate))
-  }
-  // Un fond d'écran personnalisé remplacé (ou retiré) laisse un fichier
-  // orphelin dans le dossier géré (avatarsDir) — même filet que pour la
-  // suppression/changement d'avatar de profil.
-  if (
-    patch.backgroundImage !== undefined &&
-    before.backgroundImage?.kind === 'custom' &&
-    before.backgroundImage.value !== patch.backgroundImage?.value
-  ) {
-    deleteAvatarImage(before.backgroundImage.value)
   }
 }
 

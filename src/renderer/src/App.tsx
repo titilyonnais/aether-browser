@@ -16,7 +16,6 @@ import { IntentionOverlay } from '@/components/intention/IntentionOverlay'
 import { MusePanel } from '@/components/muse/MusePanel'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { useT } from '@/i18n/useT'
-import { backgroundPresetCss } from '@/lib/backgroundPresets'
 import { holdZoomIndicator, initBridge, releaseZoomIndicator, runCommand } from '@/lib/actions'
 import { usePagesStore } from '@/stores/pages'
 import { useSettingsStore } from '@/stores/settings'
@@ -86,8 +85,6 @@ export default function App() {
   const fullscreenPageId = useUiStore((s) => s.fullscreenPageId)
   const accent = useSettingsStore((s) => s.settings?.accent ?? 'glacier')
   const accentCustom = useSettingsStore((s) => s.settings?.accentCustom ?? '')
-  const backgroundImage = useSettingsStore((s) => s.settings?.backgroundImage ?? null)
-  const theme = useSettingsStore((s) => s.settings?.theme ?? 'dark')
   const showFavoritesBar = useSettingsStore((s) => s.settings?.showFavoritesBar ?? false)
   const uiScale = useSettingsStore((s) => s.settings?.uiScale ?? 1)
   const spaceId = useSpacesStore((s) => s.activeSpaceId)
@@ -131,31 +128,6 @@ export default function App() {
     const hex = accent === 'custom' && accentCustom ? accentCustom : (ACCENT_HEX[accent] ?? ACCENT_HEX.glacier)
     document.documentElement.style.setProperty('--color-glacier', hex)
   }, [accent, accentCustom])
-
-  // Thème : sombre (défaut), clair, ou suivi du système — voir global.css.
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme
-  }, [theme])
-
-  // Fond d'écran — peint sur <body>, donc uniquement visible là où aucune
-  // WebContentsView de page ne le recouvre (celles-ci composent toujours
-  // au-dessus du DOM) : bande de titre, marges du canvas, espaces vides.
-  useEffect(() => {
-    const style = document.body.style
-    if (!backgroundImage) {
-      style.backgroundImage = ''
-      return
-    }
-    if (backgroundImage.kind === 'preset') {
-      style.backgroundImage = backgroundPresetCss(backgroundImage.value) ?? ''
-      style.backgroundSize = ''
-      style.backgroundPosition = ''
-    } else {
-      style.backgroundImage = `url("aether://avatars/${backgroundImage.value}")`
-      style.backgroundSize = 'cover'
-      style.backgroundPosition = 'center'
-    }
-  }, [backgroundImage])
 
   // Taille de l'interface ÆTHER elle-même (Réglages › Apparence) — `zoom` sur
   // un wrapper dédié (UiScaleRoot ci-dessous), PAS sur <html>. `zoom` rescale

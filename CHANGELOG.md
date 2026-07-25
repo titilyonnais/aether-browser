@@ -4,6 +4,32 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.63.0] — 2026-07-25
+
+### Supprimé
+
+- **Mode clair retiré de l'application** — ÆTHER ne propose plus qu'un thème sombre unique ; le
+  sélecteur « Sombre / Clair / Suivre le système » a disparu de Réglages › Apparence, ainsi que
+  tout le CSS conditionnel associé.
+- **Le sélecteur de fond d'écran (dégradés/image personnalisée)** — retiré avec le thème. Il était en
+  pratique quasi invisible (une `WebContentsView` de page compose toujours par-dessus le fond peint
+  sur `<body>`, donc rien ne se voyait avec une page ouverte) et signalé comme non fonctionnel : les
+  clics sur les vignettes ou le choix d'une image ne produisaient aucun effet visible.
+
+### Corrigé
+
+- **Le bouton « retour » restait grisé après une recherche depuis la page d'accueil**, malgré le
+  correctif de la 0.62.1 — cause racine différente cette fois : l'historique natif de Chromium
+  n'inscrit pas toujours de façon fiable une entrée exploitable pour le document minimal
+  `aether://newtab` une fois qu'on l'a quitté pour une vraie page. Le calcul de « peut revenir en
+  arrière » s'appuie désormais aussi sur un filet de secours (une page née d'un nouvel onglet peut
+  toujours y retourner), indépendant de ce que rapporte l'historique natif.
+- **Glisser une carte éveillée dans la Toile faisait « nager » son contenu** — la vraie vue native de
+  la page (repositionnée par un aller-retour IPC asynchrone) décalait légèrement du cadre de la carte
+  (déplacé, lui, en synchrone) pendant le geste. La vue native est désormais masquée le temps du
+  glisser, remplacée par un aperçu figé — cadre et contenu voyagent enfin ensemble, comme une carte
+  endormie.
+
 ## [0.62.1] — 2026-07-24
 
 ### Corrigé

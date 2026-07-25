@@ -412,6 +412,17 @@ export class ViewManager {
    * la page, PAS persisté : une simple estampille de ce qui a été vu à
    * l'écran, vidée à chaque nouvelle navigation principale. */
   private embeddedOriginsByPage = new Map<PageId, Set<string>>()
+  /** Pages nées sur `aether://newtab` (voir `ensureLive`) — filet de secours
+   * pour le bouton « retour », INDÉPENDANT de `navigationHistory.canGoBack()`.
+   * En pratique, l'historique natif de Chromium n'inscrit pas toujours de
+   * façon fiable une entrée exploitable pour ce document minimal servi par le
+   * protocole `aether:` une fois qu'on l'a quitté pour une vraie origine
+   * http(s) (constaté : bouton « retour » grisé après une recherche depuis la
+   * page d'accueil, alors même que `ensureLive` charge bien un vrai document).
+   * Reste vrai tant que la page n'est pas fermée (même à travers une éviction
+   * LRU/réhydratation, où l'historique natif repart de zéro) — voir
+   * `effectiveCanGoBack`/`performGoBack`, et `closePage` pour le nettoyage. */
+  private everNewTab = new Set<PageId>()
 
   constructor(
     private win: BrowserWindow,
@@ -549,6 +560,7 @@ export class ViewManager {
     view.webContents.setAudioMuted(Boolean(row.muted))
 
     this.views.set(row.id, view)
+    if (this.isNewTabUrl(row.url)) this.everNewTab.add(row.id)
     this.runtime.set(row.id, {
       isLive: true,
       isLoading: true,
@@ -611,6 +623,31 @@ export class ViewManager {
     return { liveViews: this.views.size, totalMemoryKB }
   }
 
+  private isNewTabUrl(u: string): boolean {
+    return u.startsWith('aether://newtab')
+  }
+
+  /** `navigationHistory.canGoBack()` seul ne suffit pas pour une page née
+   * d'un nouvel onglet (voir `everNewTab`) — combine la vérité native avec ce
+   * filet de secours. */
+  private effectiveCanGoBack(pageId: PageId, wc: WebContents): boolean {
+    if (wc.navigationHistory.canGoBack()) return true
+    return this.everNewTab.has(pageId) && !this.isNewTabUrl(wc.getURL())
+  }
+
+  /** Retour arrière robuste : bascule sur `aether://newtab` quand
+   * l'historique natif n'a rien à offrir mais que la page en est bien issue
+   * (voir `everNewTab`) — sans ce filet, le bouton reste grisé/inopérant. */
+  private performGoBack(pageId: PageId, wc: WebContents): void {
+    if (wc.navigationHistory.canGoBack()) {
+      wc.navigationHistory.goBack()
+      return
+    }
+    if (this.everNewTab.has(pageId) && !this.isNewTabUrl(wc.getURL())) {
+      void this.navigate(pageId, 'aether://newtab')
+    }
+  }
+
   /** Câble tous les événements d'une page web. */
   private wire(pageId: PageId, wc: WebContents): void {
     const nav = wc.navigationHistory
@@ -646,7 +683,7 @@ export class ViewManager {
     const onNavigated = (url: string): void => {
       if (pagesRepo.get(pageId)) pagesRepo.updateNavigation(pageId, url)
       this.patchRuntime(pageId, {
-        canGoBack: nav.canGoBack(),
+        canGoBack: this.effectiveCanGoBack(pageId, wc),
         canGoForward: nav.canGoForward()
       })
       // Couvre les cas non passés par `ensureLive`/`navigate` (redirections,
@@ -691,7 +728,7 @@ export class ViewManager {
     wc.on('did-stop-loading', () => {
       this.patchRuntime(pageId, {
         isLoading: false,
-        canGoBack: nav.canGoBack(),
+        canGoBack: this.effectiveCanGoBack(pageId, wc),
         canGoForward: nav.canGoForward()
       })
       // `aether://…` (nouvel onglet) : jamais un vrai site — ni un historique
@@ -861,7 +898,7 @@ export class ViewManager {
       }
       if (input.alt && input.key === 'ArrowLeft') {
         event.preventDefault()
-        if (nav.canGoBack()) nav.goBack()
+        this.performGoBack(pageId, wc)
         return
       }
       if (input.alt && input.key === 'ArrowRight') {
@@ -952,7 +989,7 @@ export class ViewManager {
         actions.paste = () => wc.paste()
       }
       rows.push(
-        { kind: 'item', id: 'back', label: 'Retour', disabled: !nav.canGoBack() },
+        { kind: 'item', id: 'back', label: 'Retour', disabled: !this.effectiveCanGoBack(pageId, wc) },
         { kind: 'item', id: 'forward', label: 'Avancer', disabled: !nav.canGoForward() },
         { kind: 'item', id: 'reload', label: 'Recharger' },
         { kind: 'separator' },
@@ -960,7 +997,7 @@ export class ViewManager {
         { kind: 'item', id: 'view-source', label: 'Afficher le code source de la page' },
         { kind: 'item', id: 'inspect', label: isImage ? "Inspecter l'élément" : 'Inspecter' }
       )
-      actions.back = () => nav.goBack()
+      actions.back = () => this.performGoBack(pageId, wc)
       actions.forward = () => nav.goForward()
       actions.reload = () => wc.reload()
       actions['copy-page-url'] = () => clipboard.writeText(wc.getURL())
@@ -1332,8 +1369,8 @@ export class ViewManager {
     // d'accueil) : `aether://newtab` doit rester une entrée « retour ».
     // `startsWith` (pas égalité stricte) : le schéma standard `aether:`
     // normalise l'URL committée en 'aether://newtab/' (barre oblique finale).
-    const isNewTab = (u: string): boolean => u.startsWith('aether://newtab')
-    const leavingNewTab = isNewTab(row.url) && !isNewTab(url)
+    const leavingNewTab = this.isNewTabUrl(row.url) && !this.isNewTabUrl(url)
+    if (leavingNewTab) this.everNewTab.add(id)
     pagesRepo.updateNavigation(id, url)
 
     const existing = this.views.get(id)
@@ -1356,12 +1393,18 @@ export class ViewManager {
     if (!this.views.has(id) || this.views.get(id) !== view) return
     this.syncStoreShim(id, view.webContents, url)
     void view.webContents.loadURL(url).catch(() => undefined)
-    this.patchRuntime(id, { loadError: null })
+    // Poussé tout de suite (pas d'attente de `did-navigate`) : `everNewTab`
+    // sait déjà, dès cet instant, que le bouton « retour » doit s'activer —
+    // inutile de laisser le bouton grisé le temps que Chromium confirme.
+    this.patchRuntime(id, {
+      loadError: null,
+      canGoBack: leavingNewTab ? true : this.getRuntime(id).canGoBack
+    })
   }
 
   goBack(id: PageId): void {
     const wc = this.liveContents(id)
-    if (wc?.navigationHistory.canGoBack()) wc.navigationHistory.goBack()
+    if (wc) this.performGoBack(id, wc)
   }
 
   goForward(id: PageId): void {
@@ -1755,6 +1798,7 @@ export class ViewManager {
     }
     this.destroyView(id, { keepPreview: false })
     this.runtime.delete(id)
+    this.everNewTab.delete(id)
     this.visibleIds = this.visibleIds.filter((x) => x !== id)
   }
 

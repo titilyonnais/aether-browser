@@ -45,10 +45,6 @@ export default function PopoverRoot() {
   useEffect(() => {
     void window.aether.settings.get().then((s) => {
       setShowPreview(s.showTabHoverPreview)
-      // Pas de store partagé avec la fenêtre principale (contexte JS séparé) —
-      // sans ça `.popover-surface`/`.glass` resteraient bloqués sur le thème
-      // sombre par défaut de `:root`, même si l'utilisateur est en thème clair.
-      document.documentElement.dataset.theme = s.theme
       // Même échelle que la fenêtre principale (Réglages › Apparence), sinon
       // le contenu du popup resterait à 100 % pendant que le reste de
       // l'interface est agrandi/réduit — `reportSize` (plus bas) mesure déjà

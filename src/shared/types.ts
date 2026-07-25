@@ -218,9 +218,6 @@ export type SearchEngineId = 'duckduckgo' | 'google' | 'brave' | 'bing' | 'ecosi
 /** Couleur d'accent prédéfinie de l'interface (Apparence). '' = utiliser accentCustom. */
 export type AccentId = 'glacier' | 'lavande' | 'emeraude' | 'ambre' | 'rose' | 'custom'
 
-/** Thème visuel de l'interface ÆTHER. */
-export type ThemeMode = 'dark' | 'light' | 'system'
-
 /** Mode proxy (Système). */
 export type ProxyMode = 'system' | 'direct' | 'custom'
 
@@ -333,15 +330,9 @@ export interface AppSettings {
   /** Id d'un moteur intégré (SearchEngineId) ou d'un CustomSearchEngine. */
   searchEngine: string
   // — Apparence —
-  theme: ThemeMode
   accent: AccentId
   /** Couleur hexadécimale personnalisée, utilisée quand accent === 'custom'. */
   accentCustom: string
-  /** Fond d'écran de l'appli — `'preset'` référence un dégradé intégré (id
-   * dans BACKGROUND_PRESETS, renderer), `'custom'` un fichier importé (nom
-   * stocké dans le même dossier géré que les avatars, servi via
-   * `aether://avatars/<fichier>`). */
-  backgroundImage: { kind: 'preset' | 'custom'; value: string } | null
   /** Barre de favoris sous la barre de titre. */
   showFavoritesBar: boolean
   /** Regrouper les favoris par espace (pastille de couleur) dans la barre. */
@@ -452,10 +443,8 @@ export interface SettingsPatch {
   xaiKey?: string | null
   aiCloudDailyLimit?: number
   searchEngine?: string
-  theme?: ThemeMode
   accent?: AccentId
   accentCustom?: string
-  backgroundImage?: { kind: 'preset' | 'custom'; value: string } | null
   showFavoritesBar?: boolean
   groupFavoritesBySpace?: boolean
   wideAddressBar?: boolean

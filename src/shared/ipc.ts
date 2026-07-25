@@ -312,8 +312,6 @@ export const CH = {
   appNewWindow: 'app:new-window',
   reportSend: 'report:send',
   reportChooseAttachments: 'report:choose-attachments',
-  backgroundChooseImage: 'background:choose-image',
-  backgroundImageDataUrl: 'background:image-data-url',
 
   // Téléchargements
   downloadsList: 'downloads:list',
@@ -748,16 +746,6 @@ export interface AetherApi {
     /** Sélecteur de fichiers natif (multi-sélection) pour joindre des pièces
      * au rapport de bug — retourne les chemins choisis. */
     chooseReportAttachments(): Promise<{ path: string; name: string; size: number }[]>
-    /** Choisit une image de fond d'écran personnalisée — copiée dans le
-     * dossier géré (même mécanisme que les avatars), retourne son nom de
-     * fichier stocké ET une `data:` URI (pour l'extraction de couleur
-     * dominante côté renderer, sans jamais passer par `aether://` qui
-     * pollue le canvas). */
-    chooseBackgroundImage(): Promise<{ filename: string; dataUrl: string } | null>
-    /** Relit un fond d'écran personnalisé DÉJÀ choisi (fichier déjà stocké)
-     * en `data:` URI, pour l'extraction de couleur dominante sans devoir le
-     * réimporter. */
-    backgroundImageDataUrl(filename: string): Promise<string | null>
   }
   downloads: {
     list(): Promise<DownloadEntry[]>
