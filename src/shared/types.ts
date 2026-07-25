@@ -374,6 +374,12 @@ export interface AppSettings {
   newTabWeatherLocation: NewTabWeatherLocation | null
   /** Style d'affichage du widget actualités. */
   newTabNewsStyle: NewTabNewsStyle
+  /** Fond d'écran de la page de nouvel onglet intégrée — `'preset'` référence
+   * un dégradé intégré (id dans BACKGROUND_PRESETS, renderer), `'custom'` un
+   * fichier importé (nom stocké dans le dossier géré des avatars, servi via
+   * `aether://avatars/<fichier>`). Scopé à cette page (jamais peint derrière
+   * une page web, toujours recouverte par sa WebContentsView native). */
+  newTabBackground: { kind: 'preset' | 'custom'; value: string } | null
   /** Facteur de zoom par défaut des pages web (1 = 100 %). */
   defaultZoom: number
   // — Confidentialité & sécurité —
@@ -463,6 +469,7 @@ export interface SettingsPatch {
   newTabWidgets?: Partial<NewTabWidgets>
   newTabWeatherLocation?: NewTabWeatherLocation | null
   newTabNewsStyle?: NewTabNewsStyle
+  newTabBackground?: { kind: 'preset' | 'custom'; value: string } | null
   defaultZoom?: number
   allowMedia?: boolean
   allowGeolocation?: boolean

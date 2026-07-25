@@ -50,7 +50,7 @@ import type {
 import { computeAffinities, queuePageEmbedding } from './ai/embeddings'
 import { classifyIntent } from './ai/intent'
 import type { AiRouter } from './ai/router'
-import { chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
+import { avatarImageDataUrl, chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
 import { getCertificateDetail } from './certificates'
 import { getNewTabNews, getNewTabWeather, getSearchSuggestions, searchNewTabCities } from './newtab'
 import { invalidateSiteDataCache, listSiteDataGroups, registrableDomain, siteDataGroupFor } from './siteDataRegistry'
@@ -1769,6 +1769,15 @@ export function registerIpc(router: AiRouter): void {
     if (!activeProfileRecordOf(views)?.isPrivate) searchQueriesRepo.record(activeProfileOf(views), String(query).slice(0, 300))
   })
 
+  ipcMain.handle(CH.newTabChooseBackground, async (e): Promise<{ filename: string; dataUrl: string } | null> => {
+    const filename = await chooseAndSaveAvatarImage(resolveWindowContext(e).win)
+    if (!filename) return null
+    const dataUrl = avatarImageDataUrl(filename)
+    return dataUrl ? { filename, dataUrl } : null
+  })
+
+  ipcMain.handle(CH.newTabBackgroundImageDataUrl, (_e, filename: string) => avatarImageDataUrl(String(filename ?? '')))
+
   // ─── IA ────────────────────────────────────────────────────────────────────
 
   ipcMain.handle(CH.aiStatus, () => router.getStatus())
@@ -2153,6 +2162,16 @@ function applySideEffects(views: ViewManager, patch: SettingsPatch, before: AppS
   if (patch.spellcheckLanguages !== undefined) {
     const isPrivate = activeProfileRecordOf(views)?.isPrivate ?? false
     applySpellcheckLanguages(webPartitionForProfile(activeProfileOf(views), isPrivate))
+  }
+  // Un fond personnalisé de nouvel onglet remplacé (ou retiré) laisse un
+  // fichier orphelin dans le dossier géré (avatarsDir) — même filet que pour
+  // la suppression/changement d'avatar de profil.
+  if (
+    patch.newTabBackground !== undefined &&
+    before.newTabBackground?.kind === 'custom' &&
+    before.newTabBackground.value !== patch.newTabBackground?.value
+  ) {
+    deleteAvatarImage(before.newTabBackground.value)
   }
 }
 

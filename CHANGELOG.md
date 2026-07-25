@@ -4,6 +4,28 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.64.0] — 2026-07-25
+
+### Ajouté
+
+- **Fond d'écran de la page de nouvel onglet, de retour** — cette fois scopé à la page
+  d'accueil elle-même (panneau « Personnaliser », plus dans Réglages) au lieu du fond de
+  l'appli entière : une `WebContentsView` de page compose toujours par-dessus le DOM, donc le
+  fond général restait invisible dès qu'une page était ouverte, ce qui le rendait quasi
+  inutile. Huit dégradés composés de plusieurs lueurs superposées (Aurore, Nébuleuse, Braise,
+  Abysses, Orchidée, Crépuscule, Météore, Émeraude), une image personnelle importable, et un
+  bouton pour en extraire la couleur dominante comme accent — le tout bien visible cette fois,
+  avec un voile de lisibilité automatique par-dessus l'image/le dégradé.
+
+### Corrigé
+
+- **Après un retour vers la page d'accueil suivi d'une NOUVELLE recherche, un premier clic
+  « retour » retombait sur l'ANCIENNE recherche au lieu de la page d'accueil** — `loadURL()`,
+  contrairement à une navigation d'adresse dans un vrai navigateur, n'écrase jamais la branche
+  « avancer » restée au-delà de la position courante ; la nouvelle page s'empilait par-dessus
+  l'ancienne branche au lieu de la remplacer. Cette branche obsolète est désormais purgée à
+  chaque navigation, comme le ferait un vrai navigateur.
+
 ## [0.63.0] — 2026-07-25
 
 ### Supprimé

@@ -1392,7 +1392,23 @@ export class ViewManager {
     await this.pendingInitialLoad.get(id)
     if (!this.views.has(id) || this.views.get(id) !== view) return
     this.syncStoreShim(id, view.webContents, url)
+    // `webContents.loadURL()` — contrairement à une navigation d'adresse dans
+    // un vrai navigateur — n'écrase JAMAIS la branche « avancer » restée
+    // au-delà de la position courante : elle reste indéfiniment accessible en
+    // cliquant « retour » plusieurs fois de suite (constaté : après un retour
+    // puis une NOUVELLE recherche, un premier clic « retour » retombait sur
+    // l'ANCIENNE recherche au lieu de la page d'accueil — la nouvelle page
+    // s'était simplement empilée PAR-DESSUS l'ancienne branche, jamais
+    // purgée). On retire nous-mêmes cette branche obsolète, comme le ferait
+    // Chromium pour une navigation venant réellement de la barre d'adresse.
+    // Capturé AVANT `loadURL` (donc avant tout ajout) et retiré dans le MÊME
+    // tick, sans `await` entre les deux : aucune autre navigation ne peut
+    // s'intercaler pour invalider ces indices.
+    const nav = view.webContents.navigationHistory
+    const staleFrom = nav.getActiveIndex() + 1
+    const staleTo = nav.length() - 1
     void view.webContents.loadURL(url).catch(() => undefined)
+    for (let i = staleTo; i >= staleFrom; i--) nav.removeEntryAtIndex(i)
     // Poussé tout de suite (pas d'attente de `did-navigate`) : `everNewTab`
     // sait déjà, dès cet instant, que le bouton « retour » doit s'activer —
     // inutile de laisser le bouton grisé le temps que Chromium confirme.

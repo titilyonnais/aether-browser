@@ -201,7 +201,9 @@ const api: AetherApi = {
     searchCities: (query: string) => ipcRenderer.invoke(CH.newTabCitySearch, query),
     searchSuggestions: (query: string) => ipcRenderer.invoke(CH.newTabSearchSuggestions, query),
     recentSearches: (limit?: number) => ipcRenderer.invoke(CH.newTabRecentSearches, limit),
-    recordSearch: (query: string) => ipcRenderer.send(CH.newTabRecordSearch, query)
+    recordSearch: (query: string) => ipcRenderer.send(CH.newTabRecordSearch, query),
+    chooseBackground: () => ipcRenderer.invoke(CH.newTabChooseBackground),
+    backgroundImageDataUrl: (filename: string) => ipcRenderer.invoke(CH.newTabBackgroundImageDataUrl, filename)
   },
   ai: {
     status: () => ipcRenderer.invoke(CH.aiStatus),

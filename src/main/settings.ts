@@ -55,6 +55,7 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   newTabWidgets: { clock: true, weather: false, news: false },
   newTabWeatherLocation: null,
   newTabNewsStyle: 'text',
+  newTabBackground: null,
   defaultZoom: 1,
   allowMedia: false,
   allowGeolocation: false,
@@ -244,6 +245,7 @@ export function getSettings(): AppSettings {
     newTabWidgets: getString('newTabWidgets'),
     newTabWeatherLocation: getString('newTabWeatherLocation'),
     newTabNewsStyle: getString('newTabNewsStyle'),
+    newTabBackground: getString('newTabBackground'),
     defaultZoom: getString('defaultZoom'),
     allowMedia: getString('allowMedia'),
     allowGeolocation: getString('allowGeolocation'),
@@ -358,6 +360,7 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
     )
   }
   if (patch.newTabNewsStyle !== undefined) putValue('newTabNewsStyle', patch.newTabNewsStyle)
+  if (patch.newTabBackground !== undefined) putValue('newTabBackground', patch.newTabBackground)
   if (patch.defaultZoom !== undefined) {
     putValue('defaultZoom', Math.min(3, Math.max(0.5, patch.defaultZoom)))
   }

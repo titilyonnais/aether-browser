@@ -261,6 +261,8 @@ export const CH = {
   newTabSearchSuggestions: 'newtab:search-suggestions',
   newTabRecentSearches: 'newtab:recent-searches',
   newTabRecordSearch: 'newtab:record-search',
+  newTabChooseBackground: 'newtab:choose-background',
+  newTabBackgroundImageDataUrl: 'newtab:background-image-data-url',
 
   // IA
   aiStatus: 'ai:status',
@@ -658,6 +660,15 @@ export interface AetherApi {
      * une URL directe) est exécutée, depuis la page de nouvel onglet ou la
      * barre d'intention. */
     recordSearch(query: string): void
+    /** Choisit une image de fond personnalisée pour la page de nouvel onglet —
+     * copiée dans le dossier géré (même mécanisme que les avatars), retourne
+     * son nom de fichier stocké ET une `data:` URI (pour l'aperçu immédiat et
+     * l'extraction de couleur dominante côté renderer). */
+    chooseBackground(): Promise<{ filename: string; dataUrl: string } | null>
+    /** Relit un fond personnalisé DÉJÀ choisi (fichier déjà stocké) en
+     * `data:` URI, pour l'extraction de couleur dominante sans devoir le
+     * réimporter. */
+    backgroundImageDataUrl(filename: string): Promise<string | null>
   }
   ai: {
     status(): Promise<AiStatus>

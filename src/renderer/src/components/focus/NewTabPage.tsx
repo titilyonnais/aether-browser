@@ -17,6 +17,7 @@ import {
   CloudRain,
   CloudSnow,
   CloudSun,
+  Image as ImageIcon,
   Newspaper,
   Pencil,
   Plus,
@@ -24,6 +25,7 @@ import {
   Search,
   Settings as SettingsIcon,
   Sun,
+  Wand2,
   X
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -40,6 +42,8 @@ import type {
 import { Favicon } from '@/components/ui/Favicon'
 import { useT } from '@/i18n/useT'
 import { closePage, executeIntent } from '@/lib/actions'
+import { BACKGROUND_PRESETS, backgroundPresetCss } from '@/lib/backgroundPresets'
+import { extractDominantColor } from '@/lib/dominantColor'
 import { cn, domainOf, uuid } from '@/lib/utils'
 import { useSearchEnginesStore } from '@/stores/searchEngines'
 import { useSettingsStore } from '@/stores/settings'
@@ -76,11 +80,14 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
   const [editing, setEditing] = useState<EditState | null>(null)
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const customizeRootRef = useRef<HTMLDivElement | null>(null)
+  const [pendingBackgroundDataUrl, setPendingBackgroundDataUrl] = useState<string | null>(null)
+  const [extractingColor, setExtractingColor] = useState(false)
 
   const shortcuts = settings?.newTabShortcuts ?? []
   const widgets = settings?.newTabWidgets ?? { clock: true, weather: false, news: false }
   const gridSize = settings?.newTabGridSize ?? 8
   const newsStyle = settings?.newTabNewsStyle ?? 'text'
+  const background = settings?.newTabBackground ?? null
 
   const goTo = (url: string): void => {
     window.aether.pages.navigate(pageId, url)
@@ -241,10 +248,50 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
     void useSettingsStore.getState().patch({ newTabNewsStyle: style })
   }
 
+  const setBackground = (next: { kind: 'preset' | 'custom'; value: string } | null): void => {
+    void useSettingsStore.getState().patch({ newTabBackground: next })
+  }
+
+  const chooseBackgroundImage = async (): Promise<void> => {
+    const result = await window.aether.newTab.chooseBackground()
+    if (!result) return
+    setPendingBackgroundDataUrl(result.dataUrl)
+    setBackground({ kind: 'custom', value: result.filename })
+  }
+
+  const useImageColor = async (): Promise<void> => {
+    if (!background || background.kind !== 'custom') return
+    setExtractingColor(true)
+    try {
+      const dataUrl = pendingBackgroundDataUrl ?? (await window.aether.newTab.backgroundImageDataUrl(background.value))
+      const hex = dataUrl ? await extractDominantColor(dataUrl) : null
+      if (hex) await useSettingsStore.getState().patch({ accent: 'custom', accentCustom: hex })
+    } finally {
+      setExtractingColor(false)
+    }
+  }
+
+  const backgroundStyle: React.CSSProperties = background
+    ? background.kind === 'preset'
+      ? { backgroundImage: backgroundPresetCss(background.value) ?? undefined }
+      : {
+          backgroundImage: `url("aether://avatars/${background.value}")`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }
+    : {}
+
   if (!settings) return null
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center overflow-y-auto px-6 py-14">
+    <div
+      className="absolute inset-0 flex flex-col items-center overflow-y-auto px-6 py-14"
+      style={backgroundStyle}
+    >
+      {/* Voile de lisibilité — uniquement quand un fond personnalisé est actif,
+          pour que le texte/les widgets restent lisibles sur une image ou un
+          dégradé chargé, sans assombrir l'apparence par défaut. */}
+      {background && <div className="pointer-events-none absolute inset-0 bg-black/28" />}
       {widgets.weather && <WeatherWidget />}
       {widgets.clock && <ClockWidget />}
 
@@ -509,6 +556,70 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
                 </button>
               ))}
             </div>
+
+            <p className="mt-2 border-t border-white/[0.06] px-2 pt-2 text-[10px] uppercase tracking-wide text-ink-faint/70">
+              {t('focusCanvas.newTab.backgroundTitle')}
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
+              <button
+                type="button"
+                title={t('focusCanvas.newTab.backgroundNone')}
+                onClick={() => setBackground(null)}
+                className={cn(
+                  'grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-ink-faint transition-colors',
+                  !background
+                    ? 'border-glacier/50 ring-2 ring-offset-1 ring-offset-abyss'
+                    : 'border-white/[0.1] hover:border-white/[0.2]'
+                )}
+              >
+                <X size={11} strokeWidth={1.8} />
+              </button>
+              {BACKGROUND_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  title={preset.label}
+                  onClick={() => setBackground({ kind: 'preset', value: preset.id })}
+                  className={cn(
+                    'h-8 w-8 shrink-0 rounded-lg bg-cover transition-transform hover:scale-105',
+                    background?.kind === 'preset' && background.value === preset.id
+                      ? 'ring-2 ring-offset-1 ring-offset-abyss ring-glacier/60'
+                      : ''
+                  )}
+                  style={{ backgroundImage: backgroundPresetCss(preset.id) ?? undefined }}
+                />
+              ))}
+              <label
+                title={t('focusCanvas.newTab.backgroundCustom')}
+                className={cn(
+                  'relative grid h-8 w-8 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-lg border-2 border-dashed transition-colors',
+                  background?.kind === 'custom' ? 'border-glacier/60' : 'border-white/20 hover:border-white/40'
+                )}
+              >
+                {background?.kind === 'custom' ? (
+                  <img src={`aether://avatars/${background.value}`} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <ImageIcon size={11} strokeWidth={1.7} className="text-ink-faint" />
+                )}
+                <button
+                  type="button"
+                  onClick={() => void chooseBackgroundImage()}
+                  className="absolute inset-0 cursor-pointer"
+                  aria-label={t('focusCanvas.newTab.backgroundCustom')}
+                />
+              </label>
+            </div>
+            {background?.kind === 'custom' && (
+              <button
+                type="button"
+                disabled={extractingColor}
+                onClick={() => void useImageColor()}
+                className="mx-2 mb-1 flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-3 py-1 text-[10.5px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink disabled:opacity-50"
+              >
+                <Wand2 size={11} strokeWidth={1.7} />
+                {extractingColor ? t('settings.appearance.extractingColor') : t('settings.appearance.useImageColor')}
+              </button>
+            )}
           </div>
         )}
       </div>
