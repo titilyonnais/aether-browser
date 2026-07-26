@@ -11,6 +11,7 @@ import { Camera, Clipboard, FileText, MapPin, Mic, Music, ShieldAlert } from 'lu
 import { useEffect, useRef, useState } from 'react'
 import type { PermissionPromptContent, SitePermissionKind } from '@shared/types'
 import { translate } from '@/i18n'
+import { applyTheme } from '@/lib/theme'
 
 // Seuls les kinds réellement « promptables » (déclenchés via
 // `setPermissionRequestHandler`, voir webSession.ts) atteignent cette fenêtre
@@ -48,6 +49,8 @@ export default function PermissionPromptRoot() {
 
   useEffect(() => {
     void window.aether.settings.get().then((s) => {
+      // Contexte JS séparé (`:root` distinct) — même raison que PopoverRoot.tsx.
+      applyTheme(document.documentElement, s.newTabBackground, s.accent, s.accentCustom)
       document.documentElement.style.setProperty('zoom', String(s.uiScale))
     })
   }, [])

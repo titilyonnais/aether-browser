@@ -17,7 +17,7 @@ import { MusePanel } from '@/components/muse/MusePanel'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { useT } from '@/i18n/useT'
 import { holdZoomIndicator, initBridge, releaseZoomIndicator, runCommand } from '@/lib/actions'
-import { backgroundPresetCss } from '@/lib/backgroundPresets'
+import { applyTheme, themeBackgroundCss } from '@/lib/theme'
 import { usePagesStore } from '@/stores/pages'
 import { useSettingsStore } from '@/stores/settings'
 import { useSpacesStore } from '@/stores/spaces'
@@ -70,14 +70,6 @@ const SiteDataOverlay = lazy(() =>
 const Onboarding = lazy(() => import('@/components/onboarding/Onboarding').then((m) => ({ default: m.Onboarding })))
 const CoachMarks = lazy(() => import('@/components/guide/CoachMarks').then((m) => ({ default: m.CoachMarks })))
 
-const ACCENT_HEX: Record<string, string> = {
-  glacier: '#a9c9ec',
-  lavande: '#b3a4e6',
-  emeraude: '#8fe0c2',
-  ambre: '#e6c78f',
-  rose: '#e6a4c4'
-}
-
 export default function App() {
   const ready = useUiStore((s) => s.ready)
   const mode = useUiStore((s) => s.mode)
@@ -125,33 +117,24 @@ export default function App() {
     }
   }, [])
 
-  // Couleur d'accent : repeint --color-glacier (accent principal de l'interface).
+  // Thème : repeint accent ET surfaces (panneaux, barres, cartes) de TOUTE
+  // l'interface — c'est ce qui distingue un thème d'un simple fond d'écran.
+  // Les popups flottants et l'invite de permission, contextes JS séparés avec
+  // leur propre `:root`, appellent le même `applyTheme` de leur côté.
   useEffect(() => {
-    const hex = accent === 'custom' && accentCustom ? accentCustom : (ACCENT_HEX[accent] ?? ACCENT_HEX.glacier)
-    document.documentElement.style.setProperty('--color-glacier', hex)
-  }, [accent, accentCustom])
+    applyTheme(document.documentElement, newTabBackground, accent, accentCustom)
+  }, [newTabBackground, accent, accentCustom])
 
-  // Thème de nouvel onglet choisi → aussi peint sur <body>, donc visible
-  // partout où aucune WebContentsView de page ne le recouvre (bande de
-  // titre, marges du canvas, espaces vides) : « choisir un thème change le
-  // style du navigateur complet », pas juste sa page d'accueil. La couleur
-  // d'accent (ci-dessus) suit déjà le même réglage pour un préréglage —
-  // voir `selectPreset`, NewTabPage.tsx.
+  // Dégradé/image du thème aussi peint sur <body> : visible partout où aucune
+  // WebContentsView de page ne le recouvre (bande de titre, marges du canvas,
+  // espaces vides).
   useEffect(() => {
     const style = document.body.style
-    if (!newTabBackground) {
-      style.backgroundImage = ''
-      return
-    }
-    if (newTabBackground.kind === 'preset') {
-      style.backgroundImage = backgroundPresetCss(newTabBackground.value) ?? ''
-      style.backgroundSize = ''
-      style.backgroundPosition = ''
-    } else {
-      style.backgroundImage = `url("aether://avatars/${newTabBackground.value}")`
-      style.backgroundSize = 'cover'
-      style.backgroundPosition = 'center'
-    }
+    const css = themeBackgroundCss(newTabBackground)
+    style.backgroundImage = css ?? ''
+    const isImage = newTabBackground?.kind === 'custom'
+    style.backgroundSize = isImage ? 'cover' : ''
+    style.backgroundPosition = isImage ? 'center' : ''
   }, [newTabBackground])
 
   // Taille de l'interface ÆTHER elle-même (Réglages › Apparence) — `zoom` sur

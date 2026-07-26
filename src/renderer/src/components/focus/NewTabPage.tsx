@@ -17,7 +17,6 @@ import {
   CloudRain,
   CloudSnow,
   CloudSun,
-  Image as ImageIcon,
   Newspaper,
   Pencil,
   Plus,
@@ -25,7 +24,6 @@ import {
   Search,
   Settings as SettingsIcon,
   Sun,
-  Wand2,
   X
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -43,8 +41,7 @@ import type {
 import { Favicon } from '@/components/ui/Favicon'
 import { useT } from '@/i18n/useT'
 import { closePage, executeIntent } from '@/lib/actions'
-import { BACKGROUND_PRESETS, backgroundPreset, backgroundPresetCss, type BackgroundPreset } from '@/lib/backgroundPresets'
-import { extractDominantColor, suggestScrimOpacity } from '@/lib/dominantColor'
+import { effectiveScrim, themeBackgroundCss } from '@/lib/theme'
 import { cn, domainOf, uuid } from '@/lib/utils'
 import { useSearchEnginesStore } from '@/stores/searchEngines'
 import { useSettingsStore } from '@/stores/settings'
@@ -81,8 +78,6 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
   const [editing, setEditing] = useState<EditState | null>(null)
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const customizeRootRef = useRef<HTMLDivElement | null>(null)
-  const [pendingBackgroundDataUrl, setPendingBackgroundDataUrl] = useState<string | null>(null)
-  const [extractingColor, setExtractingColor] = useState(false)
 
   const shortcuts = settings?.newTabShortcuts ?? []
   const widgets = settings?.newTabWidgets ?? { clock: true, weather: false, news: false }
@@ -249,63 +244,13 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
     void useSettingsStore.getState().patch({ newTabNewsStyle: style })
   }
 
-  const clearBackground = (): void => {
-    void useSettingsStore.getState().patch({ newTabBackground: null })
-  }
-
-  // Choisir un thème intégré réapplique aussi sa couleur d'accent à TOUTE
-  // l'interface (boutons, surbrillances, `--color-glacier`) — pas seulement
-  // le fond de cette page : un thème « change le style du navigateur
-  // complet », pas juste sa page d'accueil.
-  const selectPreset = (preset: BackgroundPreset): void => {
-    void useSettingsStore.getState().patch({
-      newTabBackground: { kind: 'preset', value: preset.id, scrim: preset.scrim },
-      accent: 'custom',
-      accentCustom: preset.accent
-    })
-  }
-
-  const chooseBackgroundImage = async (): Promise<void> => {
-    const result = await window.aether.newTab.chooseBackground()
-    if (!result) return
-    setPendingBackgroundDataUrl(result.dataUrl)
-    // Voile calibré automatiquement sur la luminance moyenne de LA photo
-    // choisie — une image claire (ciel, neige, plage) a besoin d'un voile
-    // bien plus soutenu qu'une image déjà sombre pour que le texte clair de
-    // la page reste lisible, voir `suggestScrimOpacity`.
-    const scrim = await suggestScrimOpacity(result.dataUrl)
-    void useSettingsStore.getState().patch({ newTabBackground: { kind: 'custom', value: result.filename, scrim } })
-  }
-
-  const useImageColor = async (): Promise<void> => {
-    if (!background || background.kind !== 'custom') return
-    setExtractingColor(true)
-    try {
-      const dataUrl = pendingBackgroundDataUrl ?? (await window.aether.newTab.backgroundImageDataUrl(background.value))
-      const hex = dataUrl ? await extractDominantColor(dataUrl) : null
-      if (hex) await useSettingsStore.getState().patch({ accent: 'custom', accentCustom: hex })
-    } finally {
-      setExtractingColor(false)
-    }
-  }
-
-  const backgroundStyle: React.CSSProperties = background
-    ? background.kind === 'preset'
-      ? { backgroundImage: backgroundPresetCss(background.value) ?? undefined }
-      : {
-          backgroundImage: `url("aether://avatars/${background.value}")`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        }
+  const themeCss = themeBackgroundCss(background)
+  const backgroundStyle: React.CSSProperties = themeCss
+    ? background?.kind === 'custom'
+      ? { backgroundImage: themeCss, backgroundSize: 'cover', backgroundPosition: 'center' }
+      : { backgroundImage: themeCss }
     : {}
-  // Repli si `scrim` est absent (réglage enregistré par une version antérieure
-  // à son introduction) — pour un thème intégré, la valeur À JOUR du
-  // catalogue prime toujours sur celle éventuellement persistée.
-  const effectiveScrim = background
-    ? background.kind === 'preset'
-      ? (backgroundPreset(background.value)?.scrim ?? background.scrim ?? 0.32)
-      : (background.scrim ?? 0.32)
-    : 0
+  const scrim = effectiveScrim(background)
 
   if (!settings) return null
 
@@ -317,11 +262,11 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
       {/* Voile de lisibilité — uniquement quand un fond personnalisé est actif,
           opacité calibrée par thème (voir `scrim`, backgroundPresets.ts) ou
           automatiquement sur la luminance de l'image importée (voir
-          `suggestScrimOpacity`) plutôt qu'une valeur fixe arbitraire. */}
+          `computeReadableScrim`) plutôt qu'une valeur fixe arbitraire. */}
       {background && (
-        <div className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: effectiveScrim }} />
+        <div className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: scrim }} />
       )}
-      {widgets.weather && <WeatherWidget />}
+      {widgets.weather && <WeatherWidget hasTheme={Boolean(background)} />}
       {widgets.clock && <ClockWidget background={background} />}
 
       {/* Recherche — classification instantanée, tape et valide directement ici ;
@@ -541,7 +486,7 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
         })}
       </div>
 
-      {widgets.news && <NewsWidget style={newsStyle} onOpen={goTo} />}
+      {widgets.news && <NewsWidget style={newsStyle} onOpen={goTo} hasTheme={Boolean(background)} />}
 
       {/* `relative` porte UNIQUEMENT le bouton (pas de padding à l'intérieur) :
           `bottom-full` sur le panneau se cale sur le bord de CE conteneur —
@@ -618,69 +563,9 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
               ))}
             </div>
 
-            <p className="mt-2 border-t border-white/[0.06] px-2 pt-2 text-[10px] uppercase tracking-wide text-ink-faint/70">
-              {t('focusCanvas.newTab.backgroundTitle')}
-            </p>
-            <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
-              <button
-                type="button"
-                title={t('focusCanvas.newTab.backgroundNone')}
-                onClick={clearBackground}
-                className={cn(
-                  'grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-ink-faint transition-colors',
-                  !background
-                    ? 'border-glacier/50 ring-2 ring-offset-1 ring-offset-abyss'
-                    : 'border-white/[0.1] hover:border-white/[0.2]'
-                )}
-              >
-                <X size={11} strokeWidth={1.8} />
-              </button>
-              {BACKGROUND_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  title={preset.label}
-                  onClick={() => selectPreset(preset)}
-                  className={cn(
-                    'h-8 w-8 shrink-0 rounded-lg bg-cover transition-transform hover:scale-105',
-                    background?.kind === 'preset' && background.value === preset.id
-                      ? 'ring-2 ring-offset-1 ring-offset-abyss ring-glacier/60'
-                      : ''
-                  )}
-                  style={{ backgroundImage: backgroundPresetCss(preset.id) ?? undefined }}
-                />
-              ))}
-              <label
-                title={t('focusCanvas.newTab.backgroundCustom')}
-                className={cn(
-                  'relative grid h-8 w-8 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-lg border-2 border-dashed transition-colors',
-                  background?.kind === 'custom' ? 'border-glacier/60' : 'border-white/20 hover:border-white/40'
-                )}
-              >
-                {background?.kind === 'custom' ? (
-                  <img src={`aether://avatars/${background.value}`} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <ImageIcon size={11} strokeWidth={1.7} className="text-ink-faint" />
-                )}
-                <button
-                  type="button"
-                  onClick={() => void chooseBackgroundImage()}
-                  className="absolute inset-0 cursor-pointer"
-                  aria-label={t('focusCanvas.newTab.backgroundCustom')}
-                />
-              </label>
-            </div>
-            {background?.kind === 'custom' && (
-              <button
-                type="button"
-                disabled={extractingColor}
-                onClick={() => void useImageColor()}
-                className="mx-2 mb-1 flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-3 py-1 text-[10.5px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink disabled:opacity-50"
-              >
-                <Wand2 size={11} strokeWidth={1.7} />
-                {extractingColor ? t('settings.appearance.extractingColor') : t('settings.appearance.useImageColor')}
-              </button>
-            )}
+            {/* Le choix du THÈME (dégradé/image de fond) vit dans
+                Réglages › Apparence — il restyle toute l'application, pas
+                seulement cette page, sa place n'est donc pas ici. */}
           </div>
         )}
       </div>
@@ -730,7 +615,7 @@ function weatherIcon(code: number): typeof Sun {
  * d'infos (ressenti, humidité, vent, UV, lever/coucher) ; une icône dédiée
  * ouvre la localisation (auto/ville). Autonome : lit/écrit directement
  * `newTabWeatherLocation`, pas besoin que le parent lui passe quoi que ce soit. */
-function WeatherWidget() {
+function WeatherWidget({ hasTheme }: { hasTheme: boolean }) {
   const t = useT()
   const settings = useSettingsStore((s) => s.settings)
   const location = settings?.newTabWeatherLocation ?? null
@@ -822,7 +707,14 @@ function WeatherWidget() {
 
   return (
     <div ref={rootRef} className="absolute left-5 top-5 z-10 w-[220px]">
-      <div className="glass overflow-hidden rounded-2xl border border-white/[0.08]">
+      <div
+        className={cn(
+          'overflow-hidden rounded-2xl border',
+          // `.glass` est volontairement très translucide — insuffisant
+          // par-dessus une photo, d'où une surface dédiée plus opaque.
+          hasTheme ? 'border-white/[0.14] bg-black/50 backdrop-blur-xl' : 'glass border-white/[0.08]'
+        )}
+      >
         <button
           type="button"
           onClick={() => setDetailsOpen((o) => !o)}
@@ -957,7 +849,16 @@ function shuffled<T>(arr: T[]): T[] {
   return a
 }
 
-function NewsWidget({ style, onOpen }: { style: NewTabNewsStyle; onOpen: (url: string) => void }) {
+function NewsWidget({
+  style,
+  onOpen,
+  hasTheme
+}: {
+  style: NewTabNewsStyle
+  onOpen: (url: string) => void
+  /** Un thème est actif : les textes ont besoin de leur propre surface. */
+  hasTheme: boolean
+}) {
   const t = useT()
   const [items, setItems] = useState<NewTabNewsItem[]>([])
   const [refreshing, setRefreshing] = useState(false)
@@ -990,7 +891,12 @@ function NewsWidget({ style, onOpen }: { style: NewTabNewsStyle; onOpen: (url: s
   return (
     <div className={style === 'photos' ? 'mt-8 w-full max-w-3xl' : 'mt-8 w-full max-w-lg'}>
       <div className="mb-1.5 flex items-center justify-between px-1">
-        <p className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wide text-ink-faint/70">
+        <p
+          className={cn(
+            'flex items-center gap-1.5 text-[10.5px] uppercase tracking-wide text-ink-faint/70',
+            hasTheme && 'text-ink-dim drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]'
+          )}
+        >
           <Newspaper size={11} strokeWidth={1.8} />
           {t('focusCanvas.newTab.newsTitle')}
         </p>
@@ -1030,14 +936,28 @@ function NewsWidget({ style, onOpen }: { style: NewTabNewsStyle; onOpen: (url: s
                   <div className="absolute inset-0 bg-gradient-to-br from-white/[0.06] to-transparent" />
                 )}
               </div>
-              <p className="mt-2 text-[12.5px] font-medium leading-snug text-ink-dim transition-colors group-hover:text-ink">
+              {/* Sur un thème actif, le titre reçoit sa PROPRE surface opaque
+                  (verre dépoli) : posé à même le fond, il se noyait dans
+                  l'image — c'est précisément ce qui rendait les actualités
+                  illisibles sur une photo. */}
+              <p
+                className={cn(
+                  'mt-2 text-[12.5px] font-medium leading-snug text-ink-dim transition-colors group-hover:text-ink',
+                  hasTheme && 'rounded-lg border border-white/[0.1] bg-black/55 px-2.5 py-1.5 backdrop-blur-md'
+                )}
+              >
                 {item.title}
               </p>
             </button>
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-white/[0.07] bg-white/[0.02]">
+        <div
+          className={cn(
+            'rounded-xl border',
+            hasTheme ? 'border-white/[0.12] bg-black/45 backdrop-blur-md' : 'border-white/[0.07] bg-white/[0.02]'
+          )}
+        >
           {displayItems.map((item, i) => (
             <button
               key={item.url + i}

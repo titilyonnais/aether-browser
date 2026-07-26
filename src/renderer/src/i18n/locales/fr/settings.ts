@@ -111,6 +111,13 @@ export const settings: Record<string, string> = {
   'settings.appearance.accentTitle': "Couleur d'accent",
   'settings.appearance.accentHint': 'Teinte des éléments actifs et des surbrillances.',
   'settings.appearance.customColor': 'Couleur personnalisée',
+  'settings.appearance.themeTitle': 'Thème',
+  'settings.appearance.themeHint':
+    "Restyle tout ÆTHER : fond de la page d'accueil et de la fenêtre, couleur d'accent, teinte des panneaux.",
+  'settings.appearance.themeNone': 'Aucun thème',
+  'settings.appearance.themeCustomImage': 'Importer une image',
+  'settings.appearance.themeAutoContrast':
+    "Le fond est automatiquement assombri juste assez pour que les textes restent lisibles (contraste minimum WCAG AA), sans jamais l'obscurcir plus que nécessaire.",
   'settings.appearance.favoritesBarTitle': 'Barre de favoris',
   'settings.appearance.favoritesBarHint': 'Une bande de pages épinglées, sous la barre de titre.',
   'settings.appearance.showFavoritesBar': 'Afficher la barre de favoris',

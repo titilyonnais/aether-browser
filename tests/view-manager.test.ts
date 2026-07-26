@@ -7,23 +7,57 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PageRow } from '../src/main/db/repositories'
 
-/** Fabrique un faux `WebContents` — surface large mais purement passive :
- * les tests LRU/éviction n'invoquent jamais les callbacks enregistrées via
- * `.on()`, seule leur EXISTENCE (pas de throw à l'enregistrement) importe. */
+/** Fabrique un faux `WebContents` — surface large mais purement passive pour
+ * les tests LRU/éviction, qui n'invoquent jamais les callbacks enregistrées
+ * via `.on()` (seule leur EXISTENCE, sans throw, y importe). Les tests de
+ * navigation, eux, les REJOUENT : `on` les mémorise dans `handlers`, et
+ * `currentUrl` sert de source de vérité pour `getURL()` (que `ViewManager`
+ * interroge pour décider du comportement du retour). */
 function fakeWebContents() {
+  const handlers = new Map<string, ((...args: unknown[]) => void)[]>()
+  /** Historique de navigation modélisé fidèlement, y compris la BIZARRERIE
+   * d'Electron dont dépend tout le comportement du bouton retour : un
+   * `loadURL()` n'ÉCRASE PAS la branche « avancer » restée au-delà de la
+   * position courante (contrairement à une navigation d'adresse dans un vrai
+   * navigateur, qui la tronque) — la nouvelle entrée s'empile APRÈS la
+   * dernière, laissant les entrées obsolètes accessibles au retour. Sans ce
+   * détail, un faux naïf (`canGoBack` toujours faux) ne peut PAS révéler la
+   * régression : il détourne le code vers un chemin de repli qui, lui,
+   * fonctionne. */
+  const history: { entries: string[]; activeIndex: number } = { entries: [], activeIndex: -1 }
   return {
+    /** Rejoue un évènement Electron comme si Chromium l'émettait. */
+    __emit(event: string, ...args: unknown[]) {
+      for (const h of handlers.get(event) ?? []) h(...args)
+    },
+    /** Simule une navigation RÉELLEMENT commitée (ce que fait Chromium après
+     * un `loadURL` réussi) : l'entrée s'empile en fin d'historique, devient
+     * l'entrée active, puis `did-navigate` est émis. */
+    __commit(url: string) {
+      history.entries.push(url)
+      history.activeIndex = history.entries.length - 1
+      this.__emit('did-navigate', {}, url)
+    },
+    /** URL réellement affichée — ce que l'utilisateur voit à l'écran. */
+    __currentUrl() {
+      return history.entries[history.activeIndex] ?? ''
+    },
     isDestroyed: vi.fn(() => false),
     isCrashed: vi.fn(() => false),
     isLoading: vi.fn(() => false),
     setAudioMuted: vi.fn(),
     setZoomFactor: vi.fn(),
     getZoomFactor: vi.fn(() => 1),
-    getURL: vi.fn(() => ''),
+    getURL: vi.fn(() => history.entries[history.activeIndex] ?? ''),
     getTitle: vi.fn(() => ''),
     getOSProcessId: vi.fn(() => 1234),
     loadURL: vi.fn(async () => undefined),
     close: vi.fn(),
-    on: vi.fn(),
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      const list = handlers.get(event) ?? []
+      list.push(handler)
+      handlers.set(event, list)
+    }),
     once: vi.fn(),
     setWindowOpenHandler: vi.fn(),
     executeJavaScript: vi.fn(async () => null),
@@ -33,9 +67,16 @@ function fakeWebContents() {
       toJPEG: () => Buffer.from('')
     })),
     navigationHistory: {
-      canGoBack: vi.fn(() => false),
-      canGoForward: vi.fn(() => false),
-      goBack: vi.fn(),
+      canGoBack: vi.fn(() => history.activeIndex > 0),
+      canGoForward: vi.fn(() => history.activeIndex < history.entries.length - 1),
+      // Un vrai retour d'historique : recule d'une entrée et notifie, comme
+      // Chromium — c'est ce qui permet au test de vérifier OÙ l'on atterrit,
+      // plutôt que seulement quelle méthode a été appelée.
+      goBack: vi.fn(function (this: void) {
+        if (history.activeIndex <= 0) return
+        history.activeIndex--
+        for (const h of handlers.get('did-navigate') ?? []) h({}, history.entries[history.activeIndex])
+      }),
       goForward: vi.fn()
     },
     debugger: {
@@ -62,8 +103,20 @@ const settingsMock = vi.hoisted(() => ({
 }))
 vi.mock('../src/main/settings', () => settingsMock)
 
-const pagesRepoMock = vi.hoisted(() => ({ pagesRepo: { get: vi.fn() } }))
+const pagesRepoMock = vi.hoisted(() => ({
+  pagesRepo: {
+    get: vi.fn(),
+    updateNavigation: vi.fn(),
+    updateTitle: vi.fn(),
+    updateFavicon: vi.fn(),
+    setMuted: vi.fn()
+  }
+}))
 vi.mock('../src/main/db/repositories', () => pagesRepoMock)
+vi.mock('../src/main/contentBlocking', () => ({
+  noteMainFrameNavigation: vi.fn(),
+  siteBlocksPopups: vi.fn(() => false)
+}))
 
 vi.mock('../src/main/popoverWindow', () => ({
   hidePopoverWindow: vi.fn(),
@@ -135,11 +188,30 @@ beforeEach(() => {
   })
   const rows = new Map<string, PageRow>()
   pagesRepoMock.pagesRepo.get.mockImplementation((id: string) => rows.get(id))
+  // `navigate()` écrit la cible en base AVANT de lancer le chargement — le
+  // mock doit reproduire cette écriture, sinon les tests de navigation ne
+  // pourraient pas révéler les bugs qui en découlent (cf. `lastCommittedUrl`).
+  pagesRepoMock.pagesRepo.updateNavigation.mockImplementation((id: string, url: string) => {
+    const row = rows.get(id)
+    if (row) rows.set(id, { ...row, url })
+  })
   ;(pagesRepoMock.pagesRepo as unknown as { _rows: Map<string, PageRow> })._rows = rows
 })
 
-function seedRow(id: string): void {
-  ;(pagesRepoMock.pagesRepo as unknown as { _rows: Map<string, PageRow> })._rows.set(id, fakeRow(id))
+function seedRow(id: string, url?: string): void {
+  const row = fakeRow(id)
+  ;(pagesRepoMock.pagesRepo as unknown as { _rows: Map<string, PageRow> })._rows.set(
+    id,
+    url ? { ...row, url } : row
+  )
+}
+
+type FakeContents = ReturnType<typeof fakeWebContents>
+
+/** Récupère le faux `WebContents` de la vue vivante d'une page. */
+function contentsOf(vm: InstanceType<typeof ViewManager>, id: string): FakeContents {
+  return (vm as unknown as { views: Map<string, { webContents: FakeContents }> }).views.get(id)!
+    .webContents
 }
 
 describe('ViewManager.ensureLive', () => {
@@ -187,5 +259,102 @@ describe('ViewManager — LRU et éviction', () => {
 
     expect(vm.getRuntime('a').isLive).toBe(true)
     expect(vm.getRuntime('b').isLive).toBe(true)
+  })
+})
+
+const NEWTAB = 'aether://newtab'
+/** URL telle que Chromium la COMMITTE réellement pour le schéma standard
+ * `aether:` — barre oblique finale ajoutée à la normalisation. C'est cette
+ * forme-là que `getURL()` renvoie, jamais celle passée à `loadURL`. */
+const NEWTAB_COMMITTED = 'aether://newtab/'
+
+describe('ViewManager — retour vers la page d’accueil', () => {
+  /** Laisse les promesses en vol se résoudre — `goBack` délègue à `navigate()`,
+   * qui attend la fin du chargement initial (`pendingInitialLoad`) avant de
+   * lancer le sien, et n'est pas attendu par l'appelant (`void`). */
+  const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+
+  /** Enchaîne « recherche depuis la page d'accueil » de bout en bout : la
+   * navigation demandée, puis le commit que Chromium émettrait ensuite. */
+  async function search(vm: InstanceType<typeof ViewManager>, id: string, url: string): Promise<void> {
+    await vm.navigate(id, url)
+    contentsOf(vm, id).__commit(url)
+  }
+
+  /** Clic sur la flèche retour, jusqu'à l'atterrissage : `goBack` peut
+   * déléguer à `navigate()` (asynchrone, non attendu par l'appelant), dont le
+   * chargement doit ensuite être commité comme le ferait Chromium. Renvoie
+   * l'URL réellement affichée à l'arrivée — le seul critère qui compte pour
+   * l'utilisateur. */
+  async function clickBack(vm: InstanceType<typeof ViewManager>, id: string): Promise<string> {
+    const wc = contentsOf(vm, id)
+    wc.loadURL.mockClear()
+    vm.goBack(id)
+    await flush()
+    // Retour traité par un chargement d'URL (et non par l'historique natif,
+    // qui a déjà notifié tout seul) : commite ce chargement.
+    // `loadURL` est typé sans paramètre côté faux (le corps n'en a pas besoin) —
+    // ses arguments réels se relisent donc via un élargissement explicite.
+    const calls = wc.loadURL.mock.calls as unknown as unknown[][]
+    const loaded = calls.at(-1)?.[0] as string | undefined
+    if (loaded !== undefined) wc.__commit(loaded)
+    return wc.__currentUrl()
+  }
+
+  it('active le bouton retour après une recherche depuis la page d’accueil', async () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', NEWTAB)
+    vm.setVisible(['a'])
+    contentsOf(vm, 'a').__commit(NEWTAB_COMMITTED)
+
+    expect(vm.getRuntime('a').canGoBack).toBe(false)
+    await search(vm, 'a', 'https://google.com/search?q=animal')
+    expect(vm.getRuntime('a').canGoBack).toBe(true)
+  })
+
+  it('revient à la page d’accueil, PAS à la recherche précédente, après un second cycle', async () => {
+    // Régression : Page d'accueil → « animal » → retour → « bill gates » →
+    // retour amenait sur la recherche « animal » au lieu de la page d'accueil.
+    // `navigate()` écrivant la cible en base avant le chargement, l'URL
+    // « précédente » relue depuis la base valait déjà la nouvelle : le drapeau
+    // « à un pas d'un nouvel onglet » était effacé par la navigation même qui
+    // venait de le poser, et le retour retombait sur l'historique natif — dont
+    // la branche « avancer » obsolète n'est jamais purgée par `loadURL()`.
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', NEWTAB)
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit(NEWTAB_COMMITTED)
+
+    // 1er cycle — recherche « animal », puis retour : déjà correct avant le
+    // correctif, mais vérifié pour cadrer la régression du 2nd cycle.
+    await search(vm, 'a', 'https://google.com/search?q=animal')
+    expect(await clickBack(vm, 'a')).toContain('aether://newtab')
+
+    // 2nd cycle — c'est ICI que la régression se manifestait : on atterrissait
+    // sur « animal » au lieu de la page d'accueil.
+    await search(vm, 'a', 'https://google.com/search?q=bill+gates')
+    expect(await clickBack(vm, 'a')).toContain('aether://newtab')
+  })
+
+  it('laisse l’historique natif gérer le retour après un clic DANS la page', async () => {
+    // Une fois qu'on s'est éloigné d'un pas de plus (lien cliqué), le retour
+    // doit redevenir un vrai retour d'historique — pas un saut direct vers la
+    // page d'accueil, qui sauterait par-dessus la page intermédiaire.
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', NEWTAB)
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit(NEWTAB_COMMITTED)
+
+    await search(vm, 'a', 'https://google.com/search?q=animal')
+    // Lien cliqué dans les résultats : navigation commitée sans passer par
+    // `navigate()`, exactement comme le ferait Chromium tout seul.
+    wc.__commit('https://fr.wikipedia.org/wiki/Animal')
+
+    // Le retour doit ramener aux RÉSULTATS, pas sauter par-dessus jusqu'à la
+    // page d'accueil.
+    expect(await clickBack(vm, 'a')).toBe('https://google.com/search?q=animal')
+    expect(wc.navigationHistory.goBack).toHaveBeenCalled()
   })
 })

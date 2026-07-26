@@ -15,6 +15,7 @@ import { FavoritesFolderPopoverCard } from '@/components/favorites/FavoritesFold
 import { SiteInfoCard } from '@/components/focus/SiteInfoCard'
 import { TabPreviewCard } from '@/components/focus/TabPreviewCard'
 import { TranslatePopoverCard } from '@/components/focus/TranslatePopoverCard'
+import { applyTheme } from '@/lib/theme'
 
 export default function PopoverRoot() {
   const [content, setContent] = useState<PopoverContent>(null)
@@ -45,6 +46,11 @@ export default function PopoverRoot() {
   useEffect(() => {
     void window.aether.settings.get().then((s) => {
       setShowPreview(s.showTabHoverPreview)
+      // Pas de store partagé avec la fenêtre principale (contexte JS séparé,
+      // donc `:root` distinct) : le thème doit être réappliqué ICI, sinon les
+      // menus contextuels resteraient sur la teinte par défaut alors que le
+      // reste de l'interface a changé de thème.
+      applyTheme(document.documentElement, s.newTabBackground, s.accent, s.accentCustom)
       // Même échelle que la fenêtre principale (Réglages › Apparence), sinon
       // le contenu du popup resterait à 100 % pendant que le reste de
       // l'interface est agrandi/réduit — `reportSize` (plus bas) mesure déjà

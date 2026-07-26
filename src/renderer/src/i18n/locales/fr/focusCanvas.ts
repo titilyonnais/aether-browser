@@ -73,9 +73,6 @@ export const focusCanvas: Record<string, string> = {
   'focusCanvas.newTab.newsStyle.text': 'Texte',
   'focusCanvas.newTab.newsStyle.photos': '3 gros titres',
   'focusCanvas.newTab.gridSizeTitle': 'Emplacements de la grille',
-  'focusCanvas.newTab.backgroundTitle': 'Fond d’écran',
-  'focusCanvas.newTab.backgroundNone': 'Aucun',
-  'focusCanvas.newTab.backgroundCustom': 'Importer une image',
 
   // FindBar
   'focusCanvas.findBar.placeholder': 'Rechercher dans la page…',

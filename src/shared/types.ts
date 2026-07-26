@@ -257,7 +257,7 @@ export interface NewTabWidgets {
  * `aether://avatars/<fichier>`). `scrim` (0-1) est l'opacité du voile sombre
  * posé par-dessus pour la lisibilité — fixe par thème pour un préréglage,
  * calculée automatiquement depuis la luminance moyenne de l'image pour un
- * import personnel (voir `suggestScrimOpacity`, renderer/lib/dominantColor.ts). */
+ * import personnel (voir `computeReadableScrim`, renderer/lib/dominantColor.ts). */
 export interface NewTabBackground {
   kind: 'preset' | 'custom'
   value: string

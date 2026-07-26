@@ -51,6 +51,7 @@ import type {
   ExtensionInfo,
   Profile,
   SearchEngineId,
+  SettingsPatch,
   SiteDataGroup,
   SitePermissionKind,
   SitePermissionOverride,
@@ -73,6 +74,8 @@ import {
   setProfileAvatarImage,
   switchProfile
 } from '@/lib/actions'
+import { BACKGROUND_PRESETS, backgroundPresetCss, type BackgroundPreset } from '@/lib/backgroundPresets'
+import { computeReadableScrim, extractDominantColor } from '@/lib/dominantColor'
 import { PERMISSION_LABELS } from '@/lib/sitePermissionLabels'
 import { cn, formatBytes } from '@/lib/utils'
 import { useMuseStore } from '@/stores/muse'
@@ -902,6 +905,124 @@ const ACCENTS: { id: Exclude<AccentId, 'custom'>; labelKey: string; color: strin
   { id: 'glacier', labelKey: 'settings.appearance.accentSauge', color: '#a8c99a' }
 ] as const
 
+/** Choix du thème d'ÆTHER — dégradé intégré ou image personnelle. Un thème
+ * restyle TOUTE l'application (fond, couleur d'accent, teinte des surfaces —
+ * voir `applyTheme`), d'où sa place ici plutôt que dans le panneau
+ * « Personnaliser » de la page d'accueil. */
+function ThemeBlock({
+  settings,
+  patch
+}: {
+  settings: AppSettings
+  patch: (p: SettingsPatch) => Promise<void>
+}) {
+  const t = useT()
+  const [pendingDataUrl, setPendingDataUrl] = useState<string | null>(null)
+  const [extracting, setExtracting] = useState(false)
+  const theme = settings.newTabBackground
+
+  const selectPreset = async (preset: BackgroundPreset): Promise<void> => {
+    await patch({
+      newTabBackground: { kind: 'preset', value: preset.id, scrim: preset.scrim },
+      accent: 'custom',
+      accentCustom: preset.accent
+    })
+  }
+
+  const chooseImage = async (): Promise<void> => {
+    const result = await window.aether.newTab.chooseBackground()
+    if (!result) return
+    setPendingDataUrl(result.dataUrl)
+    // Voile calculé pour GARANTIR le seuil de contraste WCAG AA sur cette
+    // image précise (voir `computeReadableScrim`) — pas une valeur fixe qui
+    // laisserait le texte illisible sur une photo claire.
+    const scrim = await computeReadableScrim(result.dataUrl)
+    await patch({ newTabBackground: { kind: 'custom', value: result.filename, scrim } })
+  }
+
+  const useImageColor = async (): Promise<void> => {
+    if (theme?.kind !== 'custom') return
+    setExtracting(true)
+    try {
+      const dataUrl = pendingDataUrl ?? (await window.aether.newTab.backgroundImageDataUrl(theme.value))
+      const hex = dataUrl ? await extractDominantColor(dataUrl) : null
+      if (hex) await patch({ accent: 'custom', accentCustom: hex })
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  return (
+    <Block title={t('settings.appearance.themeTitle')} hint={t('settings.appearance.themeHint')}>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <button
+          type="button"
+          title={t('settings.appearance.themeNone')}
+          onClick={() => void patch({ newTabBackground: null })}
+          className={cn(
+            'grid h-11 w-11 place-items-center rounded-xl border bg-void text-ink-faint transition-colors',
+            !theme
+              ? 'border-glacier/50 ring-2 ring-offset-2 ring-offset-abyss'
+              : 'border-white/[0.1] hover:border-white/[0.2]'
+          )}
+        >
+          <X size={14} strokeWidth={1.8} />
+        </button>
+        {BACKGROUND_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            title={preset.label}
+            onClick={() => void selectPreset(preset)}
+            className={cn(
+              'h-11 w-11 rounded-xl bg-cover transition-transform hover:scale-105',
+              theme?.kind === 'preset' && theme.value === preset.id
+                ? 'ring-2 ring-offset-2 ring-offset-abyss ring-glacier/60'
+                : ''
+            )}
+            style={{ backgroundImage: backgroundPresetCss(preset.id) ?? undefined }}
+          />
+        ))}
+        <label
+          title={t('settings.appearance.themeCustomImage')}
+          className={cn(
+            'relative grid h-11 w-11 cursor-pointer place-items-center overflow-hidden rounded-xl border-2 border-dashed transition-colors',
+            theme?.kind === 'custom' ? 'border-glacier/60' : 'border-white/20 hover:border-white/40'
+          )}
+        >
+          {theme?.kind === 'custom' ? (
+            <img src={`aether://avatars/${theme.value}`} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <ImageIcon size={14} strokeWidth={1.7} className="text-ink-faint" />
+          )}
+          <button
+            type="button"
+            onClick={() => void chooseImage()}
+            className="absolute inset-0 cursor-pointer"
+            aria-label={t('settings.appearance.themeCustomImage')}
+          />
+        </label>
+      </div>
+      {theme?.kind === 'custom' && (
+        <>
+          <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
+            {t('settings.appearance.themeAutoContrast')}
+          </p>
+          <button
+            type="button"
+            disabled={extracting}
+            onClick={() => void useImageColor()}
+            className="mt-2 flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-3.5 py-1.5 text-[11.5px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink disabled:opacity-50"
+          >
+            <Wand2 size={12} strokeWidth={1.7} />
+            {extracting ? t('settings.appearance.extractingColor') : t('settings.appearance.useImageColor')}
+          </button>
+        </>
+      )}
+    </Block>
+  )
+}
+
 function AppearanceSection() {
   const t = useT()
   const settings = useSettingsStore((s) => s.settings)
@@ -929,6 +1050,8 @@ function AppearanceSection() {
           <span className="w-12 text-right font-mono text-[12px] tabular-nums text-ink-dim">{uiScalePct}%</span>
         </div>
       </Block>
+
+      <ThemeBlock settings={settings} patch={patch} />
 
       <Block title={t('settings.appearance.accentTitle')} hint={t('settings.appearance.accentHint')}>
         <div className="flex flex-wrap items-center gap-2.5">

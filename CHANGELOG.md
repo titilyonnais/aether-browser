@@ -4,6 +4,42 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.66.0] — 2026-07-26
+
+### Corrigé
+
+- **Le bouton « retour » ramenait à la recherche précédente au lieu de la page d'accueil** — la
+  vraie cause, cette fois localisée : `navigate()` écrit l'URL cible en base AVANT de lancer le
+  chargement, si bien que l'URL « précédente » relue plus tard depuis la base valait déjà la
+  NOUVELLE. Le repère « cette page est à un pas de la page d'accueil » était donc effacé par la
+  navigation même qui venait de le poser, et le retour retombait sur l'historique natif — dont
+  Electron ne purge jamais la branche obsolète. Le suivi de l'URL précédente est désormais
+  indépendant de la base. Une recherche depuis la page d'accueil ramène systématiquement à la
+  page d'accueil, autant de fois d'affilée qu'on le veut.
+  Couvert par trois tests de non-régression qui rejouent la séquence complète (dont le cycle
+  double qui échouait) — ils échouent bien sans le correctif.
+
+### Amélioré
+
+- **Lisibilité garantie sur une image importée, plus seulement estimée** — le voile n'est plus
+  déduit d'une luminance moyenne (trompeuse : une voiture sombre devant un ciel clair donnait une
+  moyenne basse et un texte illisible sur le ciel) mais calculé pour ATTEINDRE le contraste
+  minimum WCAG AA (4.5:1) sur les zones claires de l'image, par recherche dichotomique. L'image
+  n'est jamais assombrie plus que nécessaire — ni moins. Cinq tests vérifient la garantie,
+  y compris les cas limites (image quasi noire, reflet spéculaire isolé).
+- **Actualités, météo, horloge et raccourcis lisibles sur tout fond** — surfaces en verre dépoli
+  nettement plus opaques et ombres portées sur les textes sans surface propre, là où ils se
+  noyaient dans la photo.
+- **Un thème restyle vraiment toute l'application** — au-delà du fond et des icônes, chacun des
+  8 thèmes porte sa propre palette de surfaces (panneaux, barres, cartes) et sa couleur d'accent,
+  appliquées aussi aux menus contextuels et aux invites de permission (fenêtres séparées, qui
+  restaient jusqu'ici sur la teinte par défaut).
+
+### Modifié
+
+- **Le choix du thème a déménagé dans Réglages › Apparence** — il ne concerne plus seulement la
+  page d'accueil, sa place n'était donc plus dans le panneau « Personnaliser » de celle-ci.
+
 ## [0.65.0] — 2026-07-26
 
 ### Corrigé

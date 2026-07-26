@@ -438,6 +438,12 @@ export class ViewManager {
    * de façon déterministe, que le retour doit mener DIRECTEMENT au nouvel
    * onglet — sans jamais consulter `navigationHistory` pour cette étape. */
   private singleHopFromNewTab = new Set<PageId>()
+  /** Dernière URL réellement COMMITÉE par Chromium pour cette page (voir
+   * `onNavigated`). Indispensable pour connaître l'URL PRÉCÉDENTE : la ligne
+   * en base ne peut pas servir de référence, `navigate()` y écrit la cible
+   * avant même de lancer le chargement. Semé par `ensureLive`, mis à jour à
+   * chaque navigation commitée. */
+  private lastCommittedUrl = new Map<PageId, string>()
 
   constructor(
     private win: BrowserWindow,
@@ -576,6 +582,9 @@ export class ViewManager {
 
     this.views.set(row.id, view)
     if (this.isNewTabUrl(row.url)) this.everNewTab.add(row.id)
+    // Semé AVANT tout chargement : le premier `did-navigate` a ainsi une
+    // vraie URL « précédente » à comparer (voir `lastCommittedUrl`).
+    this.lastCommittedUrl.set(row.id, row.url)
     this.runtime.set(row.id, {
       isLive: true,
       isLoading: true,
@@ -709,7 +718,16 @@ export class ViewManager {
       // seulement celles lancées par `navigate()`) : couvre aussi un clic
       // dans la page elle-même, qui invalide tout autant la relation « à un
       // pas d'un nouvel onglet » pour la page maintenant affichée.
-      const previousUrl = pagesRepo.get(pageId)?.url
+      //
+      // `lastCommittedUrl` et PAS `pagesRepo.get(pageId).url` : `navigate()`
+      // écrit la cible en base AVANT `loadURL`, donc au moment où
+      // `did-navigate` arrive, la ligne en base porte déjà la NOUVELLE URL —
+      // le « précédent » lu là valait donc toujours l'URL courante, et cette
+      // branche supprimait systématiquement le drapeau que `navigate()`
+      // venait tout juste de poser (cause du retour qui retombait sur
+      // l'ancienne recherche au lieu de la page d'accueil).
+      const previousUrl = this.lastCommittedUrl.get(pageId)
+      this.lastCommittedUrl.set(pageId, url)
       if (pagesRepo.get(pageId)) pagesRepo.updateNavigation(pageId, url)
       if (previousUrl !== undefined) {
         if (this.isNewTabUrl(previousUrl) && !this.isNewTabUrl(url)) {
@@ -1841,6 +1859,7 @@ export class ViewManager {
     this.runtime.delete(id)
     this.everNewTab.delete(id)
     this.singleHopFromNewTab.delete(id)
+    this.lastCommittedUrl.delete(id)
     this.visibleIds = this.visibleIds.filter((x) => x !== id)
   }
 

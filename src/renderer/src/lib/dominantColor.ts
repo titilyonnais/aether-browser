@@ -1,10 +1,10 @@
 /**
  * Analyse d'image côté renderer — couleur dominante (façon Windows : « Choisir
  * automatiquement une couleur d'accentuation à partir de l'image de fond ») et
- * luminance moyenne (pour calibrer AUTOMATIQUEMENT le voile de lisibilité posé
- * sur le fond de la page de nouvel onglet, voir `suggestScrimOpacity` —
- * NewTabPage.tsx ne pose plus une opacité fixe arbitraire, elle s'adapte à
- * l'image importée). Fonctionne UNIQUEMENT sur des `data:` URIs — une image
+ * calcul du voile de lisibilité à poser sur un thème image, dimensionné pour
+ * GARANTIR le contraste minimum WCAG AA du texte de l'interface (voir
+ * `computeReadableScrim`) — jamais une opacité fixe arbitraire.
+ * Fonctionne UNIQUEMENT sur des `data:` URIs — une image
  * chargée depuis `aether://` (ou toute autre origine) pollue le canvas
  * (`getImageData` lève une `SecurityError`), alors qu'une `data:` URI est
  * toujours exemptée de cette règle par la spec HTML, quel que soit le
@@ -63,29 +63,91 @@ export async function extractDominantColor(dataUrl: string): Promise<string | nu
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`
 }
 
-/** Voile sombre à poser SUR une image importée pour que le texte clair de la
- * page de nouvel onglet (widgets, raccourcis, recherche) reste lisible quel
- * que soit son contenu — calibré sur la luminance perçue moyenne (poids
- * standard ITU-R BT.601, plus fidèle à la perception humaine qu'une simple
- * moyenne RVB) plutôt qu'une opacité fixe arbitraire : une photo déjà sombre
- * n'a besoin que d'un voile léger, une photo claire (ciel, neige, plage) en
- * réclame un bien plus soutenu pour ne pas noyer le texte. Bornée [0.22, 0.62]
- * — jamais totalement transparent (le texte resterait fragile sur une zone
- * claire locale même si la moyenne est sombre) ni assez opaque pour effacer
- * l'image choisie. */
-export async function suggestScrimOpacity(dataUrl: string): Promise<number> {
-  const data = await sampleImage(dataUrl)
-  if (!data) return 0.32
-
-  let luminance = 0
-  let count = 0
-  for (let i = 0; i < data.length; i += 4) {
-    const alpha = data[i + 3] / 255
-    if (alpha === 0) continue
-    luminance += (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255
-    count++
+/** Luminance relative WCAG d'une couleur sRGB 8 bits (0-1). */
+function relativeLuminance(r: number, g: number, b: number): number {
+  const lin = (c8: number): number => {
+    const c = c8 / 255
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
   }
-  if (count === 0) return 0.32
-  const avgLuminance = luminance / count
-  return Math.min(0.62, Math.max(0.22, 0.2 + avgLuminance * 0.55))
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+}
+
+/** Rapport de contraste WCAG entre deux luminances relatives (1 à 21). */
+function contrastRatio(l1: number, l2: number): number {
+  const [hi, lo] = l1 >= l2 ? [l1, l2] : [l2, l1]
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+/** Couleur du texte principal de l'interface (`--color-ink`) — référence du
+ * calcul de contraste ci-dessous. */
+const INK = { r: 0xe9, g: 0xe9, b: 0xf2 }
+
+/** Seuil de lisibilité à NE JAMAIS franchir : 4.5:1, le minimum WCAG AA pour
+ * du texte courant. Tout fond retenu est assombri autant qu'il le faut pour
+ * l'atteindre — pas de « à peu près lisible ». */
+const MIN_CONTRAST = 4.5
+
+/** Part des pixels les plus CLAIRS qui pilote le calcul (10 % ici). Une
+ * moyenne globale est trompeuse : sur la photo d'une voiture sombre devant un
+ * ciel clair, elle reste basse alors que le texte posé sur le ciel est
+ * illisible. On dimensionne donc le voile sur les zones claires — celles qui
+ * mettent réellement le texte en difficulté — sans se laisser dicter la loi
+ * par un unique reflet spéculaire (d'où un centile, pas le maximum). */
+const BRIGHT_PERCENTILE = 0.9
+
+/**
+ * Opacité du voile noir à poser SUR une image importée pour GARANTIR que le
+ * texte clair de la page reste lisible — pas une estimation empirique mais la
+ * résolution directe du critère WCAG : on cherche la plus petite opacité pour
+ * laquelle le contraste entre `--color-ink` et les zones claires de l'image
+ * atteint `MIN_CONTRAST`. L'image reste ainsi aussi visible que la lisibilité
+ * l'autorise, jamais assombrie plus que nécessaire — et jamais moins.
+ *
+ * Le mélange est calculé en sRGB (comme le fait le compositeur CSS pour un
+ * `background: rgb(0 0 0 / α)` superposé), puis relinéarisé pour la luminance
+ * WCAG — un raccourci qui multiplierait la luminance par `(1 - α)` se
+ * tromperait d'un facteur gamma.
+ */
+export async function computeReadableScrim(dataUrl: string): Promise<number> {
+  const data = await sampleImage(dataUrl)
+  // Image illisible : voile prudent (une image qu'on ne peut pas analyser
+  // peut être n'importe quoi, dont un fond blanc).
+  if (!data) return 0.55
+
+  const luminances: number[] = []
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue
+    luminances.push(relativeLuminance(data[i], data[i + 1], data[i + 2]))
+  }
+  if (luminances.length === 0) return 0.55
+
+  luminances.sort((a, b) => a - b)
+  const reference = luminances[Math.min(luminances.length - 1, Math.floor(luminances.length * BRIGHT_PERCENTILE))]
+
+  // Reconstitue une couleur grise de cette luminance pour rejouer le mélange
+  // en sRGB : le voile s'applique aux canaux, pas à la luminance.
+  const toSrgb8 = (linear: number): number => {
+    const c = linear <= 0.0031308 ? linear * 12.92 : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055
+    return Math.max(0, Math.min(255, c * 255))
+  }
+  const base = toSrgb8(reference)
+  const inkLuminance = relativeLuminance(INK.r, INK.g, INK.b)
+
+  // Recherche dichotomique de l'opacité minimale suffisante. 12 itérations →
+  // précision ~0.0002, largement au-delà du visible.
+  let low = 0
+  let high = 0.92
+  if (contrastRatio(inkLuminance, relativeLuminance(base * (1 - high), base * (1 - high), base * (1 - high))) < MIN_CONTRAST) {
+    return high
+  }
+  for (let i = 0; i < 12; i++) {
+    const mid = (low + high) / 2
+    const dimmed = base * (1 - mid)
+    if (contrastRatio(inkLuminance, relativeLuminance(dimmed, dimmed, dimmed)) >= MIN_CONTRAST) high = mid
+    else low = mid
+  }
+  // Arrondi VERS LE HAUT (jamais `Math.round`) : arrondir au centième le plus
+  // proche pouvait redescendre juste SOUS le seuil (4.4989:1 mesuré) et
+  // annuler la garantie que toute cette fonction existe pour tenir.
+  return Math.min(0.92, Math.ceil(high * 100) / 100)
 }
