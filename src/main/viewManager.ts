@@ -423,6 +423,21 @@ export class ViewManager {
    * LRU/réhydratation, où l'historique natif repart de zéro) — voir
    * `effectiveCanGoBack`/`performGoBack`, et `closePage` pour le nettoyage. */
   private everNewTab = new Set<PageId>()
+  /** Pages dont la page COURANTE est exactement à un pas d'un nouvel onglet
+   * vierge quitté à l'instant (recherche/URL depuis la page d'accueil) —
+   * recalculé à CHAQUE navigation commitée (voir `onNavigated`), qu'elle
+   * vienne de nous (recherche, raccourci) ou d'un clic dans la page. Filet
+   * PRIORITAIRE sur l'historique natif pour `performGoBack` : `loadURL()`
+   * n'écrase jamais la branche « avancer » restée au-delà de la position
+   * courante (contrairement à une navigation d'adresse dans un vrai
+   * navigateur) — une recherche → retour → NOUVELLE recherche empilait donc
+   * la nouvelle page par-dessus l'ancienne branche jamais purgée, et un
+   * premier clic « retour » retombait sur l'ancienne recherche au lieu de la
+   * page d'accueil. Plutôt que de tenter de manipuler l'historique natif
+   * (fragile, sensible au moment exact où Chromium committe), on sait ICI,
+   * de façon déterministe, que le retour doit mener DIRECTEMENT au nouvel
+   * onglet — sans jamais consulter `navigationHistory` pour cette étape. */
+  private singleHopFromNewTab = new Set<PageId>()
 
   constructor(
     private win: BrowserWindow,
@@ -628,17 +643,26 @@ export class ViewManager {
   }
 
   /** `navigationHistory.canGoBack()` seul ne suffit pas pour une page née
-   * d'un nouvel onglet (voir `everNewTab`) — combine la vérité native avec ce
-   * filet de secours. */
+   * d'un nouvel onglet (voir `everNewTab`/`singleHopFromNewTab`) — combine la
+   * vérité native avec ces filets de secours. */
   private effectiveCanGoBack(pageId: PageId, wc: WebContents): boolean {
+    if (this.singleHopFromNewTab.has(pageId) && !this.isNewTabUrl(wc.getURL())) return true
     if (wc.navigationHistory.canGoBack()) return true
     return this.everNewTab.has(pageId) && !this.isNewTabUrl(wc.getURL())
   }
 
-  /** Retour arrière robuste : bascule sur `aether://newtab` quand
-   * l'historique natif n'a rien à offrir mais que la page en est bien issue
-   * (voir `everNewTab`) — sans ce filet, le bouton reste grisé/inopérant. */
+  /** Retour arrière robuste. `singleHopFromNewTab` est PRIORITAIRE sur
+   * l'historique natif (pas un simple repli) : quand la page courante est à
+   * exactement un pas d'un nouvel onglet tout juste quitté, le retour doit
+   * mener DIRECTEMENT au nouvel onglet, quelle que soit la branche
+   * « avancer » que l'historique natif a pu accumuler par ailleurs (voir le
+   * commentaire de `singleHopFromNewTab`). `everNewTab` reste un filet plus
+   * large en dernier recours si l'historique natif n'a rien à offrir. */
   private performGoBack(pageId: PageId, wc: WebContents): void {
+    if (this.singleHopFromNewTab.has(pageId) && !this.isNewTabUrl(wc.getURL())) {
+      void this.navigate(pageId, 'aether://newtab')
+      return
+    }
     if (wc.navigationHistory.canGoBack()) {
       wc.navigationHistory.goBack()
       return
@@ -681,7 +705,19 @@ export class ViewManager {
     })
 
     const onNavigated = (url: string): void => {
+      // `singleHopFromNewTab` recalculé à CHAQUE navigation committée (pas
+      // seulement celles lancées par `navigate()`) : couvre aussi un clic
+      // dans la page elle-même, qui invalide tout autant la relation « à un
+      // pas d'un nouvel onglet » pour la page maintenant affichée.
+      const previousUrl = pagesRepo.get(pageId)?.url
       if (pagesRepo.get(pageId)) pagesRepo.updateNavigation(pageId, url)
+      if (previousUrl !== undefined) {
+        if (this.isNewTabUrl(previousUrl) && !this.isNewTabUrl(url)) {
+          this.singleHopFromNewTab.add(pageId)
+        } else {
+          this.singleHopFromNewTab.delete(pageId)
+        }
+      }
       this.patchRuntime(pageId, {
         canGoBack: this.effectiveCanGoBack(pageId, wc),
         canGoForward: nav.canGoForward()
@@ -1370,7 +1406,12 @@ export class ViewManager {
     // `startsWith` (pas égalité stricte) : le schéma standard `aether:`
     // normalise l'URL committée en 'aether://newtab/' (barre oblique finale).
     const leavingNewTab = this.isNewTabUrl(row.url) && !this.isNewTabUrl(url)
-    if (leavingNewTab) this.everNewTab.add(id)
+    if (leavingNewTab) {
+      this.everNewTab.add(id)
+      this.singleHopFromNewTab.add(id)
+    } else {
+      this.singleHopFromNewTab.delete(id)
+    }
     pagesRepo.updateNavigation(id, url)
 
     const existing = this.views.get(id)
@@ -1392,26 +1433,10 @@ export class ViewManager {
     await this.pendingInitialLoad.get(id)
     if (!this.views.has(id) || this.views.get(id) !== view) return
     this.syncStoreShim(id, view.webContents, url)
-    // `webContents.loadURL()` — contrairement à une navigation d'adresse dans
-    // un vrai navigateur — n'écrase JAMAIS la branche « avancer » restée
-    // au-delà de la position courante : elle reste indéfiniment accessible en
-    // cliquant « retour » plusieurs fois de suite (constaté : après un retour
-    // puis une NOUVELLE recherche, un premier clic « retour » retombait sur
-    // l'ANCIENNE recherche au lieu de la page d'accueil — la nouvelle page
-    // s'était simplement empilée PAR-DESSUS l'ancienne branche, jamais
-    // purgée). On retire nous-mêmes cette branche obsolète, comme le ferait
-    // Chromium pour une navigation venant réellement de la barre d'adresse.
-    // Capturé AVANT `loadURL` (donc avant tout ajout) et retiré dans le MÊME
-    // tick, sans `await` entre les deux : aucune autre navigation ne peut
-    // s'intercaler pour invalider ces indices.
-    const nav = view.webContents.navigationHistory
-    const staleFrom = nav.getActiveIndex() + 1
-    const staleTo = nav.length() - 1
     void view.webContents.loadURL(url).catch(() => undefined)
-    for (let i = staleTo; i >= staleFrom; i--) nav.removeEntryAtIndex(i)
-    // Poussé tout de suite (pas d'attente de `did-navigate`) : `everNewTab`
-    // sait déjà, dès cet instant, que le bouton « retour » doit s'activer —
-    // inutile de laisser le bouton grisé le temps que Chromium confirme.
+    // Poussé tout de suite (pas d'attente de `did-navigate`) : le bouton
+    // « retour » doit s'activer dès cet instant — inutile de le laisser
+    // grisé le temps que Chromium confirme.
     this.patchRuntime(id, {
       loadError: null,
       canGoBack: leavingNewTab ? true : this.getRuntime(id).canGoBack
@@ -1815,6 +1840,7 @@ export class ViewManager {
     this.destroyView(id, { keepPreview: false })
     this.runtime.delete(id)
     this.everNewTab.delete(id)
+    this.singleHopFromNewTab.delete(id)
     this.visibleIds = this.visibleIds.filter((x) => x !== id)
   }
 

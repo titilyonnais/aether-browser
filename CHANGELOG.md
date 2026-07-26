@@ -4,6 +4,28 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.65.0] — 2026-07-26
+
+### Corrigé
+
+- **Le bouton « retour » retombait sur l'ANCIENNE recherche au lieu de la page d'accueil**,
+  après un cycle recherche → retour → NOUVELLE recherche → retour — la purge de branche
+  d'historique de la 0.64.0 n'y suffisait pas. Le retour vers `aether://newtab` ne dépend plus
+  DU TOUT de l'historique natif de Chromium pour cette étape précise : la page courante sait
+  désormais elle-même, de façon déterministe, qu'elle est à exactement un pas d'un nouvel
+  onglet tout juste quitté, et y retourne directement.
+
+### Amélioré
+
+- **Lisibilité de la page de nouvel onglet sur un fond personnalisé** — voile de lisibilité
+  calibré automatiquement (fixe et réglé à la main par thème intégré ; calculé depuis la
+  luminance moyenne pour une image importée, plus sombre = voile plus léger), surfaces en verre
+  dépoli sur la barre de recherche et les icônes de raccourcis, ombre portée sur les textes nus
+  (horloge, libellés) — lisible quel que soit le fond choisi.
+- **Choisir un thème intégré restylise maintenant le navigateur complet** — sa couleur d'accent
+  (boutons, surbrillances) et un voile assorti sur la bande de titre/les marges, pas seulement
+  le fond de la page d'accueil.
+
 ## [0.64.0] — 2026-07-25
 
 ### Ajouté

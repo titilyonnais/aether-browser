@@ -251,6 +251,19 @@ export interface NewTabWidgets {
   news: boolean
 }
 
+/** Fond d'écran de la page de nouvel onglet intégrée. `'preset'` référence un
+ * dégradé intégré (id dans BACKGROUND_PRESETS, renderer), `'custom'` un
+ * fichier importé (nom stocké dans le dossier géré des avatars, servi via
+ * `aether://avatars/<fichier>`). `scrim` (0-1) est l'opacité du voile sombre
+ * posé par-dessus pour la lisibilité — fixe par thème pour un préréglage,
+ * calculée automatiquement depuis la luminance moyenne de l'image pour un
+ * import personnel (voir `suggestScrimOpacity`, renderer/lib/dominantColor.ts). */
+export interface NewTabBackground {
+  kind: 'preset' | 'custom'
+  value: string
+  scrim: number
+}
+
 /** Résultat météo courant (widget nouvel onglet) — géolocalisation par IP, aucune clé requise. */
 export interface NewTabWeather {
   city: string
@@ -374,12 +387,11 @@ export interface AppSettings {
   newTabWeatherLocation: NewTabWeatherLocation | null
   /** Style d'affichage du widget actualités. */
   newTabNewsStyle: NewTabNewsStyle
-  /** Fond d'écran de la page de nouvel onglet intégrée — `'preset'` référence
-   * un dégradé intégré (id dans BACKGROUND_PRESETS, renderer), `'custom'` un
-   * fichier importé (nom stocké dans le dossier géré des avatars, servi via
-   * `aether://avatars/<fichier>`). Scopé à cette page (jamais peint derrière
-   * une page web, toujours recouverte par sa WebContentsView native). */
-  newTabBackground: { kind: 'preset' | 'custom'; value: string } | null
+  /** Fond d'écran de la page de nouvel onglet — voir `NewTabBackground`.
+   * Scopé à cette page (jamais peint derrière une page web, toujours
+   * recouverte par sa WebContentsView native) ; réappliqué aussi au fond de
+   * la chrome ÆTHER (bande de titre, marges) dans App.tsx. */
+  newTabBackground: NewTabBackground | null
   /** Facteur de zoom par défaut des pages web (1 = 100 %). */
   defaultZoom: number
   // — Confidentialité & sécurité —
@@ -469,7 +481,7 @@ export interface SettingsPatch {
   newTabWidgets?: Partial<NewTabWidgets>
   newTabWeatherLocation?: NewTabWeatherLocation | null
   newTabNewsStyle?: NewTabNewsStyle
-  newTabBackground?: { kind: 'preset' | 'custom'; value: string } | null
+  newTabBackground?: NewTabBackground | null
   defaultZoom?: number
   allowMedia?: boolean
   allowGeolocation?: boolean

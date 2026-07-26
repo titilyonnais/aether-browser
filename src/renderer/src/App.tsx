@@ -17,6 +17,7 @@ import { MusePanel } from '@/components/muse/MusePanel'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { useT } from '@/i18n/useT'
 import { holdZoomIndicator, initBridge, releaseZoomIndicator, runCommand } from '@/lib/actions'
+import { backgroundPresetCss } from '@/lib/backgroundPresets'
 import { usePagesStore } from '@/stores/pages'
 import { useSettingsStore } from '@/stores/settings'
 import { useSpacesStore } from '@/stores/spaces'
@@ -85,6 +86,7 @@ export default function App() {
   const fullscreenPageId = useUiStore((s) => s.fullscreenPageId)
   const accent = useSettingsStore((s) => s.settings?.accent ?? 'glacier')
   const accentCustom = useSettingsStore((s) => s.settings?.accentCustom ?? '')
+  const newTabBackground = useSettingsStore((s) => s.settings?.newTabBackground ?? null)
   const showFavoritesBar = useSettingsStore((s) => s.settings?.showFavoritesBar ?? false)
   const uiScale = useSettingsStore((s) => s.settings?.uiScale ?? 1)
   const spaceId = useSpacesStore((s) => s.activeSpaceId)
@@ -128,6 +130,29 @@ export default function App() {
     const hex = accent === 'custom' && accentCustom ? accentCustom : (ACCENT_HEX[accent] ?? ACCENT_HEX.glacier)
     document.documentElement.style.setProperty('--color-glacier', hex)
   }, [accent, accentCustom])
+
+  // Thème de nouvel onglet choisi → aussi peint sur <body>, donc visible
+  // partout où aucune WebContentsView de page ne le recouvre (bande de
+  // titre, marges du canvas, espaces vides) : « choisir un thème change le
+  // style du navigateur complet », pas juste sa page d'accueil. La couleur
+  // d'accent (ci-dessus) suit déjà le même réglage pour un préréglage —
+  // voir `selectPreset`, NewTabPage.tsx.
+  useEffect(() => {
+    const style = document.body.style
+    if (!newTabBackground) {
+      style.backgroundImage = ''
+      return
+    }
+    if (newTabBackground.kind === 'preset') {
+      style.backgroundImage = backgroundPresetCss(newTabBackground.value) ?? ''
+      style.backgroundSize = ''
+      style.backgroundPosition = ''
+    } else {
+      style.backgroundImage = `url("aether://avatars/${newTabBackground.value}")`
+      style.backgroundSize = 'cover'
+      style.backgroundPosition = 'center'
+    }
+  }, [newTabBackground])
 
   // Taille de l'interface ÆTHER elle-même (Réglages › Apparence) — `zoom` sur
   // un wrapper dédié (UiScaleRoot ci-dessous), PAS sur <html>. `zoom` rescale

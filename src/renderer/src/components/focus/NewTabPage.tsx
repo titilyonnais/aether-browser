@@ -31,6 +31,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { buildSearchUrl, heuristicClassify, normalizeToUrl } from '@shared/intent'
 import type {
+  NewTabBackground,
   NewTabCitySuggestion,
   NewTabNewsItem,
   NewTabNewsStyle,
@@ -42,8 +43,8 @@ import type {
 import { Favicon } from '@/components/ui/Favicon'
 import { useT } from '@/i18n/useT'
 import { closePage, executeIntent } from '@/lib/actions'
-import { BACKGROUND_PRESETS, backgroundPresetCss } from '@/lib/backgroundPresets'
-import { extractDominantColor } from '@/lib/dominantColor'
+import { BACKGROUND_PRESETS, backgroundPreset, backgroundPresetCss, type BackgroundPreset } from '@/lib/backgroundPresets'
+import { extractDominantColor, suggestScrimOpacity } from '@/lib/dominantColor'
 import { cn, domainOf, uuid } from '@/lib/utils'
 import { useSearchEnginesStore } from '@/stores/searchEngines'
 import { useSettingsStore } from '@/stores/settings'
@@ -248,15 +249,32 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
     void useSettingsStore.getState().patch({ newTabNewsStyle: style })
   }
 
-  const setBackground = (next: { kind: 'preset' | 'custom'; value: string } | null): void => {
-    void useSettingsStore.getState().patch({ newTabBackground: next })
+  const clearBackground = (): void => {
+    void useSettingsStore.getState().patch({ newTabBackground: null })
+  }
+
+  // Choisir un thème intégré réapplique aussi sa couleur d'accent à TOUTE
+  // l'interface (boutons, surbrillances, `--color-glacier`) — pas seulement
+  // le fond de cette page : un thème « change le style du navigateur
+  // complet », pas juste sa page d'accueil.
+  const selectPreset = (preset: BackgroundPreset): void => {
+    void useSettingsStore.getState().patch({
+      newTabBackground: { kind: 'preset', value: preset.id, scrim: preset.scrim },
+      accent: 'custom',
+      accentCustom: preset.accent
+    })
   }
 
   const chooseBackgroundImage = async (): Promise<void> => {
     const result = await window.aether.newTab.chooseBackground()
     if (!result) return
     setPendingBackgroundDataUrl(result.dataUrl)
-    setBackground({ kind: 'custom', value: result.filename })
+    // Voile calibré automatiquement sur la luminance moyenne de LA photo
+    // choisie — une image claire (ciel, neige, plage) a besoin d'un voile
+    // bien plus soutenu qu'une image déjà sombre pour que le texte clair de
+    // la page reste lisible, voir `suggestScrimOpacity`.
+    const scrim = await suggestScrimOpacity(result.dataUrl)
+    void useSettingsStore.getState().patch({ newTabBackground: { kind: 'custom', value: result.filename, scrim } })
   }
 
   const useImageColor = async (): Promise<void> => {
@@ -280,6 +298,14 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
           backgroundPosition: 'center'
         }
     : {}
+  // Repli si `scrim` est absent (réglage enregistré par une version antérieure
+  // à son introduction) — pour un thème intégré, la valeur À JOUR du
+  // catalogue prime toujours sur celle éventuellement persistée.
+  const effectiveScrim = background
+    ? background.kind === 'preset'
+      ? (backgroundPreset(background.value)?.scrim ?? background.scrim ?? 0.32)
+      : (background.scrim ?? 0.32)
+    : 0
 
   if (!settings) return null
 
@@ -289,16 +315,29 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
       style={backgroundStyle}
     >
       {/* Voile de lisibilité — uniquement quand un fond personnalisé est actif,
-          pour que le texte/les widgets restent lisibles sur une image ou un
-          dégradé chargé, sans assombrir l'apparence par défaut. */}
-      {background && <div className="pointer-events-none absolute inset-0 bg-black/28" />}
+          opacité calibrée par thème (voir `scrim`, backgroundPresets.ts) ou
+          automatiquement sur la luminance de l'image importée (voir
+          `suggestScrimOpacity`) plutôt qu'une valeur fixe arbitraire. */}
+      {background && (
+        <div className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: effectiveScrim }} />
+      )}
       {widgets.weather && <WeatherWidget />}
-      {widgets.clock && <ClockWidget />}
+      {widgets.clock && <ClockWidget background={background} />}
 
       {/* Recherche — classification instantanée, tape et valide directement ici ;
           suggestions Google façon barre d'adresse Chrome (voir main/newtab.ts). */}
       <div ref={searchRootRef} className="relative mt-6 w-full max-w-lg">
-        <div className="flex items-center gap-3 rounded-2xl border border-white/[0.09] bg-white/[0.03] px-5 py-3.5 focus-within:border-glacier/40">
+        <div
+          className={cn(
+            'flex items-center gap-3 rounded-2xl border px-5 py-3.5 focus-within:border-glacier/40',
+            // Surface plus opaque + flou quand un fond est actif : garantit la
+            // lisibilité quel que soit ce qu'il y a derrière, plutôt que de
+            // tenter d'analyser le contraste au pixel près à cet endroit précis.
+            background
+              ? 'border-white/[0.14] bg-black/35 backdrop-blur-xl'
+              : 'border-white/[0.09] bg-white/[0.03]'
+          )}
+        >
           <Search size={16} strokeWidth={1.6} className="shrink-0 text-glacier" />
           <input
             // Pas de `autoFocus` : ouvrirait le menu « récents » (onFocus,
@@ -437,10 +476,20 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
                   title={shortcut.title || domainOf(shortcut.url)}
                   className="flex flex-col items-center gap-1.5"
                 >
-                  <span className="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03]">
+                  <span
+                    className={cn(
+                      'grid h-11 w-11 place-items-center overflow-hidden rounded-xl border',
+                      background ? 'border-white/[0.16] bg-black/30 backdrop-blur-md' : 'border-white/[0.08] bg-white/[0.03]'
+                    )}
+                  >
                     <Favicon url={shortcut.url} faviconUrl={googleFaviconUrl(shortcut.url)} size={44} className="h-full w-full" />
                   </span>
-                  <span className="w-full max-w-[64px] truncate text-[10.5px] text-ink-faint">
+                  <span
+                    className={cn(
+                      'w-full max-w-[64px] truncate text-[10.5px] text-ink-faint',
+                      background && 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]'
+                    )}
+                  >
                     {shortcut.title || domainOf(shortcut.url)}
                   </span>
                 </button>
@@ -474,10 +523,19 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
               title={t('focusCanvas.newTab.addShortcut')}
               className="flex flex-col items-center gap-1.5 rounded-xl p-2 text-center transition-colors hover:bg-white/[0.05]"
             >
-              <span className="grid h-11 w-11 place-items-center rounded-xl border border-dashed border-white/[0.12] text-ink-faint/50">
+              <span
+                className={cn(
+                  'grid h-11 w-11 place-items-center rounded-xl border border-dashed text-ink-faint/50',
+                  background ? 'border-white/[0.22] bg-black/20 backdrop-blur-sm' : 'border-white/[0.12]'
+                )}
+              >
                 <Plus size={16} strokeWidth={1.6} />
               </span>
-              <span className="text-[10.5px] text-ink-faint/50">{t('focusCanvas.newTab.addShortcut')}</span>
+              <span
+                className={cn('text-[10.5px] text-ink-faint/50', background && 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]')}
+              >
+                {t('focusCanvas.newTab.addShortcut')}
+              </span>
             </button>
           )
         })}
@@ -493,7 +551,10 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
         <button
           type="button"
           onClick={() => setCustomizeOpen((o) => !o)}
-          className="flex items-center gap-1.5 text-[11px] text-ink-faint/60 transition-colors hover:text-ink-faint"
+          className={cn(
+            'flex items-center gap-1.5 text-[11px] text-ink-faint/60 transition-colors hover:text-ink-faint',
+            background && 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]'
+          )}
         >
           <SettingsIcon size={11} strokeWidth={1.8} />
           {t('focusCanvas.newTab.customize')}
@@ -564,7 +625,7 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
               <button
                 type="button"
                 title={t('focusCanvas.newTab.backgroundNone')}
-                onClick={() => setBackground(null)}
+                onClick={clearBackground}
                 className={cn(
                   'grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-ink-faint transition-colors',
                   !background
@@ -579,7 +640,7 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
                   key={preset.id}
                   type="button"
                   title={preset.label}
-                  onClick={() => setBackground({ kind: 'preset', value: preset.id })}
+                  onClick={() => selectPreset(preset)}
                   className={cn(
                     'h-8 w-8 shrink-0 rounded-lg bg-cover transition-transform hover:scale-105',
                     background?.kind === 'preset' && background.value === preset.id
@@ -627,18 +688,23 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
   )
 }
 
-function ClockWidget() {
+function ClockWidget({ background }: { background: NewTabBackground | null }) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
+  // Ombre portée UNIQUEMENT sur fond actif — cette horloge n'a pas de
+  // surface propre (juste du texte à même le fond), un léger ombrage suffit
+  // à la garder lisible quelle que soit l'image/le dégradé en dessous, sans
+  // avoir à analyser le contraste au pixel près sous chaque caractère.
+  const shadow = background ? 'drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)]' : undefined
   return (
     <div className="flex flex-col items-center">
-      <span className="font-display text-[40px] leading-none text-ink">
+      <span className={cn('font-display text-[40px] leading-none text-ink', shadow)}>
         {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </span>
-      <span className="mt-1 text-[11.5px] capitalize text-ink-faint">
+      <span className={cn('mt-1 text-[11.5px] capitalize text-ink-faint', shadow)}>
         {now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}
       </span>
     </div>
