@@ -29,7 +29,6 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { buildSearchUrl, heuristicClassify, normalizeToUrl } from '@shared/intent'
 import type {
-  NewTabBackground,
   NewTabCitySuggestion,
   NewTabNewsItem,
   NewTabNewsStyle,
@@ -41,7 +40,7 @@ import type {
 import { Favicon } from '@/components/ui/Favicon'
 import { useT } from '@/i18n/useT'
 import { closePage, executeIntent } from '@/lib/actions'
-import { effectiveScrim, themeBackgroundCss } from '@/lib/theme'
+import { effectiveScrim, onBackgroundTextVars, themeAnimatedLayers, themeBackgroundCss } from '@/lib/theme'
 import { cn, domainOf, uuid } from '@/lib/utils'
 import { useSearchEnginesStore } from '@/stores/searchEngines'
 import { useSettingsStore } from '@/stores/settings'
@@ -245,12 +244,19 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
   }
 
   const themeCss = themeBackgroundCss(background)
-  const backgroundStyle: React.CSSProperties = themeCss
-    ? background?.kind === 'custom'
-      ? { backgroundImage: themeCss, backgroundSize: 'cover', backgroundPosition: 'center' }
-      : { backgroundImage: themeCss }
-    : {}
+  const backgroundStyle: React.CSSProperties = {
+    ...(themeCss
+      ? background?.kind === 'custom'
+        ? { backgroundImage: themeCss, backgroundSize: 'cover', backgroundPosition: 'center' }
+        : { backgroundImage: themeCss }
+      : {}),
+    // Remonte les tons de texte secondaires au-dessus du seuil de lisibilité
+    // quand un thème est actif — c'est le TEXTE qui s'adapte au fond, jamais
+    // une carte opaque posée derrière lui (voir `onBackgroundTextVars`).
+    ...(onBackgroundTextVars(Boolean(background)) as React.CSSProperties)
+  }
   const scrim = effectiveScrim(background)
+  const animatedLayers = themeAnimatedLayers(background)
 
   if (!settings) return null
 
@@ -259,30 +265,37 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
       className="absolute inset-0 flex flex-col items-center overflow-y-auto px-6 py-14"
       style={backgroundStyle}
     >
-      {/* Voile de lisibilité — uniquement quand un fond personnalisé est actif,
-          opacité calibrée par thème (voir `scrim`, backgroundPresets.ts) ou
-          automatiquement sur la luminance de l'image importée (voir
-          `computeReadableScrim`) plutôt qu'une valeur fixe arbitraire. */}
+      {/* Couches animées des thèmes vivants — SOUS le voile, pour rester
+          couvertes par la garantie de contraste (elles ne peuvent donc jamais
+          rendre un texte illisible en dérivant). `overflow-hidden` sur un
+          conteneur dédié : les couches débordent volontairement du cadre pour
+          qu'aucune rotation ni dérive ne découvre de bord. */}
+      {animatedLayers.length > 0 && (
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {animatedLayers.map((layer, i) => (
+            <div
+              key={i}
+              className={cn('theme-layer', layer.className)}
+              style={{ backgroundImage: layer.css }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Voile de lisibilité — assombrit le fond juste assez pour que le texte
+          le PLUS SOMBRE de la page atteigne 4.5:1 (WCAG AA) : valeur calibrée
+          par thème intégré, calculée sur l'image pour un import personnel
+          (voir `computeReadableScrim`). Jamais une opacité fixe arbitraire. */}
       {background && (
         <div className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: scrim }} />
       )}
-      {widgets.weather && <WeatherWidget hasTheme={Boolean(background)} />}
-      {widgets.clock && <ClockWidget background={background} />}
+      {widgets.weather && <WeatherWidget />}
+      {widgets.clock && <ClockWidget />}
 
       {/* Recherche — classification instantanée, tape et valide directement ici ;
           suggestions Google façon barre d'adresse Chrome (voir main/newtab.ts). */}
       <div ref={searchRootRef} className="relative mt-6 w-full max-w-lg">
-        <div
-          className={cn(
-            'flex items-center gap-3 rounded-2xl border px-5 py-3.5 focus-within:border-glacier/40',
-            // Surface plus opaque + flou quand un fond est actif : garantit la
-            // lisibilité quel que soit ce qu'il y a derrière, plutôt que de
-            // tenter d'analyser le contraste au pixel près à cet endroit précis.
-            background
-              ? 'border-white/[0.14] bg-black/35 backdrop-blur-xl'
-              : 'border-white/[0.09] bg-white/[0.03]'
-          )}
-        >
+        <div className="flex items-center gap-3 rounded-2xl border border-white/[0.09] bg-white/[0.03] px-5 py-3.5 focus-within:border-glacier/40">
           <Search size={16} strokeWidth={1.6} className="shrink-0 text-glacier" />
           <input
             // Pas de `autoFocus` : ouvrirait le menu « récents » (onFocus,
@@ -421,20 +434,10 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
                   title={shortcut.title || domainOf(shortcut.url)}
                   className="flex flex-col items-center gap-1.5"
                 >
-                  <span
-                    className={cn(
-                      'grid h-11 w-11 place-items-center overflow-hidden rounded-xl border',
-                      background ? 'border-white/[0.16] bg-black/30 backdrop-blur-md' : 'border-white/[0.08] bg-white/[0.03]'
-                    )}
-                  >
+                  <span className="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03]">
                     <Favicon url={shortcut.url} faviconUrl={googleFaviconUrl(shortcut.url)} size={44} className="h-full w-full" />
                   </span>
-                  <span
-                    className={cn(
-                      'w-full max-w-[64px] truncate text-[10.5px] text-ink-faint',
-                      background && 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]'
-                    )}
-                  >
+                  <span className="w-full max-w-[64px] truncate text-[10.5px] text-ink-faint">
                     {shortcut.title || domainOf(shortcut.url)}
                   </span>
                 </button>
@@ -468,25 +471,16 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
               title={t('focusCanvas.newTab.addShortcut')}
               className="flex flex-col items-center gap-1.5 rounded-xl p-2 text-center transition-colors hover:bg-white/[0.05]"
             >
-              <span
-                className={cn(
-                  'grid h-11 w-11 place-items-center rounded-xl border border-dashed text-ink-faint/50',
-                  background ? 'border-white/[0.22] bg-black/20 backdrop-blur-sm' : 'border-white/[0.12]'
-                )}
-              >
+              <span className="grid h-11 w-11 place-items-center rounded-xl border border-dashed border-white/[0.12] text-ink-faint/50">
                 <Plus size={16} strokeWidth={1.6} />
               </span>
-              <span
-                className={cn('text-[10.5px] text-ink-faint/50', background && 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]')}
-              >
-                {t('focusCanvas.newTab.addShortcut')}
-              </span>
+              <span className="text-[10.5px] text-ink-faint/50">{t('focusCanvas.newTab.addShortcut')}</span>
             </button>
           )
         })}
       </div>
 
-      {widgets.news && <NewsWidget style={newsStyle} onOpen={goTo} hasTheme={Boolean(background)} />}
+      {widgets.news && <NewsWidget style={newsStyle} onOpen={goTo} />}
 
       {/* `relative` porte UNIQUEMENT le bouton (pas de padding à l'intérieur) :
           `bottom-full` sur le panneau se cale sur le bord de CE conteneur —
@@ -496,10 +490,7 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
         <button
           type="button"
           onClick={() => setCustomizeOpen((o) => !o)}
-          className={cn(
-            'flex items-center gap-1.5 text-[11px] text-ink-faint/60 transition-colors hover:text-ink-faint',
-            background && 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]'
-          )}
+          className="flex items-center gap-1.5 text-[11px] text-ink-faint/60 transition-colors hover:text-ink-faint"
         >
           <SettingsIcon size={11} strokeWidth={1.8} />
           {t('focusCanvas.newTab.customize')}
@@ -573,23 +564,18 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
   )
 }
 
-function ClockWidget({ background }: { background: NewTabBackground | null }) {
+function ClockWidget() {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
-  // Ombre portée UNIQUEMENT sur fond actif — cette horloge n'a pas de
-  // surface propre (juste du texte à même le fond), un léger ombrage suffit
-  // à la garder lisible quelle que soit l'image/le dégradé en dessous, sans
-  // avoir à analyser le contraste au pixel près sous chaque caractère.
-  const shadow = background ? 'drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)]' : undefined
   return (
     <div className="flex flex-col items-center">
-      <span className={cn('font-display text-[40px] leading-none text-ink', shadow)}>
+      <span className="font-display text-[40px] leading-none text-ink">
         {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </span>
-      <span className={cn('mt-1 text-[11.5px] capitalize text-ink-faint', shadow)}>
+      <span className="mt-1 text-[11.5px] capitalize text-ink-faint">
         {now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}
       </span>
     </div>
@@ -615,7 +601,7 @@ function weatherIcon(code: number): typeof Sun {
  * d'infos (ressenti, humidité, vent, UV, lever/coucher) ; une icône dédiée
  * ouvre la localisation (auto/ville). Autonome : lit/écrit directement
  * `newTabWeatherLocation`, pas besoin que le parent lui passe quoi que ce soit. */
-function WeatherWidget({ hasTheme }: { hasTheme: boolean }) {
+function WeatherWidget() {
   const t = useT()
   const settings = useSettingsStore((s) => s.settings)
   const location = settings?.newTabWeatherLocation ?? null
@@ -707,14 +693,7 @@ function WeatherWidget({ hasTheme }: { hasTheme: boolean }) {
 
   return (
     <div ref={rootRef} className="absolute left-5 top-5 z-10 w-[220px]">
-      <div
-        className={cn(
-          'overflow-hidden rounded-2xl border',
-          // `.glass` est volontairement très translucide — insuffisant
-          // par-dessus une photo, d'où une surface dédiée plus opaque.
-          hasTheme ? 'border-white/[0.14] bg-black/50 backdrop-blur-xl' : 'glass border-white/[0.08]'
-        )}
-      >
+      <div className="glass overflow-hidden rounded-2xl border border-white/[0.08]">
         <button
           type="button"
           onClick={() => setDetailsOpen((o) => !o)}
@@ -849,16 +828,7 @@ function shuffled<T>(arr: T[]): T[] {
   return a
 }
 
-function NewsWidget({
-  style,
-  onOpen,
-  hasTheme
-}: {
-  style: NewTabNewsStyle
-  onOpen: (url: string) => void
-  /** Un thème est actif : les textes ont besoin de leur propre surface. */
-  hasTheme: boolean
-}) {
+function NewsWidget({ style, onOpen }: { style: NewTabNewsStyle; onOpen: (url: string) => void }) {
   const t = useT()
   const [items, setItems] = useState<NewTabNewsItem[]>([])
   const [refreshing, setRefreshing] = useState(false)
@@ -891,12 +861,7 @@ function NewsWidget({
   return (
     <div className={style === 'photos' ? 'mt-8 w-full max-w-3xl' : 'mt-8 w-full max-w-lg'}>
       <div className="mb-1.5 flex items-center justify-between px-1">
-        <p
-          className={cn(
-            'flex items-center gap-1.5 text-[10.5px] uppercase tracking-wide text-ink-faint/70',
-            hasTheme && 'text-ink-dim drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]'
-          )}
-        >
+        <p className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wide text-ink-faint/70">
           <Newspaper size={11} strokeWidth={1.8} />
           {t('focusCanvas.newTab.newsTitle')}
         </p>
@@ -936,28 +901,14 @@ function NewsWidget({
                   <div className="absolute inset-0 bg-gradient-to-br from-white/[0.06] to-transparent" />
                 )}
               </div>
-              {/* Sur un thème actif, le titre reçoit sa PROPRE surface opaque
-                  (verre dépoli) : posé à même le fond, il se noyait dans
-                  l'image — c'est précisément ce qui rendait les actualités
-                  illisibles sur une photo. */}
-              <p
-                className={cn(
-                  'mt-2 text-[12.5px] font-medium leading-snug text-ink-dim transition-colors group-hover:text-ink',
-                  hasTheme && 'rounded-lg border border-white/[0.1] bg-black/55 px-2.5 py-1.5 backdrop-blur-md'
-                )}
-              >
+              <p className="mt-2 text-[12.5px] font-medium leading-snug text-ink-dim transition-colors group-hover:text-ink">
                 {item.title}
               </p>
             </button>
           ))}
         </div>
       ) : (
-        <div
-          className={cn(
-            'rounded-xl border',
-            hasTheme ? 'border-white/[0.12] bg-black/45 backdrop-blur-md' : 'border-white/[0.07] bg-white/[0.02]'
-          )}
-        >
+        <div className="rounded-xl border border-white/[0.07] bg-white/[0.02]">
           {displayItems.map((item, i) => (
             <button
               key={item.url + i}

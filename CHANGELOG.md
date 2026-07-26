@@ -4,6 +4,43 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.67.0] — 2026-07-26
+
+### Corrigé
+
+- **Le bouton « retour » ramenait à la recherche précédente — cause réelle enfin trouvée.** Les
+  pages de résultats Google réécrivent leur URL en permanence (`pushState`). Or le repère
+  « cette page est à un pas de la page d'accueil » était recalculé à CHAQUE navigation commitée,
+  `did-navigate-in-page` comprise : il était donc effacé une fraction de seconde après avoir été
+  posé, et le retour retombait sur l'historique natif — correct par coïncidence au premier cycle,
+  faux dès le second. Seuls deux évènements le font désormais évoluer : nos propres navigations,
+  et `will-navigate` (l'utilisateur part vraiment ailleurs).
+- **Le bouton latéral de la souris ne revenait pas à la page d'accueil** — il est traité par
+  Chromium lui-même et ne passe jamais par le code d'ÆTHER. Plutôt que d'intercepter chaque
+  chemin séparément, c'est l'historique natif qui est désormais purgé de ses entrées périmées
+  (`loadURL` n'écrase pas la branche « avancer », contrairement à une vraie barre d'adresse).
+  Flèche, bouton de souris, Alt+Flèche gauche et geste tactile sont corrigés d'un seul coup.
+- Cinq tests de non-régression couvrent ces séquences, dont le `pushState` et le retour purement
+  natif — ils échouent bien sans les correctifs.
+
+### Modifié
+
+- **Plus de cartes sombres derrière les textes de la page d'accueil.** La lisibilité passe
+  désormais par un vrai calcul de contraste (même méthode que WebAIM / Coolors) : les tons de
+  texte secondaires sont remontés au-dessus du seuil WCAG AA quand un thème est actif, et le
+  voile de fond est dimensionné pour garantir 4.5:1 sur la couleur de texte **la plus sombre** de
+  la page — pas seulement la principale, comme c'était le cas. C'est le texte qui s'adapte au
+  fond, jamais un cadre opaque posé par-dessus.
+
+### Ajouté
+
+- **Cinq thèmes vivants** — Aurore boréale, Pulsar, Prisma, Marée et Solstice : des couches de
+  lumière qui dérivent, tournent et pulsent en continu. Animées uniquement en
+  `transform`/`opacity`, elles sont composées par le GPU sans aucun coût de mise en page ni de
+  repeinte, et se figent d'elles-mêmes si le système demande de réduire les animations. Leur
+  vignette dans les réglages est animée elle aussi. Le contraste reste garanti même au pire
+  empilement des couches (vérifié : minimum 5.7:1).
+
 ## [0.66.0] — 2026-07-26
 
 ### Corrigé

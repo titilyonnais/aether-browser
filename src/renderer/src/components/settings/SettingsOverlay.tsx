@@ -74,7 +74,7 @@ import {
   setProfileAvatarImage,
   switchProfile
 } from '@/lib/actions'
-import { BACKGROUND_PRESETS, backgroundPresetCss, type BackgroundPreset } from '@/lib/backgroundPresets'
+import { BACKGROUND_PRESETS, themePreviewCss, type BackgroundPreset } from '@/lib/backgroundPresets'
 import { computeReadableScrim, extractDominantColor } from '@/lib/dominantColor'
 import { PERMISSION_LABELS } from '@/lib/sitePermissionLabels'
 import { cn, formatBytes } from '@/lib/utils'
@@ -975,13 +975,26 @@ function ThemeBlock({
             title={preset.label}
             onClick={() => void selectPreset(preset)}
             className={cn(
-              'h-11 w-11 rounded-xl bg-cover transition-transform hover:scale-105',
+              'relative h-11 w-11 overflow-hidden rounded-xl bg-cover transition-transform hover:scale-105',
               theme?.kind === 'preset' && theme.value === preset.id
                 ? 'ring-2 ring-offset-2 ring-offset-abyss ring-glacier/60'
                 : ''
             )}
-            style={{ backgroundImage: backgroundPresetCss(preset.id) ?? undefined }}
-          />
+            style={{ backgroundImage: themePreviewCss(preset) }}
+          >
+            {/* Thème vivant : une couche réellement animée dans la vignette —
+                le mouvement est ce qui le distingue, un aperçu figé ne le
+                laisserait pas deviner. Le fond composé (`themePreviewCss`)
+                reste dessous pour que la vignette ait ses vraies couleurs
+                même animation coupée (`prefers-reduced-motion`). */}
+            {preset.animated?.map((layer, i) => (
+              <span
+                key={i}
+                className={cn('theme-layer', layer.className)}
+                style={{ backgroundImage: layer.css }}
+              />
+            ))}
+          </button>
         ))}
         <label
           title={t('settings.appearance.themeCustomImage')}

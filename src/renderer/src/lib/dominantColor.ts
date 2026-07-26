@@ -78,9 +78,13 @@ function contrastRatio(l1: number, l2: number): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-/** Couleur du texte principal de l'interface (`--color-ink`) — référence du
- * calcul de contraste ci-dessous. */
-const INK = { r: 0xe9, g: 0xe9, b: 0xf2 }
+/** Texte de référence du calcul : la couleur la PLUS SOMBRE employée par-dessus
+ * un thème (`ON_BACKGROUND_TEXT.faint`, voir theme.ts). Viser le texte
+ * principal seul ne suffirait pas — les tons secondaires, plus sombres,
+ * passeraient sous le seuil alors même que le calcul se déclarerait satisfait.
+ * En dimensionnant sur le pire des trois, TOUT le texte de la page est
+ * garanti d'un coup. */
+const REFERENCE_TEXT = { r: 0xcf, g: 0xcf, b: 0xdd }
 
 /** Seuil de lisibilité à NE JAMAIS franchir : 4.5:1, le minimum WCAG AA pour
  * du texte courant. Tout fond retenu est assombri autant qu'il le faut pour
@@ -99,7 +103,7 @@ const BRIGHT_PERCENTILE = 0.9
  * Opacité du voile noir à poser SUR une image importée pour GARANTIR que le
  * texte clair de la page reste lisible — pas une estimation empirique mais la
  * résolution directe du critère WCAG : on cherche la plus petite opacité pour
- * laquelle le contraste entre `--color-ink` et les zones claires de l'image
+ * laquelle le contraste entre `REFERENCE_TEXT` et les zones claires de l'image
  * atteint `MIN_CONTRAST`. L'image reste ainsi aussi visible que la lisibilité
  * l'autorise, jamais assombrie plus que nécessaire — et jamais moins.
  *
@@ -131,19 +135,19 @@ export async function computeReadableScrim(dataUrl: string): Promise<number> {
     return Math.max(0, Math.min(255, c * 255))
   }
   const base = toSrgb8(reference)
-  const inkLuminance = relativeLuminance(INK.r, INK.g, INK.b)
+  const textLuminance = relativeLuminance(REFERENCE_TEXT.r, REFERENCE_TEXT.g, REFERENCE_TEXT.b)
 
   // Recherche dichotomique de l'opacité minimale suffisante. 12 itérations →
   // précision ~0.0002, largement au-delà du visible.
   let low = 0
   let high = 0.92
-  if (contrastRatio(inkLuminance, relativeLuminance(base * (1 - high), base * (1 - high), base * (1 - high))) < MIN_CONTRAST) {
+  if (contrastRatio(textLuminance, relativeLuminance(base * (1 - high), base * (1 - high), base * (1 - high))) < MIN_CONTRAST) {
     return high
   }
   for (let i = 0; i < 12; i++) {
     const mid = (low + high) / 2
     const dimmed = base * (1 - mid)
-    if (contrastRatio(inkLuminance, relativeLuminance(dimmed, dimmed, dimmed)) >= MIN_CONTRAST) high = mid
+    if (contrastRatio(textLuminance, relativeLuminance(dimmed, dimmed, dimmed)) >= MIN_CONTRAST) high = mid
     else low = mid
   }
   // Arrondi VERS LE HAUT (jamais `Math.round`) : arrondir au centième le plus

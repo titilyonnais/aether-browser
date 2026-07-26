@@ -42,6 +42,24 @@ function fakeWebContents() {
     __currentUrl() {
       return history.entries[history.activeIndex] ?? ''
     },
+    /** Navigation SAME-DOCUMENT (`pushState`) — ce que font en permanence les
+     * pages de résultats Google. Chromium n'émet alors que
+     * `did-navigate-in-page`, jamais `will-navigate`. */
+    __pushState(url: string) {
+      history.entries.push(url)
+      history.activeIndex = history.entries.length - 1
+      this.__emit('did-navigate-in-page', {}, url, true)
+    },
+    /** Clic sur un lien DANS la page : Chromium annonce d'abord son intention
+     * (`will-navigate`), puis committe. */
+    __clickLink(url: string) {
+      this.__emit('will-navigate', { preventDefault() {} }, url)
+      this.__commit(url)
+    },
+    /** Historique complet, pour vérifier la purge des entrées périmées. */
+    __history() {
+      return { entries: [...history.entries], activeIndex: history.activeIndex }
+    },
     isDestroyed: vi.fn(() => false),
     isCrashed: vi.fn(() => false),
     isLoading: vi.fn(() => false),
@@ -67,6 +85,19 @@ function fakeWebContents() {
       toJPEG: () => Buffer.from('')
     })),
     navigationHistory: {
+      getActiveIndex: vi.fn(() => history.activeIndex),
+      getEntryAtIndex: vi.fn((i: number) =>
+        history.entries[i] === undefined ? null : { url: history.entries[i] }
+      ),
+      // Retirer une entrée décale celles au-dessus — et l'entrée active avec,
+      // si elle en faisait partie. Reproduit fidèlement, sans quoi le test ne
+      // pourrait pas valider la purge.
+      removeEntryAtIndex: vi.fn((i: number) => {
+        if (i < 0 || i >= history.entries.length || i === history.activeIndex) return false
+        history.entries.splice(i, 1)
+        if (i < history.activeIndex) history.activeIndex--
+        return true
+      }),
       canGoBack: vi.fn(() => history.activeIndex > 0),
       canGoForward: vi.fn(() => history.activeIndex < history.entries.length - 1),
       // Un vrai retour d'historique : recule d'une entrée et notifie, comme
@@ -337,6 +368,55 @@ describe('ViewManager — retour vers la page d’accueil', () => {
     expect(await clickBack(vm, 'a')).toContain('aether://newtab')
   })
 
+  it('résiste aux pushState de la page de résultats (cause réelle de la régression)', async () => {
+    // Google réécrit son URL par `pushState` en permanence sur ses pages de
+    // résultats. Une version précédente recalculait le repère « à un pas de la
+    // page d'accueil » à chaque navigation commitée, `did-navigate-in-page`
+    // comprise : le repère était donc effacé une fraction de seconde après
+    // avoir été posé, et le retour retombait sur l'historique natif — correct
+    // par coïncidence au 1er cycle, faux dès le 2nd.
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', NEWTAB)
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit(NEWTAB_COMMITTED)
+
+    await search(vm, 'a', 'https://google.com/search?q=animal')
+    wc.__pushState('https://google.com/search?q=animal&sca_esv=1')
+    expect(await clickBack(vm, 'a')).toContain('aether://newtab')
+
+    await search(vm, 'a', 'https://google.com/search?q=bill+gates')
+    wc.__pushState('https://google.com/search?q=bill+gates&sca_esv=2')
+    expect(await clickBack(vm, 'a')).toContain('aether://newtab')
+  })
+
+  it('purge l’historique pour que le bouton LATÉRAL de la souris marche aussi', async () => {
+    // Le bouton latéral (comme Alt+Flèche gauche ou un geste tactile) est
+    // traité par Chromium LUI-MÊME : il ne passe jamais par `goBack()` du
+    // ViewManager. La seule façon de le corriger est que l'historique natif
+    // soit lui-même juste — d'où la purge des entrées périmées.
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', NEWTAB)
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit(NEWTAB_COMMITTED)
+
+    await search(vm, 'a', 'https://google.com/search?q=animal')
+    await clickBack(vm, 'a')
+    await search(vm, 'a', 'https://google.com/search?q=bill+gates')
+
+    // L'entrée « animal », périmée, ne doit plus se trouver entre la page
+    // d'accueil et la page courante.
+    const { entries, activeIndex } = wc.__history()
+    expect(entries[activeIndex]).toBe('https://google.com/search?q=bill+gates')
+    expect(entries[activeIndex - 1]).toContain('aether://newtab')
+
+    // Un retour purement natif (ce que déclenche le bouton de la souris)
+    // atterrit donc bien sur la page d'accueil.
+    wc.navigationHistory.goBack()
+    expect(wc.__currentUrl()).toContain('aether://newtab')
+  })
+
   it('laisse l’historique natif gérer le retour après un clic DANS la page', async () => {
     // Une fois qu'on s'est éloigné d'un pas de plus (lien cliqué), le retour
     // doit redevenir un vrai retour d'historique — pas un saut direct vers la
@@ -348,9 +428,9 @@ describe('ViewManager — retour vers la page d’accueil', () => {
     wc.__commit(NEWTAB_COMMITTED)
 
     await search(vm, 'a', 'https://google.com/search?q=animal')
-    // Lien cliqué dans les résultats : navigation commitée sans passer par
-    // `navigate()`, exactement comme le ferait Chromium tout seul.
-    wc.__commit('https://fr.wikipedia.org/wiki/Animal')
+    // Lien cliqué dans les résultats : Chromium annonce `will-navigate` puis
+    // committe, sans jamais passer par `navigate()`.
+    wc.__clickLink('https://fr.wikipedia.org/wiki/Animal')
 
     // Le retour doit ramener aux RÉSULTATS, pas sauter par-dessus jusqu'à la
     // page d'accueil.

@@ -660,6 +660,38 @@ export class ViewManager {
     return this.everNewTab.has(pageId) && !this.isNewTabUrl(wc.getURL())
   }
 
+  /**
+   * Purge les entrées d'historique périmées situées ENTRE la page d'accueil et
+   * la page courante. `loadURL()` n'écrase pas la branche « avancer » restée
+   * au-delà de la position courante (contrairement à une navigation d'adresse
+   * dans un vrai navigateur, qui la tronque) : après « accueil → recherche A →
+   * retour → recherche B », l'historique conserve [accueil, A, B] et un retour
+   * natif ramène sur A. On rétablit donc [accueil, B] nous-mêmes.
+   *
+   * Corrige le retour pour TOUS les chemins d'un coup — flèche de l'interface,
+   * bouton latéral de la souris, Alt+Flèche gauche, geste tactile — plutôt que
+   * d'intercepter chacun séparément : c'est l'historique lui-même qui redevient
+   * juste. À appeler après un commit (les indices ne sont fiables qu'à ce
+   * moment-là).
+   */
+  private pruneStaleHistory(pageId: PageId, wc: WebContents): void {
+    const nav = wc.navigationHistory
+    try {
+      // Parcours vers le BAS : retirer l'entrée `i` décale seulement celles
+      // au-dessus, donc les indices inférieurs restent valides d'un tour à
+      // l'autre. On s'arrête à la page d'accueil, qu'on garde comme cible du
+      // retour (et on ne touche jamais à l'historique plus ancien qu'elle).
+      for (let i = nav.getActiveIndex() - 1; i >= 0; i--) {
+        if (this.isNewTabUrl(nav.getEntryAtIndex(i)?.url ?? '')) break
+        nav.removeEntryAtIndex(i)
+      }
+    } catch {
+      // API d'historique indisponible (vue en cours de destruction) — sans
+      // conséquence, `performGoBack` garde ses propres filets.
+    }
+    void pageId
+  }
+
   /** Retour arrière robuste. `singleHopFromNewTab` est PRIORITAIRE sur
    * l'historique natif (pas un simple repli) : quand la page courante est à
    * exactement un pas d'un nouvel onglet tout juste quitté, le retour doit
@@ -668,12 +700,22 @@ export class ViewManager {
    * commentaire de `singleHopFromNewTab`). `everNewTab` reste un filet plus
    * large en dernier recours si l'historique natif n'a rien à offrir. */
   private performGoBack(pageId: PageId, wc: WebContents): void {
+    const nav = wc.navigationHistory
     if (this.singleHopFromNewTab.has(pageId) && !this.isNewTabUrl(wc.getURL())) {
+      // Un VRAI retour d'historique est préférable quand l'entrée juste avant
+      // est bien la page d'accueil (`pruneStaleHistory` s'en assure) : il
+      // garde « avancer » utilisable et n'empile pas d'entrée supplémentaire.
+      // Sinon seulement, on la recharge.
+      const previous = nav.getActiveIndex() - 1
+      if (previous >= 0 && this.isNewTabUrl(nav.getEntryAtIndex(previous)?.url ?? '')) {
+        nav.goBack()
+        return
+      }
       void this.navigate(pageId, 'aether://newtab')
       return
     }
-    if (wc.navigationHistory.canGoBack()) {
-      wc.navigationHistory.goBack()
+    if (nav.canGoBack()) {
+      nav.goBack()
       return
     }
     if (this.everNewTab.has(pageId) && !this.isNewTabUrl(wc.getURL())) {
@@ -714,28 +756,19 @@ export class ViewManager {
     })
 
     const onNavigated = (url: string): void => {
-      // `singleHopFromNewTab` recalculé à CHAQUE navigation committée (pas
-      // seulement celles lancées par `navigate()`) : couvre aussi un clic
-      // dans la page elle-même, qui invalide tout autant la relation « à un
-      // pas d'un nouvel onglet » pour la page maintenant affichée.
-      //
-      // `lastCommittedUrl` et PAS `pagesRepo.get(pageId).url` : `navigate()`
-      // écrit la cible en base AVANT `loadURL`, donc au moment où
-      // `did-navigate` arrive, la ligne en base porte déjà la NOUVELLE URL —
-      // le « précédent » lu là valait donc toujours l'URL courante, et cette
-      // branche supprimait systématiquement le drapeau que `navigate()`
-      // venait tout juste de poser (cause du retour qui retombait sur
-      // l'ancienne recherche au lieu de la page d'accueil).
-      const previousUrl = this.lastCommittedUrl.get(pageId)
       this.lastCommittedUrl.set(pageId, url)
       if (pagesRepo.get(pageId)) pagesRepo.updateNavigation(pageId, url)
-      if (previousUrl !== undefined) {
-        if (this.isNewTabUrl(previousUrl) && !this.isNewTabUrl(url)) {
-          this.singleHopFromNewTab.add(pageId)
-        } else {
-          this.singleHopFromNewTab.delete(pageId)
-        }
-      }
+      // Le drapeau « à un pas de la page d'accueil » N'EST PLUS recalculé ici.
+      // Une version précédente le faisait, et c'était LA cause du retour qui
+      // ramenait à la recherche précédente : `did-navigate-in-page` se
+      // déclenche à chaque `pushState` — ce que les pages de résultats Google
+      // font en permanence — et effaçait donc le drapeau une fraction de
+      // seconde après que `navigate()` l'ait posé. Le retour retombait alors
+      // sur l'historique natif, correct par coïncidence au premier cycle,
+      // faux dès le second. Seules deux choses le font désormais évoluer :
+      // `navigate()` (le pose/retire en connaissance de cause) et
+      // `will-navigate` (l'utilisateur part vraiment ailleurs — voir plus bas).
+      if (this.singleHopFromNewTab.has(pageId)) this.pruneStaleHistory(pageId, wc)
       this.patchRuntime(pageId, {
         canGoBack: this.effectiveCanGoBack(pageId, wc),
         canGoForward: nav.canGoForward()
@@ -904,6 +937,14 @@ export class ViewManager {
     })
 
     wc.on('will-navigate', (event, url) => {
+      // L'utilisateur part VRAIMENT ailleurs (lien cliqué, formulaire soumis,
+      // `window.location` modifiée) : la page courante n'est plus « à un pas
+      // de la page d'accueil », le retour doit redevenir un retour normal.
+      // C'est le SEUL évènement qui distingue ce cas — `did-navigate…` se
+      // déclenche aussi pour nos propres chargements et pour les `pushState`
+      // internes des sites, et ne peut donc pas servir d'arbitre ici.
+      // `loadURL` (nos navigations) n'émet jamais `will-navigate`.
+      if (!this.isNewTabUrl(url)) this.singleHopFromNewTab.delete(pageId)
       // Posé/retiré ICI, avant le chargement réel — le crochet doit être
       // enregistré via CDP AVANT que le document du Store ne s'exécute.
       this.syncStoreShim(pageId, wc, url)

@@ -20,6 +20,37 @@ const DEFAULT_SURFACES: ThemeSurfaces = {
   veil: '#16161f'
 }
 
+/**
+ * Couleurs de texte utilisées PAR-DESSUS un thème (dégradé ou photo).
+ *
+ * Le voile de lisibilité (`computeReadableScrim`) garantit un contraste ≥ 4.5:1
+ * pour la PLUS SOMBRE de ces trois valeurs — c'est-à-dire pour tout texte de la
+ * page. Les tons secondaires par défaut (`--color-ink-dim` #9a9ab0,
+ * `--color-ink-faint` #7c7c98) sont bien trop sombres pour cela : les garantir
+ * exigerait un voile quasi opaque, qui effacerait l'image. On les REMONTE donc
+ * ici plutôt que de poser des cartes opaques derrière les textes — c'est le
+ * texte qui s'adapte au fond, pas l'inverse.
+ */
+export const ON_BACKGROUND_TEXT = {
+  ink: '#f4f4fa',
+  dim: '#e2e2ec',
+  /** Le plus sombre des trois — c'est LUI que le voile doit garantir. */
+  faint: '#cfcfdd'
+} as const
+
+/** Variables CSS à poser sur le conteneur d'une zone posée sur un thème, pour
+ * que tout le texte qu'elle contient reste au-dessus du seuil de lisibilité.
+ * Objet vide (aucune surcharge) sans thème actif : les tons par défaut de
+ * `global.css` conviennent parfaitement sur une surface unie. */
+export function onBackgroundTextVars(hasBackground: boolean): Record<string, string> {
+  if (!hasBackground) return {}
+  return {
+    '--color-ink': ON_BACKGROUND_TEXT.ink,
+    '--color-ink-dim': ON_BACKGROUND_TEXT.dim,
+    '--color-ink-faint': ON_BACKGROUND_TEXT.faint
+  }
+}
+
 export const ACCENT_HEX: Record<string, string> = {
   glacier: '#a9c9ec',
   lavande: '#b3a4e6',
@@ -61,6 +92,12 @@ export function themeBackgroundCss(theme: NewTabBackground | null): string | nul
   if (!theme) return null
   if (theme.kind === 'preset') return backgroundPreset(theme.value)?.css ?? null
   return `url("aether://avatars/${theme.value}")`
+}
+
+/** Couches animées d'un thème vivant, ou tableau vide (thème statique/image). */
+export function themeAnimatedLayers(theme: NewTabBackground | null): { css: string; className: string }[] {
+  if (theme?.kind !== 'preset') return []
+  return backgroundPreset(theme.value)?.animated ?? []
 }
 
 /** Opacité EFFECTIVE du voile de lisibilité. Pour un thème intégré, la valeur
