@@ -701,6 +701,14 @@ export class ViewManager {
    * large en dernier recours si l'historique natif n'a rien à offrir. */
   private performGoBack(pageId: PageId, wc: WebContents): void {
     const nav = wc.navigationHistory
+    // Coupe un chargement ENCORE EN VOL avant toute chose. Sans ça, la
+    // navigation en cours se committe une seconde plus tard et écrase le
+    // retour : l'utilisateur revient bien à la page d'accueil, puis se
+    // retrouve « téléporté » sur la page qu'il venait tout juste de quitter.
+    // Cliquer « retour » pendant qu'une page charge encore est banal (résultats
+    // de recherche lents), d'où un symptôme qui ne se manifestait qu'une fois
+    // sur deux — selon que le chargement avait eu, ou non, le temps de finir.
+    if (wc.isLoading()) wc.stop()
     if (this.singleHopFromNewTab.has(pageId) && !this.isNewTabUrl(wc.getURL())) {
       // Un VRAI retour d'historique est préférable quand l'entrée juste avant
       // est bien la page d'accueil (`pruneStaleHistory` s'en assure) : il
@@ -1509,7 +1517,11 @@ export class ViewManager {
 
   goForward(id: PageId): void {
     const wc = this.liveContents(id)
-    if (wc?.navigationHistory.canGoForward()) wc.navigationHistory.goForward()
+    if (!wc?.navigationHistory.canGoForward()) return
+    // Même précaution qu'au retour (voir `performGoBack`) : un chargement
+    // encore en vol écraserait la navigation demandée en se committant après.
+    if (wc.isLoading()) wc.stop()
+    wc.navigationHistory.goForward()
   }
 
   reload(id: PageId): void {

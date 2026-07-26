@@ -11,9 +11,12 @@
  * réglage CORS du protocole personnalisé.
  */
 
-/** Sous-échantillonnage partagé : la couleur/luminance moyenne ne change pas
- * à 32×32, et c'est bien moins de pixels à parcourir qu'une image pleine
- * résolution. */
+/** Sous-échantillonnage partagé. 64×64 (et non 32×32) : le rééchantillonnage
+ * MOYENNE les pixels voisins, donc plus la grille est grossière, plus les
+ * zones claires LOCALES — celles qui mettent réellement le texte en difficulté —
+ * se fondent dans leur voisinage sombre et disparaissent de l'analyse. 4096
+ * échantillons restent négligeables à parcourir, et une fois seulement, à
+ * l'import. */
 async function sampleImage(dataUrl: string): Promise<Uint8ClampedArray | null> {
   const image = new Image()
   image.src = dataUrl
@@ -22,7 +25,7 @@ async function sampleImage(dataUrl: string): Promise<Uint8ClampedArray | null> {
     image.onerror = () => reject(new Error('image-load-failed'))
   })
 
-  const size = 32
+  const size = 64
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
@@ -91,13 +94,17 @@ const REFERENCE_TEXT = { r: 0xcf, g: 0xcf, b: 0xdd }
  * l'atteindre — pas de « à peu près lisible ». */
 const MIN_CONTRAST = 4.5
 
-/** Part des pixels les plus CLAIRS qui pilote le calcul (10 % ici). Une
- * moyenne globale est trompeuse : sur la photo d'une voiture sombre devant un
- * ciel clair, elle reste basse alors que le texte posé sur le ciel est
- * illisible. On dimensionne donc le voile sur les zones claires — celles qui
- * mettent réellement le texte en difficulté — sans se laisser dicter la loi
- * par un unique reflet spéculaire (d'où un centile, pas le maximum). */
-const BRIGHT_PERCENTILE = 0.9
+/** Centile de luminance qui pilote le calcul : on dimensionne le voile sur les
+ * 3 % de pixels les plus CLAIRS de l'image.
+ *
+ * Une moyenne globale est trompeuse (une voiture sombre devant un mur clair
+ * donne une moyenne basse alors que le texte posé sur le mur est illisible),
+ * mais 90 % — la valeur précédente — l'était encore : le texte ne se pose pas
+ * sur la luminance moyenne, il se pose là où il tombe, y compris sur le dixième
+ * le plus clair de l'image. D'où un centile bien plus haut. Ce n'est toujours
+ * pas le maximum absolu : un unique reflet spéculaire ne doit pas imposer un
+ * voile quasi opaque à toute l'image. */
+const BRIGHT_PERCENTILE = 0.97
 
 /**
  * Opacité du voile noir à poser SUR une image importée pour GARANTIR que le

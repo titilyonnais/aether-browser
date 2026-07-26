@@ -94,6 +94,25 @@ export function themeBackgroundCss(theme: NewTabBackground | null): string | nul
   return `url("aether://avatars/${theme.value}")`
 }
 
+/**
+ * Version de l'algorithme de calcul du voile (`computeReadableScrim`). À
+ * INCRÉMENTER dès que ce calcul change : les images déjà importées portent la
+ * valeur obtenue avec l'ancienne méthode, et sans ce marqueur il faudrait
+ * réimporter manuellement son image pour bénéficier d'une correction — ce qui
+ * n'est évidemment pas acceptable pour un correctif de lisibilité.
+ *
+ * 2 — échantillonnage 64×64 et centile 97 % (au lieu de 32×32 / 90 %), après
+ * constat que le texte restait illisible sur une photo aux zones claires
+ * localisées.
+ */
+export const SCRIM_ALGO_VERSION = 2
+
+/** Ce thème a-t-il besoin d'un recalcul de son voile ? Vrai uniquement pour une
+ * image personnelle dont le voile vient d'une version antérieure du calcul. */
+export function needsScrimRecompute(theme: NewTabBackground | null): boolean {
+  return theme?.kind === 'custom' && theme.scrimAlgo !== SCRIM_ALGO_VERSION
+}
+
 /** Couches animées d'un thème vivant, ou tableau vide (thème statique/image). */
 export function themeAnimatedLayers(theme: NewTabBackground | null): { css: string; className: string }[] {
   if (theme?.kind !== 'preset') return []

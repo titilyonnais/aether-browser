@@ -17,7 +17,8 @@ import { MusePanel } from '@/components/muse/MusePanel'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { useT } from '@/i18n/useT'
 import { holdZoomIndicator, initBridge, releaseZoomIndicator, runCommand } from '@/lib/actions'
-import { applyTheme, themeBackgroundCss } from '@/lib/theme'
+import { computeReadableScrim } from '@/lib/dominantColor'
+import { applyTheme, needsScrimRecompute, SCRIM_ALGO_VERSION, themeBackgroundCss } from '@/lib/theme'
 import { usePagesStore } from '@/stores/pages'
 import { useSettingsStore } from '@/stores/settings'
 import { useSpacesStore } from '@/stores/spaces'
@@ -124,6 +125,30 @@ export default function App() {
   useEffect(() => {
     applyTheme(document.documentElement, newTabBackground, accent, accentCustom)
   }, [newTabBackground, accent, accentCustom])
+
+  // Voile d'une image personnelle recalculé quand la méthode de calcul a
+  // évolué depuis son import (voir `SCRIM_ALGO_VERSION`) : une correction de
+  // lisibilité doit s'appliquer aux images DÉJÀ choisies, pas seulement aux
+  // prochaines — sans quoi il faudrait réimporter son fond à la main.
+  useEffect(() => {
+    if (!needsScrimRecompute(newTabBackground) || newTabBackground?.kind !== 'custom') return
+    let cancelled = false
+    const filename = newTabBackground.value
+    void window.aether.newTab
+      .backgroundImageDataUrl(filename)
+      .then(async (dataUrl) => {
+        if (cancelled || !dataUrl) return
+        const scrim = await computeReadableScrim(dataUrl)
+        if (cancelled) return
+        await useSettingsStore.getState().patch({
+          newTabBackground: { kind: 'custom', value: filename, scrim, scrimAlgo: SCRIM_ALGO_VERSION }
+        })
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [newTabBackground])
 
   // Dégradé/image du thème aussi peint sur <body> : visible partout où aucune
   // WebContentsView de page ne le recouvre (bande de titre, marges du canvas,

@@ -116,6 +116,8 @@ export const settings: Record<string, string> = {
     "Restyle tout ÆTHER : fond de la page d'accueil et de la fenêtre, couleur d'accent, teinte des panneaux.",
   'settings.appearance.themeNone': 'Aucun thème',
   'settings.appearance.themeCustomImage': 'Importer une image',
+  'settings.appearance.useImageColor': "Accent d'après l'image",
+  'settings.appearance.extractingColor': 'Analyse des couleurs…',
   'settings.appearance.themeAutoContrast':
     "Le fond est automatiquement assombri juste assez pour que les textes restent lisibles (contraste minimum WCAG AA), sans jamais l'obscurcir plus que nécessaire.",
   'settings.appearance.favoritesBarTitle': 'Barre de favoris',

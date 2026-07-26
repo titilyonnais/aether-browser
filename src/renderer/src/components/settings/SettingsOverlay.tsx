@@ -26,6 +26,7 @@ import {
   MonitorCog,
   Palette,
   Pencil,
+  Pipette,
   Plus,
   Puzzle,
   RefreshCw,
@@ -76,6 +77,7 @@ import {
 } from '@/lib/actions'
 import { BACKGROUND_PRESETS, themePreviewCss, type BackgroundPreset } from '@/lib/backgroundPresets'
 import { computeReadableScrim, extractDominantColor } from '@/lib/dominantColor'
+import { SCRIM_ALGO_VERSION } from '@/lib/theme'
 import { PERMISSION_LABELS } from '@/lib/sitePermissionLabels'
 import { cn, formatBytes } from '@/lib/utils'
 import { useMuseStore } from '@/stores/muse'
@@ -937,7 +939,9 @@ function ThemeBlock({
     // image précise (voir `computeReadableScrim`) — pas une valeur fixe qui
     // laisserait le texte illisible sur une photo claire.
     const scrim = await computeReadableScrim(result.dataUrl)
-    await patch({ newTabBackground: { kind: 'custom', value: result.filename, scrim } })
+    await patch({
+      newTabBackground: { kind: 'custom', value: result.filename, scrim, scrimAlgo: SCRIM_ALGO_VERSION }
+    })
   }
 
   const useImageColor = async (): Promise<void> => {
@@ -1025,9 +1029,15 @@ function ThemeBlock({
             type="button"
             disabled={extracting}
             onClick={() => void useImageColor()}
-            className="mt-2 flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-3.5 py-1.5 text-[11.5px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink disabled:opacity-50"
+            className="mt-2 flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.03] px-3.5 py-1.5 text-[11.5px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink disabled:opacity-50"
           >
-            <Wand2 size={12} strokeWidth={1.7} />
+            {/* Pastille de la couleur d'accent COURANTE : montre ce que le
+                bouton va remplacer, plus parlant qu'une icône générique. */}
+            <span
+              className="h-3 w-3 shrink-0 rounded-full ring-1 ring-white/20"
+              style={{ background: settings.accent === 'custom' ? settings.accentCustom || '#a9c9ec' : undefined }}
+            />
+            <Pipette size={12} strokeWidth={1.7} />
             {extracting ? t('settings.appearance.extractingColor') : t('settings.appearance.useImageColor')}
           </button>
         </>

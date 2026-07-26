@@ -25,6 +25,8 @@ function fakeWebContents() {
    * régression : il détourne le code vers un chemin de repli qui, lui,
    * fonctionne. */
   const history: { entries: string[]; activeIndex: number } = { entries: [], activeIndex: -1 }
+  /** Navigation démarrée mais pas encore commitée (page en cours de chargement). */
+  const pending: { url: string | null } = { url: null }
   return {
     /** Rejoue un évènement Electron comme si Chromium l'émettait. */
     __emit(event: string, ...args: unknown[]) {
@@ -60,9 +62,26 @@ function fakeWebContents() {
     __history() {
       return { entries: [...history.entries], activeIndex: history.activeIndex }
     },
+    /** Démarre un chargement SANS le committer : reproduit une page encore en
+     * cours de chargement (résultats de recherche lents). `__settle()` le
+     * committe plus tard — sauf si `stop()` l'a annulé entre-temps, exactement
+     * comme Chromium. */
+    __beginPendingLoad(url: string) {
+      pending.url = url
+    },
+    /** Le chargement en vol aboutit (s'il n'a pas été annulé). */
+    __settle() {
+      if (pending.url === null) return
+      const url = pending.url
+      pending.url = null
+      this.__commit(url)
+    },
     isDestroyed: vi.fn(() => false),
     isCrashed: vi.fn(() => false),
-    isLoading: vi.fn(() => false),
+    isLoading: vi.fn(() => pending.url !== null),
+    stop: vi.fn(() => {
+      pending.url = null
+    }),
     setAudioMuted: vi.fn(),
     setZoomFactor: vi.fn(),
     getZoomFactor: vi.fn(() => 1),
@@ -414,6 +433,35 @@ describe('ViewManager — retour vers la page d’accueil', () => {
     // Un retour purement natif (ce que déclenche le bouton de la souris)
     // atterrit donc bien sur la page d'accueil.
     wc.navigationHistory.goBack()
+    expect(wc.__currentUrl()).toContain('aether://newtab')
+  })
+
+  it('ne se laisse pas « téléporter » par un chargement encore en vol', async () => {
+    // Symptôme rapporté : retour à la page d'accueil, puis une seconde plus
+    // tard téléportation sur la page qu'on venait de quitter — et seulement
+    // « une fois sur deux ». Cause : cliquer « retour » pendant que la page
+    // charge encore (banal sur des résultats de recherche lents) laissait la
+    // navigation en vol se committer APRÈS le retour, l'écrasant. D'où
+    // l'annulation explicite du chargement avant de reculer.
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', NEWTAB)
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit(NEWTAB_COMMITTED)
+
+    const searchUrl = 'https://google.com/search?q=animal'
+    await vm.navigate('a', searchUrl)
+    wc.__commit(searchUrl)
+    // La page continue de charger (sous-ressources, redirection interne) et
+    // une navigation reste en vol au moment du clic.
+    wc.__beginPendingLoad(searchUrl)
+    expect(wc.isLoading()).toBe(true)
+
+    expect(await clickBack(vm, 'a')).toContain('aether://newtab')
+
+    // Le chargement en vol tente d'aboutir une seconde plus tard : il doit
+    // avoir été annulé, donc rester sans effet.
+    wc.__settle()
     expect(wc.__currentUrl()).toContain('aether://newtab')
   })
 

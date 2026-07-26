@@ -262,6 +262,12 @@ export interface NewTabBackground {
   kind: 'preset' | 'custom'
   value: string
   scrim: number
+  /** Version de l'algorithme ayant calculé `scrim` (images personnelles
+   * uniquement). Le voile est calculé UNE FOIS à l'import ; quand la méthode
+   * de calcul évolue, cette marque permet de le recalculer automatiquement au
+   * démarrage plutôt que d'exiger un réimport manuel de l'image (voir
+   * `SCRIM_ALGO_VERSION`, renderer/lib/theme.ts). */
+  scrimAlgo?: number
 }
 
 /** Résultat météo courant (widget nouvel onglet) — géolocalisation par IP, aucune clé requise. */

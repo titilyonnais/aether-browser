@@ -4,6 +4,28 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.68.0] — 2026-07-26
+
+### Corrigé
+
+- **Le retour « téléportait » sur la page précédente une seconde plus tard**, environ une fois
+  sur deux. Cliquer « retour » pendant que la page charge encore (banal sur des résultats de
+  recherche) laissait la navigation en vol se committer APRÈS le retour, l'écrasant — d'où
+  l'intermittence, selon que le chargement avait eu ou non le temps de finir. Le chargement en
+  cours est désormais explicitement annulé avant de reculer (et d'avancer). Test de
+  non-régression à l'appui.
+- **Une image personnelle rendait les textes invisibles.** Deux causes cumulées : le voile était
+  calculé sur les 10 % de pixels les plus clairs — trop indulgent, le texte ne se pose pas sur
+  la moyenne — et l'analyse à 32×32 lissait justement les zones claires locales qui gênent la
+  lecture. Désormais 64×64 et 3 % les plus clairs. Surtout, **les images DÉJÀ importées voient
+  leur voile recalculé automatiquement au démarrage** : plus besoin de réimporter son fond pour
+  bénéficier d'un correctif de lisibilité.
+- **La clé `settings.appearance.useImageColor` s'affichait telle quelle** dans les réglages —
+  supprimée par erreur en 0.63.0 alors qu'elle restait utilisée. Le bouton s'appelle maintenant
+  « Accent d'après l'image », avec une pipette et un aperçu de la couleur d'accent en cours.
+  Un test vérifie désormais que toute clé référencée existe bien, pour que l'oubli ne puisse
+  plus se reproduire.
+
 ## [0.67.0] — 2026-07-26
 
 ### Corrigé
