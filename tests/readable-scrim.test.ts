@@ -66,6 +66,37 @@ function contrastAfterScrim(level: number, scrim: number): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
+describe('opacité du texte', () => {
+  /** Contraste d'un texte d'opacité `alpha` sur un fond de niveau `bg`. Un
+   * texte semi-transparent se MÉLANGE à son fond : c'est ce mélange, et non la
+   * couleur nominale, qui décide de la lisibilité. */
+  function contrastWithAlpha(textLevel: number, alpha: number, bg: number): number {
+    const lin = (c8: number): number => {
+      const c = c8 / 255
+      return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+    }
+    const lum = (c8: number): number => 0.2126 * lin(c8) + 0.7152 * lin(c8) + 0.0722 * lin(c8)
+    const rendered = alpha * textLevel + (1 - alpha) * bg
+    const [hi, lo] = lum(rendered) >= lum(bg) ? [lum(rendered), lum(bg)] : [lum(bg), lum(rendered)]
+    return (hi + 0.05) / (lo + 0.05)
+  }
+
+  const FAINT = 0xcf // ON_BACKGROUND_TEXT.faint
+
+  it('un texte à 50 % ne peut PAS atteindre le seuil, même sur du noir pur', () => {
+    // Justifie la neutralisation des opacités partielles (`[data-on-theme]`,
+    // global.css) : c'était la cause réelle des textes illisibles sur une
+    // photo, et AUCUNE force de voile n'aurait pu la corriger.
+    expect(contrastWithAlpha(FAINT, 0.5, 0)).toBeLessThan(4.5)
+  })
+
+  it('le même texte à pleine opacité passe largement', () => {
+    expect(contrastWithAlpha(FAINT, 1, 0)).toBeGreaterThanOrEqual(4.5)
+    // Et jusqu'à la limite haute que le voile garantit (luminance ≈ 0.10).
+    expect(contrastWithAlpha(FAINT, 1, 88)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
 describe('computeReadableScrim', () => {
   it('atteint le seuil AA sur une image uniformément claire', async () => {
     pixels = grayImage(Array(64).fill(235))

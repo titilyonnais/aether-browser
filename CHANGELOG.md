@@ -4,6 +4,40 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.69.0] — 2026-07-30
+
+### Corrigé
+
+- **Textes illisibles sur une image personnelle — la cause profonde.** Les tons secondaires du
+  design emploient des opacités partielles (`/50`, `/60`, `/70`). Or un texte semi-transparent se
+  mélange à son propre fond : plus le voile assombrit, plus le texte s'assombrit avec lui. À 50 %
+  d'opacité, le contraste **plafonne à 3.74:1 même sur du noir pur** — sous le seuil requis, quoi
+  qu'on fasse. Aucune force de voile ne pouvait donc corriger le problème, ce qui explique
+  l'échec des trois tentatives précédentes. L'opacité est désormais neutralisée sur un thème
+  actif : la teinte voulue par le design est conservée, seul l'alpha change, et le calcul de
+  contraste redevient valable. Aucun élément de design n'a été modifié.
+- **Croix de fermeture décentrée dans les onglets** — icône de 9 px dans une boîte de 14 px, soit
+  2,5 px de marge arrondis de façon asymétrique. Passée à 10 px pour des marges entières.
+- **Bouton « Réinitialiser l'autorisation » collé** à la zone surlignée de la permission
+  au-dessus.
+- **Bulle d'informations du site : titre et croix sautaient d'une vue à l'autre.** La racine et
+  les sous-vues avaient chacune leur propre en-tête, avec des rembourrages différents. Un
+  en-tête et une enveloppe COMMUNS à toutes les vues garantissent une géométrie identique.
+
+### Ajouté
+
+- **Logos des moteurs de recherche** dans Réglages › Recherche — le favicon servi par le domaine
+  du moteur lui-même, sans passer par un service tiers, avec repli sur la pastille lettrée hors
+  ligne.
+- **Ajouter un moteur sans écrire de gabarit** : il suffit de coller l'adresse d'une recherche
+  réelle, la requête y est repérée toute seule. Les gabarits `%s` et la syntaxe OpenSearch
+  `{searchTerms}` (Chrome/Firefox) restent acceptés.
+- **Page « Drapeaux du moteur »**, destination de `chrome://flags` — tous les drapeaux
+  rassemblés au même endroit, comme le fait cette page dans Chrome. Auparavant, `chrome://flags`
+  renvoyait vers Performance, où l'on n'en retrouvait qu'une partie, mêlée à d'autres réglages.
+  La page d'origine de Google ne peut pas s'afficher : elle appartient à la couche navigateur de
+  Chrome, absente du moteur qu'Electron embarque.
+
 ## [0.68.0] — 2026-07-26
 
 ### Corrigé

@@ -945,7 +945,7 @@ export interface ChromeUrlEntry {
  */
 export const CHROME_URLS: ChromeUrlEntry[] = [
   { url: 'chrome://settings', status: 'aether', note: 'Ouvre les Paramètres ÆTHER' },
-  { url: 'chrome://flags', status: 'aether', note: 'Ouvre Performance (drapeaux moteur)' },
+  { url: 'chrome://flags', status: 'aether', note: 'Ouvre la page des drapeaux moteur' },
   { url: 'chrome://version', status: 'aether', note: 'Paramètres › À propos' },
   { url: 'chrome://about', status: 'aether', note: 'Cet annuaire' },
   { url: 'chrome://chrome-urls', status: 'aether', note: 'Cet annuaire' },
@@ -964,7 +964,7 @@ export const CHROME_URLS: ChromeUrlEntry[] = [
   { url: 'chrome://net-export', status: 'engine', note: 'Journal réseau' },
   { url: 'chrome://process-internals', status: 'engine', note: 'Processus & frames' },
   { url: 'chrome://tracing', status: 'engine', note: 'Traçage des performances' },
-  { url: 'chrome://flags (Google)', status: 'unavailable', note: 'La page Google d’origine n’existe pas dans le moteur' }
+  { url: 'chrome://flags (Google)', status: 'unavailable', note: 'La page Google d’origine appartient à Chrome, pas au moteur' }
 ]
 
 // ─── Divers ──────────────────────────────────────────────────────────────────

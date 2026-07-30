@@ -30,6 +30,17 @@ const DEFAULT_SURFACES: ThemeSurfaces = {
  * exigerait un voile quasi opaque, qui effacerait l'image. On les REMONTE donc
  * ici plutôt que de poser des cartes opaques derrière les textes — c'est le
  * texte qui s'adapte au fond, pas l'inverse.
+ *
+ * ATTENTION — ces valeurs ne suffisent QUE si le texte est rendu à pleine
+ * opacité. Un texte semi-transparent (`text-ink-faint/50` et consorts) se
+ * mélange à son propre fond : plus le voile assombrit, plus le texte
+ * s'assombrit avec lui, et le contraste PLAFONNE. À 50 % d'opacité, le maximum
+ * atteignable est 3.74:1 même sur du noir pur — sous le seuil, quoi qu'on
+ * fasse. C'était la cause réelle des textes illisibles sur une photo, et
+ * aucune force de voile n'aurait pu la corriger. Les modificateurs d'opacité
+ * sont donc neutralisés sur un thème actif (règle `[data-on-theme]`,
+ * global.css), ce qui préserve la teinte voulue par le design tout en rendant
+ * le calcul de contraste ci-dessus réellement valable.
  */
 export const ON_BACKGROUND_TEXT = {
   ink: '#f4f4fa',
@@ -40,8 +51,11 @@ export const ON_BACKGROUND_TEXT = {
 
 /** Variables CSS à poser sur le conteneur d'une zone posée sur un thème, pour
  * que tout le texte qu'elle contient reste au-dessus du seuil de lisibilité.
- * Objet vide (aucune surcharge) sans thème actif : les tons par défaut de
- * `global.css` conviennent parfaitement sur une surface unie. */
+ * À combiner avec l'attribut `data-on-theme` (voir `ON_THEME_ATTR`), qui
+ * neutralise les opacités partielles — sans lui, ces couleurs ne garantissent
+ * rien pour les textes semi-transparents. Objet vide (aucune surcharge) sans
+ * thème actif : les tons par défaut de `global.css` conviennent parfaitement
+ * sur une surface unie. */
 export function onBackgroundTextVars(hasBackground: boolean): Record<string, string> {
   if (!hasBackground) return {}
   return {
@@ -50,6 +64,10 @@ export function onBackgroundTextVars(hasBackground: boolean): Record<string, str
     '--color-ink-faint': ON_BACKGROUND_TEXT.faint
   }
 }
+
+/** Attribut marquant une zone posée sur un thème — voir la règle
+ * `[data-on-theme]` de global.css. */
+export const ON_THEME_ATTR = 'data-on-theme'
 
 export const ACCENT_HEX: Record<string, string> = {
   glacier: '#a9c9ec',

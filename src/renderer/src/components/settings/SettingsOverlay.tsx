@@ -60,6 +60,7 @@ import type {
   UpdateStatus
 } from '@shared/types'
 import { ExtensionIcon } from '@/components/ui/ExtensionIcon'
+import { Favicon } from '@/components/ui/Favicon'
 import { Kbd } from '@/components/ui/Kbd'
 import { MiniSwitch } from '@/components/ui/MiniSwitch'
 import { ProfileAvatar } from '@/components/ui/ProfileAvatar'
@@ -78,6 +79,7 @@ import {
 import { BACKGROUND_PRESETS, themePreviewCss, type BackgroundPreset } from '@/lib/backgroundPresets'
 import { computeReadableScrim, extractDominantColor } from '@/lib/dominantColor'
 import { SCRIM_ALGO_VERSION } from '@/lib/theme'
+import { engineIconUrl, normalizeEngineUrl } from '@/lib/searchEngineTemplate'
 import { PERMISSION_LABELS } from '@/lib/sitePermissionLabels'
 import { cn, formatBytes } from '@/lib/utils'
 import { useMuseStore } from '@/stores/muse'
@@ -104,6 +106,7 @@ type Section =
   | 'apropos'
   | 'all-sites'
   | 'site-details'
+  | 'flags'
 
 const SECTIONS: readonly Section[] = [
   'ia',
@@ -124,7 +127,7 @@ const SECTIONS: readonly Section[] = [
 /** Sections atteignables uniquement par relais direct (bouton dédié, bulle
  * de site) — jamais dans `SECTIONS` (qui pilote la nav visible/recherche),
  * mais la garde de `SettingsPanel` doit les accepter tout de même. */
-const HIDDEN_SECTIONS: readonly Section[] = ['all-sites', 'site-details']
+const HIDDEN_SECTIONS: readonly Section[] = ['all-sites', 'site-details', 'flags']
 
 function isKnownSection(id: string | null): id is Section {
   return (SECTIONS as readonly string[]).includes(id ?? '') || (HIDDEN_SECTIONS as readonly string[]).includes(id ?? '')
@@ -343,6 +346,7 @@ function SettingsPanel() {
               {section === 'extensions' && <ExtensionsSection />}
               {section === 'reinitialiser' && <ResetSection />}
               {section === 'apropos' && <AboutSection />}
+              {section === 'flags' && <FlagsSection />}
               {section === 'all-sites' && <AllSitesSection />}
               {section === 'site-details' && <SiteDetailsSection />}
             </div>
@@ -405,6 +409,33 @@ function EngineFlagToggle({ id }: { id: string }) {
       checked={value}
       onChange={set}
     />
+  )
+}
+
+/**
+ * Page « Drapeaux » — destination de `chrome://flags`.
+ *
+ * La page d'origine de Google n'existe PAS dans Electron : `chrome://flags`
+ * appartient à la couche navigateur de Chrome, pas au moteur Chromium
+ * (« content ») qu'Electron embarque — la charger n'afficherait qu'une erreur.
+ * Plutôt que de rediriger vers Performance, où l'utilisateur ne retrouvait
+ * qu'une partie des drapeaux noyée parmi d'autres réglages, cette page les
+ * rassemble TOUS au même endroit, ce qui est exactement la fonction de
+ * `chrome://flags`. Chaque drapeau reste par ailleurs présent dans sa section
+ * thématique — c'est la même bascule, pas une copie.
+ */
+function FlagsSection() {
+  const t = useT()
+  return (
+    <div className="space-y-7">
+      <Block title={t('settings.flags.title')} hint={t('settings.flags.hint')}>
+        <div className="space-y-1">
+          {FLAG_DEFS.map((def) => (
+            <EngineFlagToggle key={def.id} id={def.id} />
+          ))}
+        </div>
+      </Block>
+    </div>
   )
 }
 
@@ -1974,12 +2005,17 @@ function SearchSection() {
   if (!settings) return null
 
   const addEngine = async (): Promise<void> => {
-    if (!url.includes('%s')) {
+    // Trois saisies acceptées, de la plus explicite à la plus naturelle :
+    // un gabarit `%s`, la syntaxe OpenSearch `{searchTerms}` que Chrome et
+    // Firefox emploient, ou simplement l'adresse d'une recherche réelle —
+    // convertie automatiquement (voir `templateFromPastedUrl`).
+    const normalized = normalizeEngineUrl(url)
+    if (!normalized) {
       setError(t('settings.search.errorMissingPercentS'))
       return
     }
     try {
-      const engine = await window.aether.searchEngines.create(label, url)
+      const engine = await window.aether.searchEngines.create(label, normalized)
       useSearchEnginesStore.getState().add(engine)
       void patch({ searchEngine: engine.id })
       setLabel('')
@@ -2001,7 +2037,7 @@ function SearchSection() {
     <div className="space-y-7">
       <Block title={t('settings.search.engineTitle')} hint={t('settings.search.engineHint')}>
         <div className="space-y-1.5">
-          {(Object.entries(SEARCH_ENGINES) as [SearchEngineId, { label: string }][]).map(
+          {(Object.entries(SEARCH_ENGINES) as [SearchEngineId, { label: string; url: string }][]).map(
             ([id, def]) => (
               <button
                 key={id}
@@ -2015,6 +2051,7 @@ function SearchSection() {
                 )}
               >
                 <RadioDot checked={settings.searchEngine === id} />
+                <Favicon url={def.url} faviconUrl={engineIconUrl(def.url)} size={18} />
                 <span className="text-[13px] text-ink">{def.label}</span>
                 {id === 'duckduckgo' && (
                   <span className="ml-auto text-[10px] text-ink-faint">{t('settings.search.defaultRespectful')}</span>
@@ -2039,6 +2076,7 @@ function SearchSection() {
                 className="flex min-w-0 flex-1 items-center gap-3 text-left"
               >
                 <RadioDot checked={settings.searchEngine === engine.id} />
+                <Favicon url={engine.url} faviconUrl={engineIconUrl(engine.url)} size={18} />
                 <span className="min-w-0">
                   <span className="block truncate text-[13px] text-ink">{engine.label}</span>
                   <span className="block truncate font-mono text-[10px] text-ink-faint">{engine.url}</span>

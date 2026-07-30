@@ -32,6 +32,11 @@ export const settings: Record<string, string> = {
   'settings.common.loading': 'Chargement…',
   'settings.common.rename': 'Renommer',
 
+  // Section Drapeaux (chrome://flags)
+  'settings.flags.title': 'Drapeaux du moteur',
+  'settings.flags.hint':
+    "Réglages bas niveau du moteur de rendu, rassemblés ici comme le ferait chrome://flags. Chacun apparaît aussi dans sa section thématique. Un redémarrage est nécessaire pour les appliquer.",
+
   // Section Intelligence
   'settings.ai.museProviderTitle': 'Esprit de Muse',
   'settings.ai.museProviderHint': "Le provider utilisé par Muse et la Barre d'Intention.",
@@ -277,11 +282,13 @@ export const settings: Record<string, string> = {
   'settings.search.engineHint': 'Utilisé quand une intention devient une recherche.',
   'settings.search.defaultRespectful': 'défaut — respectueux',
   'settings.search.addCustomTitle': 'Ajouter un moteur personnalisé',
-  'settings.search.addCustomHint': "Utilisez %s à l'endroit où la requête doit s'insérer.",
+  'settings.search.addCustomHint':
+    "Collez simplement l'adresse d'une recherche faite sur ce moteur : la requête y est repérée toute seule. Vous pouvez aussi écrire le gabarit vous-même, avec %s (ou {searchTerms}) à la place de la requête.",
   'settings.search.namePlaceholder': 'Nom du moteur',
   'settings.search.urlPlaceholder': 'https://exemple.com/recherche?q=%s',
   'settings.search.newEngine': 'Nouveau moteur',
-  'settings.search.errorMissingPercentS': "L'URL doit contenir %s à la place de la requête.",
+  'settings.search.errorMissingPercentS':
+    "Adresse non reconnue. Collez l'URL d'une recherche réelle (par exemple https://exemple.com/search?q=chat), ou placez %s là où la requête doit s'insérer.",
   'settings.search.errorGeneric': "Impossible d'ajouter ce moteur.",
 
   // Section Données

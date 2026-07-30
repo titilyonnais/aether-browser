@@ -63,9 +63,12 @@ export function resolveInternalRoute(input: string): InternalRoute | null {
       return { kind: 'settings', section: SETTINGS_SUBPAGE_TO_SECTION[sub] }
     case 'flags':
     case 'labo':
-      // Les drapeaux moteur sont désormais répartis (Performance, Apparence, Système) ;
-      // Performance regroupe l'essentiel (accélération matérielle, expérimental).
-      return { kind: 'settings', section: 'performance' }
+      // Page dédiée regroupant TOUS les drapeaux moteur — l'équivalent le plus
+      // proche de `chrome://flags`, dont la page d'origine (couche navigateur
+      // de Chrome, absente du moteur qu'Electron embarque) ne peut pas
+      // s'afficher. Auparavant renvoyé vers Performance, où l'on ne retrouvait
+      // qu'une partie des drapeaux, mêlée à d'autres réglages.
+      return { kind: 'settings', section: 'flags' }
     case 'help':
     case 'guide':
       return { kind: 'guide' }

@@ -42,19 +42,33 @@ function close(): void {
   window.aether.popover.hide()
 }
 
-/** En-tête des vues de détail — flèche de retour + titre + croix de fermeture
- * (contrairement à la racine, dont l'en-tête est l'origine elle-même). */
-function DetailHeader({ title, onBack }: { title: string; onBack: () => void }) {
+/**
+ * En-tête COMMUN à toutes les vues de la bulle — racine comme sous-vues.
+ *
+ * Un seul composant, donc une seule géométrie : titre et croix de fermeture
+ * tombent exactement au même endroit d'une vue à l'autre. Auparavant la racine
+ * et les vues de détail avaient chacune leur propre en-tête, avec des
+ * rembourrages différents (`py-1` contre `py-1.5`, `px-1` contre `px-1.5`, et
+ * un conteneur rembourré d'un côté seulement) : la croix se déplaçait de
+ * quelques pixels à chaque navigation dans la bulle, et le titre sautait
+ * verticalement.
+ *
+ * `onBack` absent = vue racine (pas de flèche de retour) ; le titre s'indente
+ * alors naturellement moins, ce qui est le comportement attendu.
+ */
+function CardHeader({ title, onBack }: { title: string; onBack?: () => void }) {
   return (
-    <div className="flex items-center gap-1 px-1.5 py-1.5">
-      <button
-        type="button"
-        onClick={onBack}
-        className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.05] hover:text-ink-dim"
-      >
-        <ChevronLeft size={15} strokeWidth={1.8} />
-      </button>
-      <span className="min-w-0 flex-1 truncate px-1 text-[12.5px] font-medium text-ink">{title}</span>
+    <div className="flex items-center gap-1 px-1 py-1">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.05] hover:text-ink-dim"
+        >
+          <ChevronLeft size={15} strokeWidth={1.8} />
+        </button>
+      )}
+      <span className="min-w-0 flex-1 truncate px-1.5 text-[12.5px] font-medium text-ink">{title}</span>
       <button
         type="button"
         onClick={close}
@@ -65,6 +79,10 @@ function DetailHeader({ title, onBack }: { title: string; onBack: () => void }) 
     </div>
   )
 }
+
+/** Enveloppe commune : même largeur et même rembourrage pour TOUTES les vues,
+ * sans quoi l'en-tête partagé ci-dessus se retrouverait quand même décalé. */
+const CARD_CLASS = 'popover-surface w-80 overflow-hidden rounded-xl p-1.5'
 
 function ChevronRow({
   icon: Icon,
@@ -126,7 +144,9 @@ function PermissionRow({
         />
       </button>
       {expanded && (
-        <div className="px-2.5 pb-2">
+        // `pt-1` : sans cet espace, le bouton touchait le bas de la zone
+        // surlignée au survol de la permission, les deux paraissant collés.
+        <div className="px-2.5 pb-2 pt-1">
           <button
             type="button"
             onClick={onReset}
@@ -166,7 +186,7 @@ export function SiteInfoCard({ pageId, locale, initialInfo }: SiteInfoCardProps)
 
   if (!info) {
     return (
-      <div className="popover-surface w-72 overflow-hidden rounded-xl p-1.5">
+      <div className={CARD_CLASS}>
         <div className="px-3 py-4 text-center text-[11.5px] text-ink-faint">
           {t('focusCanvas.siteInfo.notHttp')}
         </div>
@@ -176,9 +196,9 @@ export function SiteInfoCard({ pageId, locale, initialInfo }: SiteInfoCardProps)
 
   if (view.kind === 'security-detail') {
     return (
-      <div className="popover-surface w-80 overflow-hidden rounded-xl">
-        <DetailHeader title={t('focusCanvas.siteInfo.securedConnection')} onBack={() => setView({ kind: 'root' })} />
-        <div className="px-3.5 pb-3.5">
+      <div className={CARD_CLASS}>
+        <CardHeader title={t('focusCanvas.siteInfo.securedConnection')} onBack={() => setView({ kind: 'root' })} />
+        <div className="px-1 pb-1">
           <div className="flex items-start gap-2.5 rounded-lg bg-white/[0.03] p-2.5">
             {info.isHttps ? (
               <Lock size={15} strokeWidth={1.8} className="mt-0.5 shrink-0 text-emerald-300/80" />
@@ -217,12 +237,12 @@ export function SiteInfoCard({ pageId, locale, initialInfo }: SiteInfoCardProps)
 
   if (view.kind === 'cookies-detail') {
     return (
-      <div className="popover-surface w-80 overflow-hidden rounded-xl">
-        <DetailHeader
+      <div className={CARD_CLASS}>
+        <CardHeader
           title={t('focusCanvas.siteInfo.cookiesAndSiteData')}
           onBack={() => setView({ kind: 'root' })}
         />
-        <div className="space-y-2.5 px-3.5 pb-3.5">
+        <div className="space-y-2 px-1 pb-1">
           <p className="text-[11px] leading-relaxed text-ink-faint">{t('focusCanvas.siteInfo.cookiesDetailBody')}</p>
           <ChevronRow
             icon={Cookie}
@@ -245,17 +265,8 @@ export function SiteInfoCard({ pageId, locale, initialInfo }: SiteInfoCardProps)
   }
 
   return (
-    <div className="popover-surface w-80 overflow-hidden rounded-xl p-1.5">
-      <div className="flex items-center gap-2 px-1 py-1">
-        <span className="min-w-0 flex-1 truncate px-1.5 text-[12.5px] font-medium text-ink">{info.origin}</span>
-        <button
-          type="button"
-          onClick={close}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-ink-faint transition-colors hover:bg-white/[0.05] hover:text-ink-dim"
-        >
-          <X size={15} strokeWidth={1.7} />
-        </button>
-      </div>
+    <div className={CARD_CLASS}>
+      <CardHeader title={info.origin} />
 
       <ChevronRow
         icon={info.isHttps ? Lock : Unlock}

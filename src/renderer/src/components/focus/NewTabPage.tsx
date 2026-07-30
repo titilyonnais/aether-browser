@@ -40,7 +40,13 @@ import type {
 import { Favicon } from '@/components/ui/Favicon'
 import { useT } from '@/i18n/useT'
 import { closePage, executeIntent } from '@/lib/actions'
-import { effectiveScrim, onBackgroundTextVars, themeAnimatedLayers, themeBackgroundCss } from '@/lib/theme'
+import {
+  effectiveScrim,
+  onBackgroundTextVars,
+  ON_THEME_ATTR,
+  themeAnimatedLayers,
+  themeBackgroundCss
+} from '@/lib/theme'
 import { cn, domainOf, uuid } from '@/lib/utils'
 import { useSearchEnginesStore } from '@/stores/searchEngines'
 import { useSettingsStore } from '@/stores/settings'
@@ -264,6 +270,9 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
     <div
       className="absolute inset-0 flex flex-col items-center overflow-y-auto px-6 py-14"
       style={backgroundStyle}
+      // Neutralise les opacités partielles des tons secondaires : sans ça, le
+      // voile de lisibilité ne PEUT PAS atteindre le seuil (voir global.css).
+      {...(background ? { [ON_THEME_ATTR]: '' } : {})}
     >
       {/* Couches animées des thèmes vivants — SOUS le voile, pour rester
           couvertes par la garantie de contraste (elles ne peuvent donc jamais

@@ -279,7 +279,7 @@ export function PageStrip() {
                 }}
                 className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded text-ink-faint hover:bg-white/[0.12]"
               >
-                <VolumeX size={9} strokeWidth={2} />
+                <VolumeX size={10} strokeWidth={2} />
               </span>
             )}
             <span
@@ -289,9 +289,13 @@ export function PageStrip() {
                 e.stopPropagation()
                 closeAndDismissTooltip(id)
               }}
+              // Icône de 10 px dans une boîte de 14 px : 2 px de marge PLEINE
+              // de chaque côté. À 9 px, la marge tombait à 2,5 px et
+              // s'arrondissait de façon asymétrique — la croix paraissait
+              // décalée dans son fond au survol.
               className="ml-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center rounded opacity-0 transition-opacity hover:bg-white/[0.12] group-hover:opacity-100"
             >
-              <X size={9} strokeWidth={2} />
+              <X size={10} strokeWidth={2} />
             </span>
           </motion.button>
         )

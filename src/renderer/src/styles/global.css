@@ -78,6 +78,27 @@
   }
 }
 
+/* ─── Lisibilité par-dessus un thème ──────────────────────────────────────
+   Les tons secondaires du design emploient des opacités partielles
+   (`text-ink-faint/50` et consorts) — parfait sur une surface unie, FATAL
+   par-dessus une image : un texte semi-transparent se mélange à son propre
+   fond, donc plus le voile de lisibilité assombrit, plus le texte s'assombrit
+   avec lui. Le contraste plafonne alors à 3.74:1 à 50 % d'opacité, MÊME sur
+   du noir pur — aucune force de voile ne peut atteindre les 4.5:1 requis.
+
+   On rétablit donc la pleine opacité dans les zones marquées `data-on-theme`.
+   La TEINTE voulue par le design est conservée telle quelle (seule l'alpha
+   change), et le calcul de `computeReadableScrim` — qui raisonne sur des
+   couleurs opaques — redevient valable.
+
+   Sélecteur d'attribut `[class~="…"]` : cible la classe exacte sans avoir à
+   échapper ses caractères spéciaux (`/`, `.`, `[`, `]`).                    */
+[data-on-theme] [class~='text-ink-faint/50'],
+[data-on-theme] [class~='text-ink-faint/60'],
+[data-on-theme] [class~='text-ink-faint/70'] {
+  color: var(--color-ink-faint);
+}
+
 /* ─── Thèmes dynamiques ───────────────────────────────────────────────────
    Couches animées superposées au dégradé de base des thèmes « vivants »
    (voir `animated`, backgroundPresets.ts). Toutes les animations n'agissent
