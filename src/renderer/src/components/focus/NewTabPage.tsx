@@ -270,7 +270,17 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
 
   return (
     <div
-      className="absolute inset-0 flex flex-col items-center overflow-y-auto px-6 py-14"
+      // `isolate` (`isolation: isolate`) : fait de CETTE div un contexte
+      // d'empilement à part entière. Indispensable pour que le `-z-10` du
+      // calque flouté (plus bas) reste un détail purement LOCAL — sans lui,
+      // un z-index négatif s'échappe vers le contexte d'empilement de
+      // l'ANCÊTRE le plus proche qui en établit un (ici, un parent de
+      // PageSlot.tsx), où il peut se retrouver derrière le fond OPAQUE de ce
+      // parent plutôt que simplement derrière le texte de cette page — c'est
+      // exactement ce qui s'est produit : le fond flouté disparaissait
+      // entièrement (recouvert par ce fond ancêtre), pas seulement le texte
+      // qui repassait devant.
+      className="absolute inset-0 isolate flex flex-col items-center overflow-y-auto px-6 py-14"
       style={backgroundStyle}
       // Neutralise les opacités partielles des tons secondaires : sans ça, le
       // voile de lisibilité ne PEUT PAS atteindre le seuil (voir global.css).

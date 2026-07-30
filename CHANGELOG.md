@@ -4,6 +4,32 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.73.0] — 2026-07-31
+
+### Corrigé
+
+- **Le fond flouté disparaissait entièrement dès qu'on activait le flou** — régression du
+  correctif précédent. `position: absolute` seul ne crée PAS de contexte d'empilement CSS ; le
+  z-index négatif ajouté en 0.72.0 pour repasser le calque flouté sous le texte s'échappait donc
+  vers le contexte d'empilement de l'ancêtre le plus proche qui en établit un (un parent de la
+  page nouvel onglet), où il se retrouvait derrière le fond opaque de CET ancêtre plutôt que
+  simplement derrière le texte de la page — d'où un fond par défaut uni à la place du fond flouté.
+  Reproduit et vérifié hors de l'application (bascule du z-index négatif avec/sans isolation,
+  test d'ordre de peinture réel) avant correctif : `isolation: isolate` sur la racine de la page
+  fait de ce z-index un détail purement local, qui ne peut plus s'échapper.
+- **« ÆTHER est votre navigateur par défaut » alors que rien n'avait été confirmé, et ÆTHER
+  n'apparaissait même pas dans Windows Paramètres › Applications par défaut.** Les deux bugs
+  avaient la même cause : `app.setAsDefaultProtocolClient`, sous Windows, n'écrit que
+  `Software\Classes\http\shell\open\command` — le mécanisme pré-Windows 8, que le sélecteur de
+  Windows 10/11 ignore totalement pour les navigateurs, et que son propre `isDefaultProtocolClient`
+  relisait ensuite pour se donner raison à lui-même (faux positif). ÆTHER écrit désormais la
+  structure que Windows lit réellement pour peupler ce sélecteur —
+  `Software\Clients\StartMenuInternet\Aether` et sa `Capabilities` (associations d'URL http/https,
+  associations de fichiers .htm/.html/.shtml), inscrite sous `Software\RegisteredApplications`,
+  exactement comme Chrome, Firefox, Brave et Edge — et le statut « par défaut » se lit désormais
+  dans `UserChoice`, le seul repère que l'utilisateur peut écrire via `ms-settings:defaultapps`,
+  jamais ÆTHER lui-même. Toujours strictement désactivé pour le build portable.
+
 ## [0.72.0] — 2026-07-30
 
 ### Corrigé
