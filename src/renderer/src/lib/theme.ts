@@ -23,9 +23,9 @@ const DEFAULT_SURFACES: ThemeSurfaces = {
 /**
  * Couleurs de texte utilisées PAR-DESSUS un thème (dégradé ou photo).
  *
- * Le voile de lisibilité (`computeReadableScrim`) garantit un contraste ≥ 4.5:1
- * pour la PLUS SOMBRE de ces trois valeurs — c'est-à-dire pour tout texte de la
- * page. Les tons secondaires par défaut (`--color-ink-dim` #9a9ab0,
+ * Le voile de lisibilité (`computeReadableScrim`) vise un contraste ≥ 7:1
+ * (WCAG AAA) pour la PLUS SOMBRE de ces trois valeurs — c'est-à-dire pour tout
+ * texte de la page. Les tons secondaires par défaut (`--color-ink-dim` #9a9ab0,
  * `--color-ink-faint` #7c7c98) sont bien trop sombres pour cela : les garantir
  * exigerait un voile quasi opaque, qui effacerait l'image. On les REMONTE donc
  * ici plutôt que de poser des cartes opaques derrière les textes — c'est le
@@ -122,8 +122,12 @@ export function themeBackgroundCss(theme: NewTabBackground | null): string | nul
  * 2 — échantillonnage 64×64 et centile 97 % (au lieu de 32×32 / 90 %), après
  * constat que le texte restait illisible sur une photo aux zones claires
  * localisées.
+ * 3 — cible AAA (7:1) au lieu de AA (4.5:1) et flou du fond, après mesure sur
+ * une photo réelle où toutes les zones étaient pourtant « conformes » AA et le
+ * texte illisible quand même : le critère WCAG suppose un fond UNI, ce qu'une
+ * photo n'est pas.
  */
-export const SCRIM_ALGO_VERSION = 2
+export const SCRIM_ALGO_VERSION = 3
 
 /** Ce thème a-t-il besoin d'un recalcul de son voile ? Vrai uniquement pour une
  * image personnelle dont le voile vient d'une version antérieure du calcul. */

@@ -294,9 +294,18 @@ export function resizePopoverWindow(sourceWc: WebContents, width: number, height
   const s = states.get(owner.id)
   if (!s || !s.popup || s.popup.isDestroyed()) return
   const popup = s.popup
-  clearBoundsDebounce(s)
-  s.boundsDebounceTimer = setTimeout(() => {
-    s.boundsDebounceTimer = null
+  // Anti-rebond à FRONT MONTANT : le tout premier rapport d'une rafale est
+  // appliqué IMMÉDIATEMENT, les suivants sont regroupés.
+  //
+  // Avec un anti-rebond classique (uniquement à front descendant), changer de
+  // vue dans une bulle donnait une animation en deux temps : le contenu se
+  // remplaçait tout de suite, puis la fenêtre native le rattrapait 60 ms plus
+  // tard. Ce décalage se voyait — c'est ce qui rendait l'agrandissement peu
+  // fluide. Appliquer d'emblée fait suivre la fenêtre au contenu, tandis que
+  // le minuteur continue d'absorber les reflows en cascade (ouverture d'un
+  // sous-menu, transition d'opacité…) qu'il servait déjà à regrouper.
+  const isFirstOfBurst = s.boundsDebounceTimer === null
+  const applyBounds = (): void => {
     if (popup.isDestroyed()) return
     // Popup masqué (déjà fermé) et pas en cours d'affichage différé : ignorer
     // tout redimensionnement TARDIF. Le ResizeObserver du renderer (le contenu
@@ -349,6 +358,13 @@ export function resizePopoverWindow(sourceWc: WebContents, width: number, height
       clearFallbackShow(s)
       fadeWindowIn(popup)
     }
+  }
+
+  clearBoundsDebounce(s)
+  if (isFirstOfBurst) applyBounds()
+  s.boundsDebounceTimer = setTimeout(() => {
+    s.boundsDebounceTimer = null
+    applyBounds()
   }, 60)
 }
 

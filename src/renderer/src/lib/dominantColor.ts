@@ -89,10 +89,24 @@ function contrastRatio(l1: number, l2: number): number {
  * garanti d'un coup. */
 const REFERENCE_TEXT = { r: 0xcf, g: 0xcf, b: 0xdd }
 
-/** Seuil de lisibilité à NE JAMAIS franchir : 4.5:1, le minimum WCAG AA pour
- * du texte courant. Tout fond retenu est assombri autant qu'il le faut pour
- * l'atteindre — pas de « à peu près lisible ». */
-const MIN_CONTRAST = 4.5
+/**
+ * Seuil de lisibilité visé : 7:1, le niveau WCAG **AAA**, et non les 4.5:1 du
+ * niveau AA.
+ *
+ * Ce choix vient d'une mesure, pas d'un excès de prudence. Sur une photo réelle
+ * (mur clair, centile 97 à 0.852 de luminance), un voile calibré pour AA
+ * donnait bien 4.7 à 5.3:1 dans chaque zone de la page — donc « conforme » — et
+ * le texte restait pourtant illisible. La raison : le critère WCAG suppose un
+ * fond UNI. Par-dessus une photo, chaque glyphe traverse des bords et des
+ * motifs à haute fréquence dont le contraste LOCAL n'a rien à voir avec la
+ * moyenne, et la petite taille des textes de la page (10 à 12 px) ne pardonne
+ * rien. AAA fournit la marge que le calcul moyen ne peut pas voir.
+ *
+ * Cette marge se combine au flou appliqué aux images importées (voir
+ * `NewTabPage`), qui s'attaque à l'autre moitié du problème : supprimer le
+ * détail fin plutôt que compenser son contraste.
+ */
+const MIN_CONTRAST = 7
 
 /** Centile de luminance qui pilote le calcul : on dimensionne le voile sur les
  * 3 % de pixels les plus CLAIRS de l'image.

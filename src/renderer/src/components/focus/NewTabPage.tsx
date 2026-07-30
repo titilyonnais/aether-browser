@@ -250,12 +250,13 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
   }
 
   const themeCss = themeBackgroundCss(background)
+  const isImageTheme = background?.kind === 'custom'
   const backgroundStyle: React.CSSProperties = {
-    ...(themeCss
-      ? background?.kind === 'custom'
-        ? { backgroundImage: themeCss, backgroundSize: 'cover', backgroundPosition: 'center' }
-        : { backgroundImage: themeCss }
-      : {}),
+    // Une image personnelle n'est PAS peinte ici : elle passe par une couche
+    // dédiée (voir plus bas) pour pouvoir être floutée sans que le flou
+    // n'atteigne le contenu de la page. Les dégradés intégrés, eux, n'ont
+    // aucun détail fin à atténuer et restent posés directement.
+    ...(themeCss && !isImageTheme ? { backgroundImage: themeCss } : {}),
     // Remonte les tons de texte secondaires au-dessus du seuil de lisibilité
     // quand un thème est actif — c'est le TEXTE qui s'adapte au fond, jamais
     // une carte opaque posée derrière lui (voir `onBackgroundTextVars`).
@@ -274,6 +275,24 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
       // voile de lisibilité ne PEUT PAS atteindre le seuil (voir global.css).
       {...(background ? { [ON_THEME_ATTR]: '' } : {})}
     >
+      {/* Image personnelle — LÉGÈREMENT FLOUTÉE.
+          Le voile seul ne suffit pas : mesuré sur une photo réelle, il
+          atteignait le seuil de contraste dans chaque zone alors que le texte
+          restait illisible. Le contraste moyen ne dit rien du détail FIN, or
+          c'est lui qui noie des textes de 10 à 12 px — chaque glyphe traversant
+          des bords et des motifs au contraste local sans rapport avec la
+          moyenne. Le flou supprime ce détail au lieu d'essayer de le compenser,
+          exactement comme le font les fonds translucides des systèmes
+          d'exploitation. `-inset-8` + `scale` : le flou tirerait sinon du vide
+          sur les bords, y laissant un liseré pâle. */}
+      {isImageTheme && themeCss && (
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div
+            className="absolute -inset-8 scale-105 bg-cover bg-center"
+            style={{ backgroundImage: themeCss, filter: 'blur(7px)' }}
+          />
+        </div>
+      )}
       {/* Couches animées des thèmes vivants — SOUS le voile, pour rester
           couvertes par la garantie de contraste (elles ne peuvent donc jamais
           rendre un texte illisible en dérivant). `overflow-hidden` sur un

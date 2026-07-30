@@ -4,6 +4,28 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.70.0] — 2026-07-30
+
+### Corrigé
+
+- **Textes illisibles sur une image importée — le critère lui-même était le mauvais.** Mesure
+  faite sur la photo réellement utilisée : le voile calculé (0,63) atteignait bien 4,7 à 5,3:1
+  dans CHAQUE zone de la page, donc « conforme » WCAG AA, et le texte restait pourtant illisible.
+  La raison : le critère WCAG suppose un fond **uni**. Par-dessus une photo, chaque glyphe
+  traverse des bords et des motifs dont le contraste local n'a rien à voir avec la moyenne, et
+  des textes de 10 à 12 px n'y survivent pas. Deux changements en réponse :
+  - cible relevée au niveau **AAA (7:1)** au lieu de AA — sur cette même photo, le voile passe de
+    0,63 à 0,75 et le contraste de 4,6 à 7,2:1 ;
+  - **léger flou du fond** (7 px), qui supprime le détail fin au lieu d'essayer d'en compenser le
+    contraste — la technique employée par les fonds translucides des systèmes d'exploitation.
+    Appliqué à la seule image, jamais au contenu de la page.
+
+  Les images déjà importées sont recalculées automatiquement au démarrage, sans réimport.
+- **Agrandissement saccadé des bulles** (cadenas → « La connexion est sécurisée ») — la fenêtre
+  native était redimensionnée avec 60 ms de retard sur son contenu, d'où une animation en deux
+  temps. Le premier redimensionnement d'une rafale est désormais appliqué immédiatement, les
+  suivants restant regroupés comme avant.
+
 ## [0.69.0] — 2026-07-30
 
 ### Corrigé

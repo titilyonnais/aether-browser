@@ -1,6 +1,6 @@
 /**
  * Tests du calcul de voile de lisibilité (`computeReadableScrim`) — vérifie
- * que le seuil WCAG AA (4.5:1) est RÉELLEMENT atteint quelle que soit
+ * que le seuil WCAG AAA (7:1) est RÉELLEMENT atteint quelle que soit
  * l'image, y compris les cas qui piégeaient l'approche précédente par
  * moyenne de luminance (sujet sombre devant un fond clair).
  *
@@ -87,21 +87,23 @@ describe('opacité du texte', () => {
     // Justifie la neutralisation des opacités partielles (`[data-on-theme]`,
     // global.css) : c'était la cause réelle des textes illisibles sur une
     // photo, et AUCUNE force de voile n'aurait pu la corriger.
+    // Même les 4.5:1 du niveau AA sont hors d'atteinte — a fortiori les 7:1 visés.
     expect(contrastWithAlpha(FAINT, 0.5, 0)).toBeLessThan(4.5)
   })
 
   it('le même texte à pleine opacité passe largement', () => {
-    expect(contrastWithAlpha(FAINT, 1, 0)).toBeGreaterThanOrEqual(4.5)
-    // Et jusqu'à la limite haute que le voile garantit (luminance ≈ 0.10).
-    expect(contrastWithAlpha(FAINT, 1, 88)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastWithAlpha(FAINT, 1, 0)).toBeGreaterThanOrEqual(7)
+    // Et jusqu'à la limite haute que le voile garantit désormais (AAA :
+    // luminance de fond ≈ 0.047, soit un niveau sRGB d'environ 61).
+    expect(contrastWithAlpha(FAINT, 1, 60)).toBeGreaterThanOrEqual(7)
   })
 })
 
 describe('computeReadableScrim', () => {
-  it('atteint le seuil AA sur une image uniformément claire', async () => {
+  it('atteint le seuil AAA sur une image uniformément claire', async () => {
     pixels = grayImage(Array(64).fill(235))
     const scrim = await computeReadableScrim('data:,')
-    expect(contrastAfterScrim(235, scrim)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastAfterScrim(235, scrim)).toBeGreaterThanOrEqual(7)
   })
 
   it('assombrit à peine une image déjà très sombre', async () => {
@@ -110,7 +112,7 @@ describe('computeReadableScrim', () => {
     // Déjà lisible sans aide : le voile doit rester quasi nul pour ne pas
     // effacer inutilement l'image choisie.
     expect(scrim).toBeLessThan(0.1)
-    expect(contrastAfterScrim(12, scrim)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastAfterScrim(12, scrim)).toBeGreaterThanOrEqual(7)
   })
 
   it('se règle sur les ZONES CLAIRES, pas sur la moyenne', async () => {
@@ -120,7 +122,7 @@ describe('computeReadableScrim', () => {
     // le texte posé sur le ciel était illisible.
     pixels = grayImage([...Array(45).fill(18), ...Array(19).fill(225)])
     const scrim = await computeReadableScrim('data:,')
-    expect(contrastAfterScrim(225, scrim)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastAfterScrim(225, scrim)).toBeGreaterThanOrEqual(7)
   })
 
   it('ne se laisse pas dicter la loi par un reflet spéculaire isolé', async () => {
