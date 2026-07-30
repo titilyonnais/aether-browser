@@ -4,6 +4,28 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.71.0] — 2026-07-30
+
+### Corrigé
+
+- **Sur une image importée, ni le voile ni le flou ne s'appliquaient** — l'image s'affichait
+  telle quelle et plus AUCUN texte n'était lisible, alors que la valeur calculée était pourtant
+  correcte en base (vérifié : 0,74). Le voile vivait dans un `<div>` frère superposé en absolu,
+  et rien ne garantissait qu'il couvre effectivement le fond. Fond et voile ne forment désormais
+  qu'une seule pile `background-image` : ils ne peuvent plus se désolidariser ni s'empiler dans
+  le mauvais ordre.
+- **« Autoriser » rogné par un fondu** dans les listes déroulantes de Confidentialité ›
+  Autorisations par site — le conteneur de 96 px était trop juste d'un cheveu pour le mot plus
+  son chevron, et le fondu de troncature mordait sur la fin du mot alors qu'il n'y avait rien à
+  tronquer.
+
+### Ajouté
+
+- **Réglages du fond d'écran** (Apparence › Thème, images personnelles) : le flou est
+  désactivable, et l'assombrissement s'ajuste au curseur. Descendre sous la valeur calculée
+  reste possible — un avertissement signale simplement que la lisibilité n'est plus garantie.
+  Un lien rétablit la valeur automatique.
+
 ## [0.70.0] — 2026-07-30
 
 ### Corrigé

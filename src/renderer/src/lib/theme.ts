@@ -143,10 +143,38 @@ export function themeAnimatedLayers(theme: NewTabBackground | null): { css: stri
 
 /** Opacité EFFECTIVE du voile de lisibilité. Pour un thème intégré, la valeur
  * à jour du catalogue prime toujours sur celle éventuellement persistée par
- * une version antérieure ; pour une image, c'est la valeur calculée à
- * l'import (voir `computeReadableScrim`) qui fait foi. */
+ * une version antérieure ; pour une image, un réglage manuel (`scrimUser`)
+ * prime sur la valeur calculée à l'import (voir `computeReadableScrim`). */
 export function effectiveScrim(theme: NewTabBackground | null): number {
   if (!theme) return 0
   if (theme.kind === 'preset') return backgroundPreset(theme.value)?.scrim ?? theme.scrim ?? 0.32
-  return theme.scrim ?? 0.55
+  return theme.scrimUser ?? theme.scrim ?? 0.55
+}
+
+/** Le flou du fond est-il actif ? Images personnelles seulement — un dégradé
+ * intégré n'a aucun détail fin à atténuer. Activé par défaut. */
+export function isBlurEnabled(theme: NewTabBackground | null): boolean {
+  return theme?.kind === 'custom' && theme.blur !== false
+}
+
+/**
+ * Pile CSS `background-image` complète d'un thème : le voile de lisibilité est
+ * une COUCHE de cette pile, posée au-dessus de l'image ou du dégradé.
+ *
+ * Auparavant le voile vivait dans un `<div>` frère, superposé en absolu. Rien
+ * ne garantissait qu'il couvre effectivement le fond — et de fait, une image
+ * s'est affichée en clair, sans voile ni flou, rendant toute la page illisible
+ * alors que la valeur calculée était pourtant correcte en base. Réunir fond et
+ * voile dans une seule propriété supprime la question : ils ne peuvent plus se
+ * désolidariser, ni s'empiler dans le mauvais ordre.
+ *
+ * En CSS, la PREMIÈRE couche est la plus haute — le voile passe donc devant.
+ */
+export function themeBackgroundStack(theme: NewTabBackground | null): string | null {
+  const base = themeBackgroundCss(theme)
+  if (!base) return null
+  const scrim = effectiveScrim(theme)
+  if (scrim <= 0) return base
+  const veil = `linear-gradient(rgba(0, 0, 0, ${scrim}), rgba(0, 0, 0, ${scrim}))`
+  return `${veil}, ${base}`
 }

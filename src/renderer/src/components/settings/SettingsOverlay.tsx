@@ -1056,6 +1056,57 @@ function ThemeBlock({
           <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
             {t('settings.appearance.themeAutoContrast')}
           </p>
+
+          {/* Réglages du traitement de lisibilité. La valeur automatique vise
+              la LISIBILITÉ, pas le goût : selon la photo et l'usage, on peut
+              vouloir la voir davantage. Le curseur laisse ce choix, en
+              affichant honnêtement quand on descend sous le seuil calculé. */}
+          <div className="mt-3 space-y-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+            <Toggle
+              label={t('settings.appearance.themeBlur')}
+              hint={t('settings.appearance.themeBlurHint')}
+              checked={theme.blur !== false}
+              onChange={(v) => void patch({ newTabBackground: { ...theme, blur: v } })}
+            />
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] text-ink-dim">{t('settings.appearance.themeDarkening')}</span>
+                <span className="font-mono text-[11px] tabular-nums text-ink-faint">
+                  {Math.round((theme.scrimUser ?? theme.scrim) * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={92}
+                step={1}
+                value={Math.round((theme.scrimUser ?? theme.scrim) * 100)}
+                onChange={(e) =>
+                  void patch({ newTabBackground: { ...theme, scrimUser: Number(e.target.value) / 100 } })
+                }
+                className="mt-2 h-1 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-glacier"
+              />
+              {(theme.scrimUser ?? theme.scrim) < theme.scrim && (
+                <p className="mt-1.5 text-[10.5px] leading-snug text-amber-300/80">
+                  {t('settings.appearance.themeDarkeningBelow', {
+                    value: Math.round(theme.scrim * 100)
+                  })}
+                </p>
+              )}
+              {theme.scrimUser !== undefined && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const { scrimUser: _drop, ...rest } = theme
+                    void patch({ newTabBackground: rest })
+                  }}
+                  className="mt-1.5 text-[10.5px] text-ink-faint underline-offset-2 transition-colors hover:text-ink-dim hover:underline"
+                >
+                  {t('settings.appearance.themeDarkeningAuto')}
+                </button>
+              )}
+            </div>
+          </div>
           <button
             type="button"
             disabled={extracting}
@@ -1463,7 +1514,11 @@ function SitePermissionsBlock() {
                       <span className="min-w-0 flex-1 truncate text-[11px] text-ink-faint">
                         {t(labelKey)}
                       </span>
-                      <div className="w-24 shrink-0">
+                      {/* `w-28` et non `w-24` : à 96 px, « Autoriser » plus le
+                          chevron débordaient d'un cheveu, et le fondu de
+                          troncature rognait la fin du mot alors qu'il n'y avait
+                          rien à tronquer. */}
+                      <div className="w-28 shrink-0">
                         <Select
                           value={r.state}
                           onChange={(v) => void setPermission(origin, r.kind, v as SitePermissionState)}

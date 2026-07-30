@@ -268,6 +268,15 @@ export interface NewTabBackground {
    * démarrage plutôt que d'exiger un réimport manuel de l'image (voir
    * `SCRIM_ALGO_VERSION`, renderer/lib/theme.ts). */
   scrimAlgo?: number
+  /** Assombrissement choisi À LA MAIN (0-0.92), qui prime alors sur la valeur
+   * calculée. `undefined` = automatique. Le calcul vise la lisibilité, pas le
+   * goût : certaines photos supportent moins d'assombrissement que le seuil
+   * ne l'exige, d'autres méritent plus. */
+  scrimUser?: number
+  /** Flou du fond (images personnelles). `undefined` = activé, la valeur par
+   * défaut : c'est lui qui rend lisibles les petits textes sur une photo
+   * détaillée, mais il transforme visiblement l'image — donc débrayable. */
+  blur?: boolean
 }
 
 /** Résultat météo courant (widget nouvel onglet) — géolocalisation par IP, aucune clé requise. */

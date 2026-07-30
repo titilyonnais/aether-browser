@@ -123,8 +123,15 @@ export const settings: Record<string, string> = {
   'settings.appearance.themeCustomImage': 'Importer une image',
   'settings.appearance.useImageColor': "Accent d'après l'image",
   'settings.appearance.extractingColor': 'Analyse des couleurs…',
+  'settings.appearance.themeBlur': 'Flouter le fond',
+  'settings.appearance.themeBlurHint':
+    "Atténue le détail fin de la photo, qui gêne davantage la lecture que son contraste moyen — c'est ce qui rend les petits textes nets. Désactivez pour garder l'image telle quelle.",
+  'settings.appearance.themeDarkening': 'Assombrissement',
+  'settings.appearance.themeDarkeningBelow':
+    'Sous les {{value}}% calculés pour la lisibilité — certains textes peuvent devenir difficiles à lire.',
+  'settings.appearance.themeDarkeningAuto': 'Revenir à la valeur automatique',
   'settings.appearance.themeAutoContrast':
-    "Le fond est automatiquement assombri juste assez pour que les textes restent lisibles (contraste minimum WCAG AA), sans jamais l'obscurcir plus que nécessaire.",
+    "Le fond est automatiquement assombri juste assez pour que les textes restent lisibles (contraste minimum WCAG AAA), sans jamais l'obscurcir plus que nécessaire.",
   'settings.appearance.favoritesBarTitle': 'Barre de favoris',
   'settings.appearance.favoritesBarHint': 'Une bande de pages épinglées, sous la barre de titre.',
   'settings.appearance.showFavoritesBar': 'Afficher la barre de favoris',

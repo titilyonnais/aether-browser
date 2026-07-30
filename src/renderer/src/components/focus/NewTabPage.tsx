@@ -41,11 +41,11 @@ import { Favicon } from '@/components/ui/Favicon'
 import { useT } from '@/i18n/useT'
 import { closePage, executeIntent } from '@/lib/actions'
 import {
-  effectiveScrim,
+  isBlurEnabled,
   onBackgroundTextVars,
   ON_THEME_ATTR,
   themeAnimatedLayers,
-  themeBackgroundCss
+  themeBackgroundStack
 } from '@/lib/theme'
 import { cn, domainOf, uuid } from '@/lib/utils'
 import { useSearchEnginesStore } from '@/stores/searchEngines'
@@ -249,20 +249,21 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
     void useSettingsStore.getState().patch({ newTabNewsStyle: style })
   }
 
-  const themeCss = themeBackgroundCss(background)
-  const isImageTheme = background?.kind === 'custom'
+  // Fond ET voile de lisibilité dans UNE SEULE pile `background-image` : ils
+  // ne peuvent plus se désolidariser (voir `themeBackgroundStack`).
+  const themeStack = themeBackgroundStack(background)
+  const blurred = isBlurEnabled(background)
   const backgroundStyle: React.CSSProperties = {
-    // Une image personnelle n'est PAS peinte ici : elle passe par une couche
-    // dédiée (voir plus bas) pour pouvoir être floutée sans que le flou
-    // n'atteigne le contenu de la page. Les dégradés intégrés, eux, n'ont
-    // aucun détail fin à atténuer et restent posés directement.
-    ...(themeCss && !isImageTheme ? { backgroundImage: themeCss } : {}),
+    // Fond posé ici SAUF quand il doit être flouté : le flou passe alors par
+    // une couche dédiée, sans quoi il s'appliquerait aussi au contenu.
+    ...(themeStack && !blurred
+      ? { backgroundImage: themeStack, backgroundSize: 'cover', backgroundPosition: 'center' }
+      : {}),
     // Remonte les tons de texte secondaires au-dessus du seuil de lisibilité
     // quand un thème est actif — c'est le TEXTE qui s'adapte au fond, jamais
     // une carte opaque posée derrière lui (voir `onBackgroundTextVars`).
     ...(onBackgroundTextVars(Boolean(background)) as React.CSSProperties)
   }
-  const scrim = effectiveScrim(background)
   const animatedLayers = themeAnimatedLayers(background)
 
   if (!settings) return null
@@ -285,11 +286,11 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
           exactement comme le font les fonds translucides des systèmes
           d'exploitation. `-inset-8` + `scale` : le flou tirerait sinon du vide
           sur les bords, y laissant un liseré pâle. */}
-      {isImageTheme && themeCss && (
+      {themeStack && blurred && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div
             className="absolute -inset-8 scale-105 bg-cover bg-center"
-            style={{ backgroundImage: themeCss, filter: 'blur(7px)' }}
+            style={{ backgroundImage: themeStack, filter: 'blur(7px)' }}
           />
         </div>
       )}
@@ -310,13 +311,9 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
         </div>
       )}
 
-      {/* Voile de lisibilité — assombrit le fond juste assez pour que le texte
-          le PLUS SOMBRE de la page atteigne 4.5:1 (WCAG AA) : valeur calibrée
-          par thème intégré, calculée sur l'image pour un import personnel
-          (voir `computeReadableScrim`). Jamais une opacité fixe arbitraire. */}
-      {background && (
-        <div className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: scrim }} />
-      )}
+      {/* Plus de `<div>` de voile séparé : il fait désormais partie de la pile
+          de fond (`themeBackgroundStack`), donc il ne peut plus manquer à
+          l'appel pendant que l'image, elle, s'affiche. */}
       {widgets.weather && <WeatherWidget />}
       {widgets.clock && <ClockWidget />}
 
