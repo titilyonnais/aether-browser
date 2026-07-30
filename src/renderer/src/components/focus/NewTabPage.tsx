@@ -286,8 +286,22 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
           exactement comme le font les fonds translucides des systèmes
           d'exploitation. `-inset-8` + `scale` : le flou tirerait sinon du vide
           sur les bords, y laissant un liseré pâle. */}
+      {/* `-z-10` sur ces DEUX conteneurs, PAS juste `absolute` : sans z-index
+          explicite, un enfant positionné (position: absolute) peint TOUJOURS
+          par-dessus les enfants non positionnés de son parent, quel que soit
+          l'ordre dans le DOM (CSS 2.1 §E.2 : les descendants positionnés,
+          même sans z-index, forment une couche au-dessus des descendants en
+          flux normal). Or tout le contenu de la page — barre de recherche,
+          raccourcis, actualités — est en flux normal, SANS position
+          explicite. Ce calque flouté, laissé en `position: absolute` seul
+          comme avant, passait donc TOUJOURS devant, masquant tout le texte
+          dès que le flou était actif — exactement le bug observé (« dès que
+          j'active le flou, plus aucun texte ; je le désactive, tout
+          réapparaît »), et qui touchait tout autant les thèmes animés (même
+          construction) sans qu'on l'ait encore remarqué. `-z-10` fait
+          explicitement redescendre ce calque SOUS le flux normal. */}
       {themeStack && blurred && (
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
           <div
             className="absolute -inset-8 scale-105 bg-cover bg-center"
             style={{ backgroundImage: themeStack, filter: 'blur(7px)' }}
@@ -300,7 +314,7 @@ export function NewTabPage({ pageId }: NewTabPageProps) {
           conteneur dédié : les couches débordent volontairement du cadre pour
           qu'aucune rotation ni dérive ne découvre de bord. */}
       {animatedLayers.length > 0 && (
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
           {animatedLayers.map((layer, i) => (
             <div
               key={i}

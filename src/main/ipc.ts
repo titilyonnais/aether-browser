@@ -51,6 +51,7 @@ import { computeAffinities, queuePageEmbedding } from './ai/embeddings'
 import { classifyIntent } from './ai/intent'
 import type { AiRouter } from './ai/router'
 import { avatarImageDataUrl, chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
+import { getDefaultBrowserState, promptSetDefaultBrowser } from './defaultBrowser'
 import { getCertificateDetail } from './certificates'
 import { getNewTabNews, getNewTabWeather, getSearchSuggestions, searchNewTabCities } from './newtab'
 import { invalidateSiteDataCache, listSiteDataGroups, registrableDomain, siteDataGroupFor } from './siteDataRegistry'
@@ -1920,6 +1921,9 @@ export function registerIpc(router: AiRouter): void {
     const { views } = resolveWindowContext(e)
     createSecondaryContentWindow(activeProfileOf(views), false, undefined, router)
   })
+
+  ipcMain.handle(CH.appDefaultBrowserStatus, () => getDefaultBrowserState())
+  ipcMain.on(CH.appPromptSetDefaultBrowser, () => promptSetDefaultBrowser())
 
   ipcMain.handle(
     CH.reportSend,

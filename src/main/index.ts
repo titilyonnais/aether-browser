@@ -6,6 +6,7 @@
 import { app, Menu, session, type BrowserWindow } from 'electron'
 import { AiRouter } from './ai/router'
 import { closeDatabase, openDatabase } from './db/database'
+import { registerAsDefaultBrowserCandidate } from './defaultBrowser'
 import { embeddingsRepo, profilesRepo } from './db/repositories'
 import { applyFlagsBeforeReady } from './flags'
 import { attachWindowLifecycleEvents, createViewDelegate, ensureBootstrap, registerIpc } from './ipc'
@@ -77,6 +78,10 @@ if (!gotLock) {
     }
     const { activeProfileId } = ensureBootstrap()
     installAetherProtocol()
+    // Réinscrit ÆTHER comme candidat navigateur par défaut à CHAQUE lancement
+    // — opération idempotente, rattrape un enregistrement corrompu ou effacé
+    // sans qu'on ait à s'en soucier (voir defaultBrowser.ts).
+    registerAsDefaultBrowserCandidate()
 
     // La session UI (defaultSession) n'a besoin d'aucune permission web.
     session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))

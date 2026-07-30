@@ -258,6 +258,8 @@ const api: AetherApi = {
     runMenuCommand: (cmd: ShortcutCommand) => ipcRenderer.send(CH.appMenuRunCommand, cmd),
     setTitle: (title: string) => ipcRenderer.send(CH.appSetTitle, title),
     openNewWindow: () => ipcRenderer.send(CH.appNewWindow),
+    defaultBrowserStatus: () => ipcRenderer.invoke(CH.appDefaultBrowserStatus),
+    promptSetDefaultBrowser: () => ipcRenderer.send(CH.appPromptSetDefaultBrowser),
     sendReport: (subject: string, body: string, attachmentPaths?: string[], includeMetadata?: boolean) =>
       ipcRenderer.invoke(CH.reportSend, subject, body, attachmentPaths, includeMetadata),
     chooseReportAttachments: () => ipcRenderer.invoke(CH.reportChooseAttachments)

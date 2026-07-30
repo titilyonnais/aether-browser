@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Minus, Plus, RotateCcw } from 'lucide-react'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { SpatialCanvas } from '@/components/canvas/SpatialCanvas'
+import { DefaultBrowserBanner } from '@/components/chrome/DefaultBrowserBanner'
 import { TitleBar } from '@/components/chrome/TitleBar'
 import { ConstellationPanel } from '@/components/constellation/ConstellationPanel'
 import { FavoritesBar } from '@/components/chrome/FavoritesBar'
@@ -223,6 +224,7 @@ export default function App() {
       <div className="relative flex h-full flex-col overflow-hidden bg-void text-ink">
         <AmbientBackground />
         <TitleBar />
+        <DefaultBrowserBanner />
         {showFavoritesBar && <FavoritesBar />}
         <div className="relative z-10 flex min-h-0 flex-1">
           <ConstellationPanel />

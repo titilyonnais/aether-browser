@@ -80,7 +80,8 @@ const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKe
   downloadDir: '',
   askDownloadLocation: true,
   autoCheckForUpdates: true,
-  onboarded: false
+  onboarded: false,
+  defaultBrowserBannerDismissed: false
 }
 
 const SECRET_KEYS: Record<ApiProviderKind, string> = {
@@ -270,6 +271,7 @@ export function getSettings(): AppSettings {
     downloadDir: getString('downloadDir'),
     askDownloadLocation: getString('askDownloadLocation'),
     autoCheckForUpdates: getString('autoCheckForUpdates'),
+    defaultBrowserBannerDismissed: getString('defaultBrowserBannerDismissed'),
     onboarded: getString('onboarded'),
     hasAnthropicKey: hasSecret('anthropic'),
     hasOpenaiKey: hasSecret('openai'),
@@ -401,6 +403,9 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
   if (patch.downloadDir !== undefined) putValue('downloadDir', patch.downloadDir)
   if (patch.askDownloadLocation !== undefined) putValue('askDownloadLocation', patch.askDownloadLocation)
   if (patch.autoCheckForUpdates !== undefined) putValue('autoCheckForUpdates', patch.autoCheckForUpdates)
+  if (patch.defaultBrowserBannerDismissed !== undefined) {
+    putValue('defaultBrowserBannerDismissed', patch.defaultBrowserBannerDismissed)
+  }
   if (patch.onboarded !== undefined) putValue('onboarded', patch.onboarded)
   if (patch.anthropicKey !== undefined) storeSecret('anthropic', patch.anthropicKey)
   if (patch.openaiKey !== undefined) storeSecret('openai', patch.openaiKey)

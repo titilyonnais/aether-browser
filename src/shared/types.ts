@@ -459,6 +459,10 @@ export interface AppSettings {
    * vérification manuelle (Réglages › À propos) fonctionne. */
   autoCheckForUpdates: boolean
   onboarded: boolean
+  /** Bannière « Faire d'ÆTHER votre navigateur par défaut » masquée pour de
+   * bon (menu « … » de la bannière) — distinct d'un simple « Plus tard », qui
+   * ne dure que la session en cours (état renderer, jamais persisté). */
+  defaultBrowserBannerDismissed: boolean
 }
 
 /** Patch envoyé par le renderer ; les clés API transitent une fois puis sont chiffrées. */
@@ -521,6 +525,7 @@ export interface SettingsPatch {
   downloadDir?: string
   askDownloadLocation?: boolean
   autoCheckForUpdates?: boolean
+  defaultBrowserBannerDismissed?: boolean
   onboarded?: boolean
 }
 

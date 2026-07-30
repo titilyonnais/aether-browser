@@ -4,6 +4,32 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.72.0] — 2026-07-30
+
+### Corrigé
+
+- **Texte invisible dès que le flou du fond était activé** — un vrai bug d'empilement CSS, sans
+  rapport avec les tentatives précédentes sur la lisibilité. Le calque flouté est
+  `position: absolute` ; en CSS, un enfant positionné peint TOUJOURS par-dessus les enfants en
+  flux normal (barre de recherche, raccourcis, actualités — tous sans position explicite), quel
+  que soit l'ordre dans le DOM. Sans flou, il n'existe aucun calque enfant : rien ne masquait le
+  texte, d'où le contraste exact du signalement (« dès que je l'active, plus rien ; je le
+  désactive, tout réapparaît »). Le même défaut touchait aussi les thèmes animés, sans qu'on
+  l'ait encore remarqué. Un z-index négatif fait maintenant redescendre ces calques sous le flux
+  normal, explicitement plutôt que par un ordre implicite fragile.
+
+### Ajouté
+
+- **Candidature d'ÆTHER comme navigateur par défaut de Windows.** ÆTHER s'enregistre désormais
+  comme candidat http/https à chaque lancement — c'est cet enregistrement qui le fait apparaître
+  dans le sélecteur Windows, le signal demandé. Windows n'autorise aucune app à SE désigner
+  elle-même par défaut sans confirmation (protection anti-détournement depuis Windows 8) : une
+  bannière propose de confirmer, avec les trois issues de Chrome/Edge — « Définir par défaut »
+  (ouvre le sélecteur Windows), « Plus tard » (redemande à la prochaine ouverture) et
+  « … › Ne plus afficher » (définitif). Un contrôle permanent existe aussi dans Réglages ›
+  Navigation pour y revenir après coup. **Jamais activé pour le build portable**, qui promet
+  explicitement aucune écriture registre — vérifié par test, y compris l'échec sans la garde.
+
 ## [0.71.0] — 2026-07-30
 
 ### Corrigé

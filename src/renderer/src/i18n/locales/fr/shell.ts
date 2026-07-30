@@ -65,5 +65,11 @@ export const shell: Record<string, string> = {
   'shell.toast.pinnedToNotes': 'Épinglé dans les notes',
   'shell.toast.linkCopied': 'Lien copié',
   'shell.toast.favoriteActionFailed': "Impossible de modifier les favoris — réessayez",
-  'shell.toast.pageCannotBeTranslated': 'Cette page ne peut pas être traduite'
+  'shell.toast.pageCannotBeTranslated': 'Cette page ne peut pas être traduite',
+
+  'defaultBrowser.banner.text': 'Faire d’ÆTHER votre navigateur par défaut ?',
+  'defaultBrowser.banner.setDefault': 'Définir par défaut',
+  'defaultBrowser.banner.later': 'Plus tard',
+  'defaultBrowser.banner.moreOptions': 'Plus d’options',
+  'defaultBrowser.banner.dismissForGood': 'Ne plus afficher'
 }

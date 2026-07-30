@@ -312,6 +312,8 @@ export const CH = {
   /** Ouvre une nouvelle fenêtre ÆTHER complète sur le profil actif de la
    * fenêtre appelante — support multi-fenêtre. */
   appNewWindow: 'app:new-window',
+  appDefaultBrowserStatus: 'app:default-browser-status',
+  appPromptSetDefaultBrowser: 'app:prompt-set-default-browser',
   reportSend: 'report:send',
   reportChooseAttachments: 'report:choose-attachments',
 
@@ -743,6 +745,16 @@ export interface AetherApi {
     setTitle(title: string): void
     /** Ouvre une nouvelle fenêtre ÆTHER complète (même profil que la fenêtre appelante). */
     openNewWindow(): void
+    /** État du navigateur par défaut — revérifié à chaque appel (jamais mis
+     * en cache) : l'utilisateur peut changer ce réglage à tout moment depuis
+     * Windows, hors de tout contrôle d'ÆTHER. `available: false` en build
+     * portable (aucune écriture registre par conception, ÆTHER n'y est
+     * jamais candidat). */
+    defaultBrowserStatus(): Promise<{ isDefault: boolean; available: boolean }>
+    /** Ouvre la page Windows où l'utilisateur peut RÉELLEMENT confirmer
+     * ÆTHER comme navigateur par défaut — voir defaultBrowser.ts (main) pour
+     * pourquoi aucune API ne permet de l'automatiser davantage. */
+    promptSetDefaultBrowser(): void
     /** Envoie un rapport de bug par SMTP (identifiants côté main uniquement,
      * jamais exposés ici) — échoue proprement si aucun relais n'est configuré.
      * `attachmentPaths` : chemins déjà choisis via `chooseReportAttachments`.

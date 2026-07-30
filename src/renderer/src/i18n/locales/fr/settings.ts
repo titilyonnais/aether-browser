@@ -159,6 +159,11 @@ export const settings: Record<string, string> = {
   'settings.appearance.renderingHint': 'Réglages moteur — un redémarrage peut être nécessaire.',
 
   // Section Navigation
+  'settings.navigation.defaultBrowserTitle': 'Navigateur par défaut',
+  'settings.navigation.defaultBrowserYes': 'ÆTHER est votre navigateur par défaut',
+  'settings.navigation.defaultBrowserNo': "ÆTHER n'est pas votre navigateur par défaut",
+  'settings.navigation.defaultBrowserPortable':
+    "Indisponible en version portable — devenir navigateur par défaut exige des écritures dans le registre Windows, ce que cette version s'interdit par conception (aucune installation, aucune trace sur le système).",
   'settings.navigation.homepageTitle': "Page d'accueil",
   'settings.navigation.homepageHint': "Ouverte via « Ouvrir ma page d'accueil » dans un espace vide.",
   'settings.navigation.homepagePlaceholder': 'https://exemple.com',

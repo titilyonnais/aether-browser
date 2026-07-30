@@ -184,7 +184,7 @@ function SettingsPanel() {
       label: t('settings.nav.navigation'),
       icon: Compass,
       keywords:
-        "page d'accueil nouvel onglet démarrage restaurer onglets dernière session téléchargements dossier demander où enregistrer barre de favoris"
+        "navigateur par défaut page d'accueil nouvel onglet démarrage restaurer onglets dernière session téléchargements dossier demander où enregistrer barre de favoris"
     },
     {
       id: 'recherche',
@@ -1287,6 +1287,58 @@ function AppearanceSection() {
 
 // ─── Section Navigation ──────────────────────────────────────────────────────
 
+/** Contrôle permanent, indépendant de la bannière (DefaultBrowserBanner.tsx,
+ * montée globalement dans App.tsx) — pour reprendre la main après avoir
+ * ignoré la bannière une fois, exactement comme Chrome/Edge/Brave gardent
+ * tous une ligne « Navigateur par défaut » dans leurs réglages en plus de
+ * leur invite ponctuelle. */
+function DefaultBrowserBlock() {
+  const t = useT()
+  const [status, setStatus] = useState<{ isDefault: boolean; available: boolean } | null>(null)
+
+  useEffect(() => {
+    void window.aether.app.defaultBrowserStatus().then(setStatus)
+  }, [])
+
+  if (!status) return null
+
+  if (!status.available) {
+    return (
+      <Block title={t('settings.navigation.defaultBrowserTitle')}>
+        <p className="text-[11.5px] leading-relaxed text-ink-faint">
+          {t('settings.navigation.defaultBrowserPortable')}
+        </p>
+      </Block>
+    )
+  }
+
+  return (
+    <Block title={t('settings.navigation.defaultBrowserTitle')}>
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3">
+        <span className="flex items-center gap-2 text-[12.5px] text-ink-dim">
+          {status.isDefault ? (
+            <Check size={14} strokeWidth={2} className="shrink-0 text-emerald-300/80" />
+          ) : (
+            <X size={14} strokeWidth={2} className="shrink-0 text-ink-faint" />
+          )}
+          {status.isDefault
+            ? t('settings.navigation.defaultBrowserYes')
+            : t('settings.navigation.defaultBrowserNo')}
+        </span>
+        {!status.isDefault && (
+          <button
+            type="button"
+            onClick={() => window.aether.app.promptSetDefaultBrowser()}
+            className="shrink-0 rounded-full bg-glacier px-4 py-1.5 text-[11.5px] font-medium text-ink-onaccent transition-colors hover:bg-glacier/90"
+          >
+            {t('defaultBrowser.banner.setDefault')}
+          </button>
+        )}
+      </div>
+    </Block>
+  )
+}
+
 function NavigationSection() {
   const t = useT()
   const settings = useSettingsStore((s) => s.settings)
@@ -1300,6 +1352,8 @@ function NavigationSection() {
 
   return (
     <div className="space-y-7">
+      <DefaultBrowserBlock />
+
       <Block title={t('settings.navigation.homepageTitle')} hint={t('settings.navigation.homepageHint')}>
         <TextInput
           defaultValue={settings.homepage}

@@ -70,6 +70,11 @@ interface UiState {
   siteDataTarget: { pageId: PageId; origin: string } | null
   /** Origine dont on affiche la page de réglages complète (section « site-details »). */
   siteDetailsOrigin: string | null
+  /** Bannière « navigateur par défaut » écartée pour CETTE session (« Plus
+   * tard ») — distinct du réglage persisté `defaultBrowserBannerDismissed`
+   * (menu « … », définitif). Jamais persisté : la bannière redemande à la
+   * prochaine ouverture d'ÆTHER, comme le font Chrome/Edge. */
+  defaultBrowserBannerSnoozed: boolean
 
   setReady(ready: boolean): void
   startCoach(): void
@@ -98,6 +103,7 @@ interface UiState {
   setCertificateTarget(id: PageId | null): void
   setSiteDataTarget(target: { pageId: PageId; origin: string } | null): void
   setSiteDetailsOrigin(origin: string | null): void
+  snoozeDefaultBrowserBanner(): void
 }
 
 export const useUiStore = create<UiState>()((set, get) => ({
@@ -122,6 +128,7 @@ export const useUiStore = create<UiState>()((set, get) => ({
   certificateTargetPageId: null,
   siteDataTarget: null,
   siteDetailsOrigin: null,
+  defaultBrowserBannerSnoozed: false,
 
   setReady: (ready) => set({ ready }),
   startCoach: () => set({ coachActive: true }),
@@ -164,5 +171,6 @@ export const useUiStore = create<UiState>()((set, get) => ({
   setQrTarget: (qrTarget) => set({ qrTarget }),
   setCertificateTarget: (certificateTargetPageId) => set({ certificateTargetPageId }),
   setSiteDataTarget: (siteDataTarget) => set({ siteDataTarget }),
-  setSiteDetailsOrigin: (siteDetailsOrigin) => set({ siteDetailsOrigin })
+  setSiteDetailsOrigin: (siteDetailsOrigin) => set({ siteDetailsOrigin }),
+  snoozeDefaultBrowserBanner: () => set({ defaultBrowserBannerSnoozed: true })
 }))
