@@ -141,25 +141,26 @@ const SPACE_HUE_PALETTE = [
   { hue: 190, label: 'Cyan' }
 ]
 
-/** Largeur fixe par type de popover (correspond aux classes Tailwind du contenu : w-72/w-52/w-80).
- * `app-menu` réserve DÉJÀ la place du flyout de sous-menu (w-80 racine +
- * gap-1.5 + w-72 flyout, toujours monté même invisible — voir
- * AppMenuPopoverCard.tsx) dans cette toute première estimation : sans ça, le
- * calcul initial positionnait la fenêtre pour un popup de 320px, puis
- * `resizePopoverWindow` la recalait sur ses 620px réels — un saut visible au
- * tout premier affichage si ce correctif arrivait après que la fenêtre soit
- * déjà montrée (`pendingShow`), ne se réglant qu'au premier redimensionnement
- * suivant (ouvrir un sous-menu) — la largeur RÉELLE ne bouge jamais après ça
- * (voir AppMenuPopoverCard.tsx), donc cette valeur (320+12+288=620) doit
- * rester exacte. La HAUTEUR (POPOVER_DEFAULT_HEIGHT, juste en dessous) suit
- * une logique différente : elle n'a pas besoin d'être exacte, seulement
- * jamais trop courte — voir son propre commentaire. */
+/** Largeur fixe par type de popover (correspond aux classes Tailwind du contenu : w-[320px]/w-52/w-[400px]).
+ * `app-menu` réserve DÉJÀ la place du flyout de sous-menu (w-[400px] racine +
+ * gap-1.5 + w-[320px] flyout, toujours monté même invisible — voir
+ * AppMenuPopoverCard.tsx, `MENU_W`/`FLYOUT_W`) dans cette toute première
+ * estimation : sans ça, le calcul initial positionnait la fenêtre pour un
+ * popup de 400px, puis `resizePopoverWindow` la recalait sur ses 726px
+ * réels — un saut visible au tout premier affichage si ce correctif arrivait
+ * après que la fenêtre soit déjà montrée (`pendingShow`), ne se réglant
+ * qu'au premier redimensionnement suivant (ouvrir un sous-menu) — la largeur
+ * RÉELLE ne bouge jamais après ça (voir AppMenuPopoverCard.tsx), donc cette
+ * valeur (400+6+320=726) doit rester exacte. La HAUTEUR
+ * (POPOVER_DEFAULT_HEIGHT, juste en dessous) suit une logique différente :
+ * elle n'a pas besoin d'être exacte, seulement jamais trop courte — voir son
+ * propre commentaire. */
 const POPOVER_WIDTH: Record<PopoverShowRequest['kind'], number> = {
   'site-info': 288,
   'tab-preview': 208,
   translate: 320,
   'favorites-folder': 320,
-  'app-menu': 620,
+  'app-menu': 726,
   'extensions-menu': 288,
   'update-ready': 288
 }
@@ -185,9 +186,17 @@ const POPOVER_DEFAULT_HEIGHT: Record<PopoverShowRequest['kind'], number> = {
  * paraissait collée à l'onglet avec 8px. */
 const POPOVER_GAP = 12
 
-/** Convertit l'ancrage (coordonnées locales à la fenêtre principale) en bornes écran absolues. */
+/** Convertit l'ancrage (coordonnées locales à la fenêtre principale) en bornes écran absolues.
+ * `getContentBounds()`, PAS `getBounds()` : cette fenêtre est frameless mais RESIZABLE
+ * (`mainWindow.ts`), le style Windows `WS_THICKFRAME` par défaut qui en découle (voir dwm.ts)
+ * ajoute une bordure de redimensionnement invisible autour du contenu réel, que `getBounds()`
+ * INCLUT dans ses coordonnées — un anchor calculé depuis `getBounds()` se retrouvait donc décalé
+ * de cette bordure (quelques pixels) par rapport au bouton réellement cliqué, pour TOUT popover
+ * sans exception (signalé par l'utilisateur, capture à l'appui). `getContentBounds()` exclut
+ * cette bordure, exactement ce que `req.anchor` (mesuré côté renderer, donc déjà dans le repère
+ * du CONTENU) attend comme origine. */
 function computePopoverBounds(win: BrowserWindow, req: PopoverShowRequest): ScreenRect {
-  const winBounds = win.getBounds()
+  const winBounds = win.getContentBounds()
   const width = POPOVER_WIDTH[req.kind]
   const height = POPOVER_DEFAULT_HEIGHT[req.kind]
   const anchorScreenX = winBounds.x + req.anchor.x
@@ -2111,14 +2120,15 @@ export function registerIpc(router: AiRouter): void {
                 ? { kind: 'site-info', pageId: req.pageId, initialInfo: req.initialInfo }
                 : { kind: req.kind, pageId: req.pageId }
     if (req.kind === 'extensions-menu') {
-      const winBounds = win.getBounds()
+      // `getContentBounds()` — voir le commentaire de `computePopoverBounds`.
+      const winBounds = win.getContentBounds()
       extensionsMenuAnchors.set(win.id, {
         rightX: winBounds.x + req.anchor.x + req.anchor.width,
         topY: winBounds.y + req.anchor.y + req.anchor.height + POPOVER_GAP
       })
     }
     const pinnedRightEdge =
-      req.placement === 'below-right' ? win.getBounds().x + req.anchor.x + req.anchor.width : null
+      req.placement === 'below-right' ? win.getContentBounds().x + req.anchor.x + req.anchor.width : null
     openPopover(win, computePopoverBounds(win, req), content, pinnedRightEdge)
   })
 
@@ -2244,7 +2254,8 @@ export function createViewDelegate(
       pendingWebstoreInstalls.set(win.id, { pageId, extensionId })
       const width = 360
       const height = 200
-      const wb = win.getBounds()
+      // `getContentBounds()` — voir le commentaire de `computePopoverBounds`.
+      const wb = win.getContentBounds()
       // Ancrée en haut de la fenêtre (comme la vraie bulle de confirmation de
       // Chrome, sous la barre d'adresse) — pas centrée verticalement.
       openPopover(

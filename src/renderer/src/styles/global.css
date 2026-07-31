@@ -302,9 +302,12 @@ textarea:focus-visible {
   backdrop-filter: blur(24px) saturate(1.25);
 }
 
-/* Verre dense pour les surfaces flottantes (overlays, palettes). */
+/* Verre dense pour les surfaces flottantes (overlays, palettes). `color-mix`
+   plutôt qu'un gris neutre fixe : une légère teinte de la couleur d'accent du
+   thème choisi (`--color-glacier`, réglée par `applyTheme`, theme.ts) rend
+   chaque bulle visuellement rattachée au thème plutôt que neutre par défaut. */
 @utility glass-strong {
-  background: rgb(14 14 22 / 0.86);
+  background: color-mix(in srgb, var(--color-glacier) 9%, rgb(14 14 22 / 0.86));
   border: 1px solid rgb(255 255 255 / 0.09);
   backdrop-filter: blur(36px) saturate(1.3);
   box-shadow:
@@ -338,7 +341,11 @@ textarea:focus-visible {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background: rgb(16 16 24 / 0.98);
+  /* Légère teinte de l'accent du thème (voir le commentaire de `.glass-strong`
+     ci-dessus) — même principe que le calque de teinte injecté par
+     PopoverSurfaceBlur.tsx une fois la capture arrivée, pour que ce fond de
+     repli (visible tant qu'elle ne l'est pas) reste cohérent avec lui. */
+  background: color-mix(in srgb, var(--color-glacier) 9%, rgb(16 16 24 / 0.98));
   border: 1px solid rgb(255 255 255 / 0.1);
   /* Pas d'ombre portée FLOUE ici (contrairement à `.glass-strong`) : cette
      fenêtre popup native est dimensionnée exactement à la taille de son
@@ -357,7 +364,7 @@ textarea:focus-visible {
    de rendu Chromium, sans le risque de débordement des popups natifs
    ci-dessus (contenu strictement contenu par la boîte de CETTE carte). */
 @utility popover-surface-dom-blur {
-  background: rgb(16 16 24 / 0.7);
+  background: color-mix(in srgb, var(--color-glacier) 9%, rgb(16 16 24 / 0.7));
   border: 1px solid rgb(255 255 255 / 0.1);
   backdrop-filter: blur(28px) saturate(1.3);
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45);

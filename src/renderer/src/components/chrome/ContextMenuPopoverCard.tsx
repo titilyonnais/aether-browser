@@ -50,7 +50,9 @@ function Row({
         isSubmenu && isOpenSubmenu && 'bg-white/[0.07]'
       )}
     >
-      <span className={row.kind === 'item' && row.danger ? 'truncate text-red-300' : 'truncate text-ink-dim'}>{row.label}</span>
+      <span className={row.kind === 'item' && row.danger ? 'whitespace-nowrap text-red-300' : 'whitespace-nowrap text-ink-dim'}>
+        {row.label}
+      </span>
       {isSubmenu ? (
         <ChevronRight size={13} strokeWidth={1.8} className="ml-2 shrink-0 text-ink-faint" />
       ) : row.kind === 'item' && row.checked ? (
@@ -74,9 +76,15 @@ function Panel({
   onOpenSubmenu: (label: string, subRows: ContextMenuRow[]) => void
 }) {
   return (
-    <div className="popover-surface w-56 overflow-hidden rounded-xl p-1.5">
+    // `w-max` (pas un `w-56` fixe) : un menu contextuel est une liste FERMÉE
+    // de libellés connus (jamais du contenu utilisateur arbitraire) — aucune
+    // raison de jamais la couper, signalé par capture utilisateur (« … » de
+    // fin systématique). La carte grandit donc pour tenir la ligne la plus
+    // longue, `min-w-56` évite juste qu'un menu à une seule ligne courte
+    // paraisse trop étroit.
+    <div className="popover-surface w-max min-w-56 overflow-hidden rounded-xl p-1.5">
       {title && (
-        <p className="mb-1 truncate px-2.5 pt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint/70">
+        <p className="mb-1 whitespace-nowrap px-2.5 pt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint/70">
           {title}
         </p>
       )}

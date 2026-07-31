@@ -158,7 +158,8 @@ function showNext(owner: BW, s: PromptState): void {
   if (!s.popup || s.popup.isDestroyed()) s.popup = createPopup(owner)
   const win = s.popup
 
-  const ownerBounds = owner.getBounds()
+  // `getContentBounds()` — voir le commentaire de `computePopoverBounds` (ipc.ts).
+  const ownerBounds = owner.getContentBounds()
   const { x, y } = sanitizeToDisplay(
     ownerBounds.x + ANCHOR_OFFSET.x,
     ownerBounds.y + ANCHOR_OFFSET.y,
@@ -243,7 +244,8 @@ export function resizePermissionPrompt(sourceWc: WebContents, width: number, hei
   if (!owner) return
   const s = states.get(owner.id)
   if (!s || !s.popup || s.popup.isDestroyed()) return
-  const ownerBounds = owner.getBounds()
+  // `getContentBounds()` — voir le commentaire de `computePopoverBounds` (ipc.ts).
+  const ownerBounds = owner.getContentBounds()
   const w = Math.max(1, width)
   const h = Math.max(1, height)
   const { x, y } = sanitizeToDisplay(ownerBounds.x + ANCHOR_OFFSET.x, ownerBounds.y + ANCHOR_OFFSET.y, w, h)

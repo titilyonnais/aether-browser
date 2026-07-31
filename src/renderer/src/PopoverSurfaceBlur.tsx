@@ -15,7 +15,11 @@ import { createPortal } from 'react-dom'
 import type { PopoverBackdrop } from '@shared/types'
 import { computePopoverBackdropLayers } from '@/lib/popoverBackdropLayout'
 
-const TINT = 'rgba(16, 16, 24, 0.62)'
+// `--color-glacier` (posée par `applyTheme`, theme.ts, dans CE document popup
+// aussi — voir PopoverRoot.tsx) plutôt qu'une teinte neutre fixe : la bulle
+// reste visuellement rattachée au thème choisi, même léger dosage (9%) que
+// `.popover-surface`/`.glass-strong` (global.css) pour rester cohérent.
+const TINT = 'color-mix(in srgb, var(--color-glacier) 9%, rgb(16 16 24 / 0.62))'
 
 export function PopoverSurfaceBlur({
   containerRef,

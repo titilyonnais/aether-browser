@@ -4,6 +4,36 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.76.0] — 2026-08-01
+
+### Corrigé
+
+- **Le sous-menu « Choisir une autre langue » de la bulle de traduction se faisait rogner par le
+  bas** — sa liste de 16 langues (jusqu'à 256px) dépassait la hauteur de la carte, coupée net par
+  le `overflow: hidden` nécessaire au flou. Le sous-menu est désormais un frère de la carte (pas
+  son enfant), et la boîte englobante grandit vers le bas pour le contenir entièrement — même
+  principe déjà utilisé pour le sous-menu du menu principal.
+- **Chaque bulle apparaissait légèrement décalée par rapport à son bouton.** Cause unique et
+  systématique : la fenêtre principale est frameless mais redimensionnable, ce qui lui laisse le
+  style Windows par défaut `WS_THICKFRAME` — une bordure de redimensionnement invisible que
+  `getBounds()` inclut dans ses coordonnées, contrairement à `getContentBounds()`. Tout calcul de
+  position de bulle partait donc d'une origine décalée de cette bordure. Corrigé à chacun des sept
+  points de conversion ancrage → écran (menu principal, infos de site, aperçu d'onglet, traduction,
+  favoris, extensions, menu contextuel, confirmation d'installation, invite de permission).
+- **Les libellés du menu principal et du menu contextuel se terminaient par « … »** — des menus à
+  liste FIXE (jamais du contenu utilisateur arbitraire) n'ont aucune raison d'être jamais coupés.
+  Les bulles s'élargissent désormais pour toujours afficher l'option en entier.
+
+### Ajouté
+
+- **Clic droit sur une page web : Enregistrer sous…, Imprimer…, et Traduire en français** (la
+  langue de l'interface) — trois actions qui manquaient par rapport à un navigateur classique,
+  toutes trois déjà disponibles ailleurs dans l'appli (menu principal, bouton dédié de la barre
+  d'adresse) et simplement reliées ici.
+- **Bulles légèrement teintées de la couleur d'accent du thème choisi** (Réglages › Apparence),
+  au lieu d'un gris neutre fixe — même dosage discret (9%) partout : popups natifs, panneaux
+  pleine fenêtre, menu Téléchargements, bannière navigateur par défaut.
+
 ## [0.75.0] — 2026-07-31
 
 ### Ajouté

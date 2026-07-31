@@ -7,7 +7,8 @@
  * main, qui traduit lui-même le texte sans jamais injecter d'UI Google).
  */
 import { Check, ChevronLeft, MoreVertical, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { LANGUAGE_NAMES } from '@shared/languageNames'
 import type { PageId } from '@shared/types'
 import { translate, type Locale } from '@/i18n'
 import { cn, domainOf } from '@/lib/utils'
@@ -15,27 +16,6 @@ import { cn, domainOf } from '@/lib/utils'
 interface TranslatePopoverCardProps {
   pageId: PageId
   locale: string
-}
-
-/** Noms français des langues les plus courantes — assez pour l'affichage
- * « Langue détectée » et les listes de langues, pas une liste exhaustive. */
-const LANGUAGE_NAMES: Record<string, string> = {
-  fr: 'français',
-  en: 'anglais',
-  es: 'espagnol',
-  de: 'allemand',
-  it: 'italien',
-  pt: 'portugais',
-  nl: 'néerlandais',
-  ru: 'russe',
-  ja: 'japonais',
-  zh: 'chinois',
-  ko: 'coréen',
-  ar: 'arabe',
-  pl: 'polonais',
-  tr: 'turc',
-  sv: 'suédois',
-  uk: 'ukrainien'
 }
 
 const LANGS = ['fr', 'en', 'es', 'de', 'it', 'pt', 'nl', 'ru', 'ja', 'zh', 'ko', 'ar', 'pl', 'tr', 'sv', 'uk']
@@ -58,8 +38,25 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
   const [domain, setDomain] = useState<string | null>(null)
   const [neverTranslateDomains, setNeverTranslateDomains] = useState<string[]>([])
   const [alwaysTranslateLanguages, setAlwaysTranslateLanguages] = useState<string[]>([])
+  const cardRef = useRef<HTMLDivElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
+  // Le menu (liste de langues) est en `position:absolute`, HORS FLUX — il
+  // n'agrandit donc pas tout seul la carte. Sans cette mesure explicite, sa
+  // partie basse restait rognée net par le `overflow-hidden` de la carte dès
+  // qu'elle dépassait la hauteur de base (16 langues, capé à `max-h-64` mais
+  // toujours plus haut que le corps de la carte) — signalé par capture
+  // utilisateur. Même patron que `boxHeight` dans AppMenuPopoverCard.tsx.
+  const [boxHeight, setBoxHeight] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    if (panel === 'none' || !cardRef.current || !menuRef.current) {
+      setBoxHeight(null)
+      return
+    }
+    const cardH = cardRef.current.offsetHeight
+    const menuBottom = menuRef.current.offsetTop + menuRef.current.offsetHeight
+    setBoxHeight(Math.max(cardH, menuBottom))
+  }, [panel])
 
   useEffect(() => {
     setTranslated(false)
@@ -133,77 +130,88 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
   }
 
   return (
-    <div className="popover-surface relative w-80 overflow-hidden rounded-xl p-3">
-      {/* Deux onglets façon bulle native Chrome/Edge : langue détectée à
-          gauche, langue cible à droite — celui qui correspond à l'état
-          affiché EST la page active, cliquer l'autre bascule dessus (pas un
-          simple bouton « Traduire »/« Original » séparé des noms de langue). */}
-      <div className="mb-3 flex items-center gap-1">
-        <div className="flex min-w-0 flex-1 items-center gap-0.5 rounded-lg bg-white/[0.03] p-0.5">
+    // Boîte EXTÉRIEURE, hauteur pilotée par `boxHeight` (normalement celle de
+    // la carte, agrandie vers le bas quand le menu de langues déborde) — même
+    // patron que AppMenuPopoverCard.tsx : la CARTE reste dans le flux normal
+    // (sa hauteur naturelle plancher `boxHeight`), le MENU est hors flux
+    // (position:absolute, sibling de la carte plutôt que son enfant) pour ne
+    // JAMAIS être rogné par le `overflow-hidden` de la carte, qui reste
+    // nécessaire au flou (voir global.css/`.popover-surface`).
+    <div className="relative w-80" style={{ height: boxHeight ?? undefined }}>
+      <div ref={cardRef} className="popover-surface w-80 overflow-hidden rounded-xl p-3">
+        {/* Deux onglets façon bulle native Chrome/Edge : langue détectée à
+            gauche, langue cible à droite — celui qui correspond à l'état
+            affiché EST la page active, cliquer l'autre bascule dessus (pas un
+            simple bouton « Traduire »/« Original » séparé des noms de langue). */}
+        <div className="mb-3 flex items-center gap-1">
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 rounded-lg bg-white/[0.03] p-0.5">
+            <button
+              type="button"
+              onClick={() => translated && runRestore()}
+              disabled={busy}
+              className={cn(
+                'min-w-0 flex-1 truncate rounded-md px-3 py-1.5 text-center text-[12px] transition-colors disabled:opacity-50',
+                !translated ? 'bg-white/[0.08] text-ink ring-1 ring-white/[0.14]' : 'text-ink-faint hover:text-ink-dim'
+              )}
+            >
+              {sourceLabel}
+            </button>
+            <button
+              type="button"
+              onClick={() => !translated && runTranslate()}
+              disabled={busy}
+              className={cn(
+                'min-w-0 flex-1 truncate rounded-md px-3 py-1.5 text-center text-[12px] transition-colors disabled:opacity-50',
+                translated ? 'bg-white/[0.08] text-ink ring-1 ring-white/[0.14]' : 'text-ink-faint hover:text-ink-dim'
+              )}
+            >
+              {targetLabel}
+            </button>
+          </div>
           <button
+            ref={menuButtonRef}
             type="button"
-            onClick={() => translated && runRestore()}
-            disabled={busy}
-            className={cn(
-              'min-w-0 flex-1 truncate rounded-md px-3 py-1.5 text-center text-[12px] transition-colors disabled:opacity-50',
-              !translated ? 'bg-white/[0.08] text-ink ring-1 ring-white/[0.14]' : 'text-ink-faint hover:text-ink-dim'
-            )}
+            title={t('focusCanvas.translate.menuPickTarget')}
+            onClick={() => setPanel((p) => (p === 'none' ? 'menu' : 'none'))}
+            className={
+              'grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim' +
+              (panel !== 'none' ? ' bg-white/[0.06] text-ink-dim' : '')
+            }
           >
-            {sourceLabel}
+            <MoreVertical size={13} strokeWidth={1.8} />
           </button>
           <button
             type="button"
-            onClick={() => !translated && runTranslate()}
-            disabled={busy}
-            className={cn(
-              'min-w-0 flex-1 truncate rounded-md px-3 py-1.5 text-center text-[12px] transition-colors disabled:opacity-50',
-              translated ? 'bg-white/[0.08] text-ink ring-1 ring-white/[0.14]' : 'text-ink-faint hover:text-ink-dim'
-            )}
+            onClick={closePopover}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim"
           >
-            {targetLabel}
+            <X size={13} strokeWidth={1.8} />
           </button>
         </div>
-        <button
-          ref={menuButtonRef}
-          type="button"
-          title={t('focusCanvas.translate.menuPickTarget')}
-          onClick={() => setPanel((p) => (p === 'none' ? 'menu' : 'none'))}
-          className={
-            'grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim' +
-            (panel !== 'none' ? ' bg-white/[0.06] text-ink-dim' : '')
-          }
-        >
-          <MoreVertical size={13} strokeWidth={1.8} />
-        </button>
-        <button
-          type="button"
-          onClick={closePopover}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-white/[0.06] hover:text-ink-dim"
-        >
-          <X size={13} strokeWidth={1.8} />
-        </button>
-      </div>
 
-      <label
-        className={cn(
-          'mb-1 flex items-center gap-2 text-[11.5px] text-glacier',
-          sourceCode ? 'cursor-pointer' : 'cursor-default opacity-50'
-        )}
-      >
-        <input
-          type="checkbox"
-          checked={alwaysTranslate}
-          onChange={toggleAlwaysTranslate}
-          disabled={!sourceCode}
-          className="h-3.5 w-3.5 shrink-0 accent-glacier"
-        />
-        {t('focusCanvas.translate.alwaysTranslate', { language: sourceLabel })}
-      </label>
+        <label
+          className={cn(
+            'mb-1 flex items-center gap-2 text-[11.5px] text-glacier',
+            sourceCode ? 'cursor-pointer' : 'cursor-default opacity-50'
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={alwaysTranslate}
+            onChange={toggleAlwaysTranslate}
+            disabled={!sourceCode}
+            className="h-3.5 w-3.5 shrink-0 accent-glacier"
+          />
+          {t('focusCanvas.translate.alwaysTranslate', { language: sourceLabel })}
+        </label>
+
+        <p className="mt-2.5 text-center text-[10px] text-ink-faint/50">Google Translate</p>
+      </div>
 
       {panel !== 'none' && (
         <div
           ref={menuRef}
-          className="glass-strong absolute right-3 top-9 z-10 max-h-64 w-56 overflow-y-auto rounded-lg p-1 shadow-xl"
+          className="popover-surface absolute right-3 top-9 z-10 max-h-64 w-56 overflow-y-auto rounded-lg p-1 shadow-xl"
         >
           {panel === 'menu' && (
             <>
@@ -262,8 +270,6 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
           )}
         </div>
       )}
-
-      <p className="mt-2.5 text-center text-[10px] text-ink-faint/50">Google Translate</p>
     </div>
   )
 }

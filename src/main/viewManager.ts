@@ -15,6 +15,7 @@ import { stat, writeFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { CH } from '@shared/ipc'
 import { resolveInternalRoute } from '@shared/intent'
+import { LANGUAGE_NAMES } from '@shared/languageNames'
 import type {
   Bounds,
   ContextMenuRow,
@@ -1096,6 +1097,22 @@ export class ViewManager {
         { kind: 'item', id: 'forward', label: 'Avancer', disabled: !nav.canGoForward() },
         { kind: 'item', id: 'reload', label: 'Recharger' },
         { kind: 'separator' },
+        { kind: 'item', id: 'save-page', label: 'Enregistrer sous…' },
+        { kind: 'item', id: 'print', label: 'Imprimer…' }
+      )
+      // Traduire depuis le clic droit — même action que le bouton dédié de la
+      // barre d'adresse (TranslatePopoverButton.tsx), ici en un clic direct
+      // plutôt qu'en ouvrant la bulle complète. Cible fixe (`fr`) : l'interface
+      // d'ÆTHER elle-même n'a actuellement qu'une langue (voir `locale = 'fr'`,
+      // PopoverRoot.tsx/PermissionPromptRoot.tsx) — pas de réglage de langue
+      // cible séparé à lire ici. `/^https?:/` : même garde que le bouton dédié,
+      // traduire une page `aether://`/`view-source:` n'a aucun sens.
+      if (/^https?:/i.test(wc.getURL())) {
+        rows.push({ kind: 'item', id: 'translate', label: `Traduire en ${LANGUAGE_NAMES.fr}` })
+        actions.translate = () => this.translate(pageId, 'fr', 'auto')
+      }
+      rows.push(
+        { kind: 'separator' },
         { kind: 'item', id: 'copy-page-url', label: "Copier l'adresse de la page" },
         { kind: 'item', id: 'view-source', label: 'Afficher le code source de la page' },
         { kind: 'item', id: 'inspect', label: isImage ? "Inspecter l'élément" : 'Inspecter' }
@@ -1103,6 +1120,8 @@ export class ViewManager {
       actions.back = () => this.performGoBack(pageId, wc)
       actions.forward = () => nav.goForward()
       actions.reload = () => wc.reload()
+      actions['save-page'] = () => void this.savePage(pageId)
+      actions.print = () => this.print(pageId)
       actions['copy-page-url'] = () => clipboard.writeText(wc.getURL())
       actions['view-source'] = () => this.delegate.onOpenRequest(pageId, `view-source:${wc.getURL()}`)
       actions.inspect = () => {

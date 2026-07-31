@@ -38,7 +38,7 @@ export function ExtensionsMenuPopoverCard() {
 
   return (
     <div className="popover-surface w-72 overflow-hidden rounded-xl p-1.5">
-      <p className="mb-1 truncate px-2.5 pt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint/70">
+      <p className="mb-1 whitespace-nowrap px-2.5 pt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint/70">
         Extensions
       </p>
       <div className="max-h-72 overflow-y-auto">

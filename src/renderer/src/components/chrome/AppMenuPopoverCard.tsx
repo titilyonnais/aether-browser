@@ -19,12 +19,17 @@ import type { ShortcutCommand } from '@shared/types'
 import { cn } from '@/lib/utils'
 
 // Dimensions FIXES du menu principal (doivent correspondre aux classes
-// Tailwind ci-dessous : `w-80` = 320px pour le panneau racine, `w-72` = 288px
-// pour le flyout, `gap` visuel de 6px entre les deux). La largeur totale
-// réservée est CONSTANTE quel que soit l'état du flyout — voir le commentaire
-// détaillé dans `AppMenuPopoverCard`. */
-const MENU_W = 320
-const FLYOUT_W = 288
+// Tailwind ci-dessous : `w-[400px]` pour le panneau racine, `w-[320px]` pour
+// le flyout, `gap` visuel de 6px entre les deux). La largeur totale réservée
+// est CONSTANTE quel que soit l'état du flyout — voir le commentaire détaillé
+// dans `AppMenuPopoverCard`. Assez larges pour que la ligne la plus longue de
+// chaque panneau (« Supprimer les données de navigation… » + son raccourci,
+// « Recherche dans les onglets » + le sien) tienne toujours en entier — plus
+// aucune troncature par `truncate`, retiré des libellés de ligne : un menu
+// FIXE (pas du contenu utilisateur arbitraire) n'a aucune raison d'être
+// jamais coupé, signalé par capture utilisateur. */
+const MENU_W = 400
+const FLYOUT_W = 320
 const FLYOUT_GAP = 6
 const TOTAL_W = FLYOUT_W + FLYOUT_GAP + MENU_W
 
@@ -158,7 +163,7 @@ function MenuRow({
         isOpenSubmenu && 'bg-white/[0.07]'
       )}
     >
-      <span className="truncate">{row.label}</span>
+      <span className="whitespace-nowrap">{row.label}</span>
       {row.submenu ? (
         <ChevronLeft size={13} strokeWidth={1.8} className="ml-2 shrink-0 text-ink-faint" />
       ) : row.accelerator ? (
@@ -242,14 +247,14 @@ export function AppMenuPopoverCard() {
         ref={flyoutRef}
         inert={!openPanel}
         className={cn(
-          'absolute left-0 w-72 overflow-hidden rounded-xl transition-opacity duration-100',
+          'absolute left-0 w-[320px] overflow-hidden rounded-xl transition-opacity duration-100',
           openPanel ? 'popover-surface p-1.5 opacity-100' : 'pointer-events-none opacity-0'
         )}
         style={{ top: flyoutTop }}
       >
         {openPanel && (
           <>
-            <p className="mb-1 truncate px-2.5 pt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint/70">
+            <p className="mb-1 whitespace-nowrap px-2.5 pt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint/70">
               {PANELS[openPanel].title}
             </p>
             {PANELS[openPanel].rows.map((row, i) => (
@@ -265,7 +270,7 @@ export function AppMenuPopoverCard() {
       </div>
       {/* Menu racine : en flux, poussé à DROITE (`ml-auto`), calé en haut de la
           boîte — sa hauteur est le plancher de `boxHeight`. */}
-      <div ref={menuRef} className="popover-surface ml-auto w-80 overflow-hidden rounded-xl p-1.5">
+      <div ref={menuRef} className="popover-surface ml-auto w-[400px] overflow-hidden rounded-xl p-1.5">
         {ROOT.map((row, i) => (
           <MenuRow
             key={'separator' in row ? `sep-${i}` : row.label}

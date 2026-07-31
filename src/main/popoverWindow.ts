@@ -245,7 +245,8 @@ export function showContextMenuPopover(
   title?: string
 ): void {
   stateFor(win).contextMenuActions = actions
-  const winBounds = win.getBounds()
+  // `getContentBounds()` — voir le commentaire de `computePopoverBounds` (ipc.ts).
+  const winBounds = win.getContentBounds()
   openPopover(
     win,
     { x: winBounds.x + anchor.x, y: winBounds.y + anchor.y + 2, width: CONTEXT_MENU_WIDTH, height: CONTEXT_MENU_DEFAULT_HEIGHT },
