@@ -209,10 +209,12 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
       </div>
 
       {panel !== 'none' && (
-        <div
-          ref={menuRef}
-          className="popover-surface absolute right-3 top-9 z-10 max-h-64 w-56 overflow-y-auto rounded-lg p-1 shadow-xl"
-        >
+        // Pas de `max-h-*`/`overflow-y-auto` : la boîte englobante (plus haut)
+        // grandit déjà pour contenir tout le menu (`boxHeight`), un plafond de
+        // hauteur ici forcerait un DÉFILEMENT INTERNE en plus — signalé par
+        // capture utilisateur, alors que l'objectif est justement de tout
+        // montrer d'un coup, jamais tronqué ni caché derrière un scroll.
+        <div ref={menuRef} className="popover-surface absolute right-3 top-9 z-10 w-56 rounded-lg p-1 shadow-xl">
           {panel === 'menu' && (
             <>
               <button

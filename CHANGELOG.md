@@ -4,6 +4,31 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.76.1] — 2026-08-01
+
+### Corrigé
+
+- **Le sous-menu de langues de la bulle de traduction restait tronqué avec un défilement
+  interne** — malgré le correctif précédent (sortie de la carte). Cause : un plafond de hauteur
+  (`max-h-64 overflow-y-auto`) forçait un défilement même une fois la boîte englobante agrandie
+  pour le contenir. Retiré — le sous-menu s'affiche désormais en entier, sans scroll.
+- **Le flou des bulles ne se voyait quasiment jamais** (juste la teinte de la 0.76.0, sans le
+  flou promis). Cause probable trouvée : la capture d'écran source du flou était REJETÉE EN BLOC
+  dès que le popup débordait, même de quelques pixels, de la fenêtre principale — un cas en
+  réalité systématique (chaque popup a 8px de marge invisible intégrée) qui laissait la plupart
+  des bulles sans la moindre capture, silencieusement. La capture est désormais RECADRÉE au lieu
+  d'être rejetée : elle part dès qu'il reste ne serait-ce qu'un pixel de recouvrement avec la
+  fenêtre principale, ce qui couvre la quasi-totalité des cas réels.
+
+### Connu
+
+- **L'alignement des bulles reste imparfait.** Le correctif de la 0.76.0 (`getContentBounds()`)
+  visait une bordure de redimensionnement Windows invisible qui aurait faussé le calcul — cette
+  hypothèse n'a probablement pas identifié la vraie cause, le décalage persistant à l'identique.
+  Recherche en cours ; un signalement précis (capture rapprochée bouton + bulle, et le
+  pourcentage d'affichage Windows utilisé — Réglages Windows › Affichage › Mise à l'échelle)
+  aiderait à trouver la cause exacte plutôt que deviner à nouveau à l'aveugle.
+
 ## [0.76.0] — 2026-08-01
 
 ### Corrigé

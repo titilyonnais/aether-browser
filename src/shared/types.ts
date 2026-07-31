@@ -807,11 +807,20 @@ export interface LocalRect {
  * 0.74.1). `width`/`height` en pixels CSS (DIP), PAS les pixels physiques du
  * bitmap capturé — c'est ce que `capturePage()` a reçu en entrée, et c'est ce
  * que `background-size` doit recevoir en sortie pour un alignement correct
- * quel que soit le facteur d'échelle Windows. */
+ * quel que soit le facteur d'échelle Windows.
+ * `offsetX`/`offsetY` : la capture est RECADRÉE (jamais rejetée en bloc) dès
+ * que le popup déborde, même de quelques pixels, de la fenêtre propriétaire
+ * (marge anti-rognage systématique de 8px sur chaque popup, bouton déclencheur
+ * proche d'un bord de fenêtre…) — un simple rejet laissait alors CHAQUE bulle
+ * sans aucun flou, indétectable sans inspection. Décalage (DIP) entre le coin
+ * haut-gauche de l'image et celui, VOULU, du popup — 0 si rien n'a dû être
+ * recadré. */
 export interface PopoverBackdrop {
   dataUrl: string
   width: number
   height: number
+  offsetX: number
+  offsetY: number
 }
 
 export type PopoverKind = 'site-info' | 'tab-preview' | 'translate' | 'favorites-folder' | 'app-menu' | 'context-menu'

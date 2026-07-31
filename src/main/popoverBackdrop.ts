@@ -17,31 +17,49 @@
  */
 import type { BrowserWindow as BW, Rectangle } from 'electron'
 
-/** Rectangle (DIP, relatif au CONTENU de `owner`) à capturer pour servir de
- * fond flouté à un popup positionné à `bounds` (DIP, coordonnées écran) — ou
- * `null` si le popup déborde de la fenêtre propriétaire (bord d'écran,
- * fenêtre non maximisée, popup ancré près d'un coin) : rien de fiable à
- * capturer dans ce cas plutôt qu'une capture partielle mal alignée, la carte
- * garde alors son fond opaque de repli (`.popover-surface`, jamais cassé). */
-export function computeBackdropCaptureRect(owner: BW, bounds: Rectangle): Rectangle | null {
+export interface BackdropCapture {
+  /** Rectangle RÉELLEMENT capturé (DIP, relatif au contenu de `owner`) —
+   * toujours entièrement contenu dans ses bornes, jamais rejeté en bloc. */
+  rect: Rectangle
+  /** Décalage (DIP) entre le coin haut-gauche VOULU du popup et celui
+   * réellement capturé — non nul seulement si `bounds` débordait de `owner`
+   * et a dû être recadré depuis la gauche/le haut. */
+  offsetX: number
+  offsetY: number
+}
+
+/** Calcule le rectangle à capturer pour servir de fond flouté à un popup
+ * positionné à `bounds` (DIP, coordonnées écran) — RECADRÉ pour tenir
+ * entièrement dans la fenêtre propriétaire plutôt que rejeté en bloc au
+ * moindre débordement : CHAQUE popup déborde un peu de `owner` par
+ * construction (marge anti-rognage de 8px systématique sur son propre
+ * contenu, voir PopoverRoot.tsx/`SAFETY_PX`), donc un simple rejet
+ * (implémentation précédente) écartait la capture bien plus souvent que
+ * prévu — silencieusement, sans qu'aucune bulle n'affiche jamais le
+ * moindre flou. `null` seulement si le popup ne recouvre plus DU TOUT
+ * `owner` (aucun pixel commun) — cas limite qui ne devrait jamais se
+ * produire en pratique, un popup est toujours ancré à un bouton À
+ * L'INTÉRIEUR de la fenêtre. */
+export function computeBackdropCaptureRect(owner: BW, bounds: Rectangle): BackdropCapture | null {
   const ownerBounds = owner.getContentBounds()
-  const rect = {
-    x: Math.round(bounds.x - ownerBounds.x),
-    y: Math.round(bounds.y - ownerBounds.y),
-    width: Math.round(bounds.width),
-    height: Math.round(bounds.height)
+  const desiredX = Math.round(bounds.x - ownerBounds.x)
+  const desiredY = Math.round(bounds.y - ownerBounds.y)
+  const desiredWidth = Math.round(bounds.width)
+  const desiredHeight = Math.round(bounds.height)
+
+  const x = Math.max(0, desiredX)
+  const y = Math.max(0, desiredY)
+  const right = Math.min(desiredX + desiredWidth, ownerBounds.width)
+  const bottom = Math.min(desiredY + desiredHeight, ownerBounds.height)
+  const width = right - x
+  const height = bottom - y
+  if (width <= 0 || height <= 0) return null
+
+  return {
+    rect: { x, y, width, height },
+    offsetX: x - desiredX,
+    offsetY: y - desiredY
   }
-  if (
-    rect.width <= 0 ||
-    rect.height <= 0 ||
-    rect.x < 0 ||
-    rect.y < 0 ||
-    rect.x + rect.width > ownerBounds.width ||
-    rect.y + rect.height > ownerBounds.height
-  ) {
-    return null
-  }
-  return rect
 }
 
 /** Capture ce qu'il y a réellement dans `owner` sous `bounds`, et le pousse à
@@ -56,16 +74,22 @@ export async function captureAndSendBackdrop(
   channel: string
 ): Promise<void> {
   if (owner.isDestroyed() || popup.isDestroyed()) return
-  const rect = computeBackdropCaptureRect(owner, bounds)
-  if (!rect) return
+  const capture = computeBackdropCaptureRect(owner, bounds)
+  if (!capture) return
   try {
-    const image = await owner.webContents.capturePage(rect)
+    const image = await owner.webContents.capturePage(capture.rect)
     if (popup.isDestroyed()) return
-    // `width`/`height` = le rect DIP demandé, PAS `image.getSize()` (pixels
-    // physiques du bitmap, qui diffèrent sur un facteur d'échelle Windows non
-    // entier) — c'est ce que `background-size` doit recevoir côté renderer
-    // pour un alignement pixel-perfect avec `getBoundingClientRect()`.
-    popup.webContents.send(channel, { dataUrl: image.toDataURL(), width: rect.width, height: rect.height })
+    // `width`/`height` = le rect DIP réellement capturé, PAS `image.getSize()`
+    // (pixels physiques du bitmap, qui diffèrent sur un facteur d'échelle
+    // Windows non entier) — c'est ce que `background-size` doit recevoir côté
+    // renderer pour un alignement pixel-perfect avec `getBoundingClientRect()`.
+    popup.webContents.send(channel, {
+      dataUrl: image.toDataURL(),
+      width: capture.rect.width,
+      height: capture.rect.height,
+      offsetX: capture.offsetX,
+      offsetY: capture.offsetY
+    })
   } catch {
     // Capture indisponible (fenêtre minimisée, GPU occupé…) — sans
     // conséquence bloquante, la carte garde son fond opaque de repli.

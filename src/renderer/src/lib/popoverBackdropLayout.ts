@@ -26,25 +26,28 @@ export interface PopoverBackdropLayers {
  * dans le repère de la fenêtre popup — exactement ce que rend
  * `getBoundingClientRect()` dans ce contexte (fenêtre popup = tout le
  * viewport, jamais de défilement de page autour), sans conversion
- * supplémentaire : la capture (popoverBackdrop.ts, main) part de ce même
- * repère (coin haut-gauche de la fenêtre popup = coin haut-gauche de l'image
- * capturée).
- * `backdropSize` : dimensions de la capture ENTIÈRE (celles de la fenêtre
- * popup, pas de la carte — une carte ne remplit pas forcément toute la
- * fenêtre, ex. le menu principal avec sa marge de flyout réservée à gauche).
+ * supplémentaire.
+ * `backdrop` : la capture — `width`/`height` = dimensions RÉELLEMENT capturées
+ * (une carte ne remplit pas forcément toute la fenêtre, ex. le menu principal
+ * avec sa marge de flyout réservée à gauche) ; `offsetX`/`offsetY` = décalage
+ * entre le coin haut-gauche VOULU du popup et celui réellement capturé (non
+ * nul si `popoverBackdrop.ts`, main, a dû recadrer — popup débordant de sa
+ * fenêtre propriétaire, même de quelques pixels). Sans ce décalage, l'image
+ * capturée après un recadrage semblait « glisser » par rapport à la carte —
+ * elle représente alors un rectangle qui ne commence PLUS au coin du popup.
  */
 export function computePopoverBackdropLayers(
   cardOffset: { left: number; top: number },
-  backdropSize: { width: number; height: number }
+  backdrop: { width: number; height: number; offsetX: number; offsetY: number }
 ): PopoverBackdropLayers {
-  const x = POPOVER_BACKDROP_OVERSCAN_PX - cardOffset.left
-  const y = POPOVER_BACKDROP_OVERSCAN_PX - cardOffset.top
+  const x = POPOVER_BACKDROP_OVERSCAN_PX + backdrop.offsetX - cardOffset.left
+  const y = POPOVER_BACKDROP_OVERSCAN_PX + backdrop.offsetY - cardOffset.top
   return {
     inset: -POPOVER_BACKDROP_OVERSCAN_PX,
     // Premier calque (teinte) : une seule couleur unie, sa propre position
     // n'a aucune importance tant qu'elle couvre `100% 100%` — `0 0` sert
     // juste de valeur neutre pour aligner les deux listes CSS terme à terme.
     backgroundPosition: `0 0, ${x}px ${y}px`,
-    backgroundSize: `100% 100%, ${backdropSize.width}px ${backdropSize.height}px`
+    backgroundSize: `100% 100%, ${backdrop.width}px ${backdrop.height}px`
   }
 }
