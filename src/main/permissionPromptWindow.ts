@@ -114,11 +114,11 @@ function createPopup(owner: BW): BW {
     skipTaskbar: true,
     focusable: false,
     backgroundColor: '#00000000',
-    // Flou natif DWM (« Acrylic ») — voir le commentaire équivalent dans
-    // popoverWindow.ts (même architecture de fenêtre séparée transparente,
-    // même raison pour laquelle un `backdrop-filter` CSS ne peut rien flouter
-    // ici). Sans effet silencieux avant Windows 11 22H2.
-    backgroundMaterial: 'acrylic',
+    // Pas de `backgroundMaterial: 'acrylic'` ici — voir le commentaire dans
+    // popoverWindow.ts (même architecture de fenêtre séparée transparente) :
+    // Windows peint son matériau sur tout le rectangle de la fenêtre, y
+    // compris ses marges volontairement invisibles, débordant largement de la
+    // carte visible.
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,

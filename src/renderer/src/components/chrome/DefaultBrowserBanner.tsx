@@ -100,7 +100,7 @@ export function DefaultBrowserBanner() {
                 <MoreHorizontal size={13} strokeWidth={1.8} />
               </button>
               {menuOpen && (
-                <div className="popover-surface absolute right-0 top-full z-10 mt-1.5 w-52 overflow-hidden rounded-xl p-1">
+                <div className="popover-surface-dom-blur absolute right-0 top-full z-10 mt-1.5 w-52 overflow-hidden rounded-xl p-1">
                   <button
                     type="button"
                     onClick={dismissForGood}

@@ -497,7 +497,7 @@ function DownloadsButton() {
       </button>
 
       {showTooltip && (
-        <div className="popover-surface absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-xl p-1.5">
+        <div className="popover-surface-dom-blur absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-xl p-1.5">
           {activeCount === 0 ? (
             recentCompleted.length > 0 ? (
               recentCompleted.map((d) => (

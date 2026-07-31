@@ -312,25 +312,21 @@ textarea:focus-visible {
     0 0 0 1px rgb(0 0 0 / 0.4);
 }
 
-/* Surface pour les fenêtres popup natives flottantes (infos de site, aperçu
-   d'onglet, profils…) — et pour les quelques bulles DOM ordinaires qui
-   réutilisent la même carte (menu Téléchargements de TitleBar.tsx,
-   bannière navigateur par défaut). Ce sont, pour les popups natifs, des
-   `BrowserWindow` transparentes SÉPARÉES de la fenêtre principale : le
-   `backdrop-filter` ci-dessous n'y flouterait rien (leur propre page ne
-   contient RIEN derrière la carte — Chromium ne peut flouter que ce qu'IL a
-   peint), d'où le flou natif du compositeur Windows posé côté main
-   (`backgroundMaterial: 'acrylic'`, popoverWindow.ts/permissionPromptWindow.ts)
-   à la place. `backdrop-filter` ici sert donc les bulles DOM ordinaires (où
-   il floute normalement la page vivante juste en dessous) sans rien changer
-   pour les popups natifs (rien à flouter → aucun effet, jamais cassé).
-   Fond éclairci pour laisser l'un ou l'autre flou transparaître — restait
-   presque opaque avant, masquant tout flou même quand le compositeur Windows
-   le fournissait réellement. */
+/* Surface opaque pour les fenêtres popup natives flottantes (infos de site,
+   aperçu d'onglet, profils, menu principal…) : ce sont des `BrowserWindow`
+   transparentes SÉPARÉES de la fenêtre principale, dimensionnées un peu plus
+   GRANDES que la carte visible (marge anti-rognage + largeur réservée pour un
+   flyout pas encore ouvert, voir PopoverRoot.tsx) — un vrai flou (CSS
+   `backdrop-filter`, qui n'a ici rien à flouter dans la page de ce popup ;
+   OU matériau Windows natif « Acrylic », essayé puis RETIRÉ : il peint sur
+   TOUT le rectangle de la fenêtre sans respecter ces marges volontairement
+   invisibles, débordant largement de la carte — confirmé par capture
+   utilisateur) casse cette marge invisible ou n'a aucun effet fiable. Fond
+   quasi opaque, sans flou : le seul rendu garanti de ne JAMAIS déborder de la
+   bulle elle-même. */
 @utility popover-surface {
-  background: rgb(16 16 24 / 0.68);
+  background: rgb(16 16 24 / 0.98);
   border: 1px solid rgb(255 255 255 / 0.1);
-  backdrop-filter: blur(28px) saturate(1.3);
   /* Pas d'ombre portée FLOUE ici (contrairement à `.glass-strong`) : cette
      fenêtre popup native est dimensionnée exactement à la taille de son
      contenu (voir `PopoverRoot.tsx`/`reportSize`), sans marge pour laisser
@@ -338,6 +334,19 @@ textarea:focus-visible {
      au bord de la fenêtre, visible comme un angle dur au lieu de disparaître
      en douceur. Un simple liseré (spread nul, respecte le rayon de la
      bordure) suffit à détacher la carte du fond sans ce risque. */
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45);
+}
+
+/* Même carte, pour les quelques bulles qui sont de VRAIS éléments DOM dans
+   la fenêtre PRINCIPALE (menu Téléchargements de TitleBar.tsx, bannière
+   navigateur par défaut) — pas des fenêtres séparées : `backdrop-filter`
+   floute ici réellement la page vivante juste en dessous, dans la MÊME pile
+   de rendu Chromium, sans le risque de débordement des popups natifs
+   ci-dessus (contenu strictement contenu par la boîte de CETTE carte). */
+@utility popover-surface-dom-blur {
+  background: rgb(16 16 24 / 0.7);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  backdrop-filter: blur(28px) saturate(1.3);
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45);
 }
 

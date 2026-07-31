@@ -108,20 +108,16 @@ function createPopup(parent: BW, s: PopoverState): BW {
     skipTaskbar: true,
     focusable: false,
     backgroundColor: '#00000000',
-    // Flou natif DWM (« Acrylic ») du bureau/de la fenêtre réellement DERRIÈRE
-    // cette fenêtre popup — un `backdrop-filter` CSS n'a rien de fiable à
-    // flouter ICI : cette fenêtre est TRANSPARENTE et séparée de la fenêtre
-    // principale (voir le commentaire d'en-tête), donc sa propre page ne
-    // contient RIEN derrière la bulle à flouter — le flou doit venir du
-    // compositeur Windows lui-même, pas de Chromium. Respecte le canal alpha
-    // que Chromium a déjà composé (coins arrondis transparents de la bulle
-    // compris) : seule la zone réellement opaque/semi-transparente de la
-    // carte (voir `.popover-surface`, dont l'opacité a été baissée pour
-    // laisser CE flou transparaître) reçoit le flou+teinte ; les coins restent
-    // nets. Option native Electron (pas de FFI, contrairement à dwm.ts) —
-    // sans effet silencieux avant Windows 11 22H2 : la carte garde alors son
-    // fond actuel sans flou, jamais cassée.
-    backgroundMaterial: 'acrylic',
+    // `backgroundMaterial: 'acrylic'` a été essayé ici pour un vrai flou natif
+    // DWM, puis RETIRÉ : cette fenêtre est délibérément un peu plus GRANDE que
+    // la carte visible (marge anti-rognage + largeur réservée pour un flyout
+    // qui n'est pas encore ouvert, voir PopoverRoot.tsx) — Windows peint son
+    // matériau Acrylic sur TOUT le rectangle de la fenêtre, sans se soucier de
+    // ces zones volontairement invisibles côté CSS (`opacity-0`) : la marge
+    // réservée devenait un gros bloc flouté visible qui débordait largement de
+    // la bulle (confirmé par capture utilisateur). Le flou « juste dans la
+    // bulle » doit rester entièrement piloté par Chromium (voir `.popover-surface`,
+    // global.css), qui seul respecte le découpage exact de la carte.
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,

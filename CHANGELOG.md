@@ -4,6 +4,22 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.74.1] — 2026-07-31
+
+### Corrigé
+
+- **Le flou natif ajouté en 0.74.0 débordait largement de la bulle** (capture utilisateur : un
+  gros bloc flouté visible bien au-delà du menu). Cause : les fenêtres popup sont volontairement
+  un peu plus grandes que la carte visible (marge anti-rognage, largeur réservée pour un
+  sous-menu pas encore ouvert dans le menu principal) — le matériau Windows natif peint sur TOUT
+  le rectangle de la fenêtre, sans se soucier de ces zones rendues invisibles côté CSS. Retiré :
+  ces bulles (menu principal, infos de site, aperçu d'onglet…) reviennent à une carte opaque sans
+  flou, seul rendu qui garantit de ne jamais déborder. Les deux bulles qui sont de vrais éléments
+  de la fenêtre principale (menu Téléchargements, bannière navigateur par défaut) gardent
+  elles un flou réel — sans ce risque, car strictement contenues dans leur propre boîte.
+  Un flou réellement contenu pour les popups natifs demanderait une implémentation plus lourde
+  (capture d'écran de la zone concernée) — hors scope de ce correctif.
+
 ## [0.74.0] — 2026-07-31
 
 ### Corrigé
