@@ -21,6 +21,7 @@ import { join } from 'node:path'
 import { CH } from '@shared/ipc'
 import type { ContextMenuRow, LocalRect, PopoverContent } from '@shared/types'
 import { disableNativeWindowTransitions } from './dwm'
+import { captureAndSendBackdrop } from './popoverBackdrop'
 import { fadeWindowIn, fadeWindowOut } from './windowFade'
 
 interface PopoverState {
@@ -341,6 +342,14 @@ export function resizePopoverWindow(sourceWc: WebContents, width: number, height
     // commentaire sur `naturalY` (PopoverState) pour pourquoi `current.y`
     // laissait un clamp initial se figer au lieu de se corriger.
     const next = sanitizeToDisplay({ ...current, x, y: s.naturalY, width: w, height: h })
+    // Capture de ce qu'il y a réellement derrière le popup à SA position/
+    // taille FINALE — source du flou en CSS de chaque carte (voir
+    // popoverBackdrop.ts). Toujours tentée ici, même quand les bornes ne
+    // changent pas concrètement (branche ci-dessous) : le CONTENU peut avoir
+    // changé à taille égale (ex. menu contextuel rouvert ailleurs). Jamais
+    // attendue avant de révéler le popup (fire-and-forget) — la carte reste
+    // opaque, sans flou, tant que cette capture n'est pas arrivée.
+    void captureAndSendBackdrop(owner, popup, next, CH.popoverSetBackdrop)
     // Le ResizeObserver du renderer (PopoverRoot.tsx) se redéclenche à CHAQUE
     // reflow (ex. ouvrir/fermer un sous-menu change `opacity`/`inert`, ce qui
     // recalcule le layout même quand les dimensions FINALES ne bougent pas

@@ -291,12 +291,14 @@ const api: AetherApi = {
     reportSize: (size: { width: number; height: number }) =>
       ipcRenderer.send(CH.popoverResize, size),
     onSetContent: (cb) => on(CH.popoverSetContent, cb),
+    onSetBackdrop: (cb) => on(CH.popoverSetBackdrop, cb),
     onClosed: (cb) => on(CH.popoverClosed, cb),
     runContextMenuAction: (id: string) => ipcRenderer.send(CH.contextMenuAction, id),
     confirmWebstoreInstall: (confirmed: boolean) => ipcRenderer.send(CH.webstoreInstallConfirm, confirmed)
   },
   permissionPrompt: {
     onSetContent: (cb) => on(CH.permissionPromptSetContent, cb),
+    onSetBackdrop: (cb) => on(CH.permissionPromptSetBackdrop, cb),
     reportSize: (size: { width: number; height: number }) => ipcRenderer.send(CH.permissionPromptResize, size),
     respond: (requestId: string, granted: boolean) =>
       ipcRenderer.send(CH.permissionPromptRespond, requestId, granted)

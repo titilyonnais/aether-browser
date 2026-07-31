@@ -9,9 +9,10 @@
  */
 import { Camera, Clipboard, FileText, MapPin, Mic, Music, ShieldAlert } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { PermissionPromptContent, SitePermissionKind } from '@shared/types'
+import type { PermissionPromptContent, PopoverBackdrop, SitePermissionKind } from '@shared/types'
 import { translate } from '@/i18n'
 import { applyTheme } from '@/lib/theme'
+import { PopoverSurfaceBlur } from './PopoverSurfaceBlur'
 
 // Seuls les kinds réellement « promptables » (déclenchés via
 // `setPermissionRequestHandler`, voir webSession.ts) atteignent cette fenêtre
@@ -40,12 +41,24 @@ const MESSAGE_KEYS: Partial<Record<SitePermissionKind, string>> = {
 
 export default function PermissionPromptRoot() {
   const [content, setContent] = useState<PermissionPromptContent | null>(null)
+  // `null` tant qu'aucune capture n'est encore arrivée — voir le commentaire
+  // équivalent dans PopoverRoot.tsx.
+  const [backdrop, setBackdrop] = useState<PopoverBackdrop | null>(null)
   // Pas de store partagé avec la fenêtre principale (contexte JS séparé) —
   // langue d'interface fixe pour l'instant, comme PopoverRoot.tsx.
   const locale = 'fr'
   const rootRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => window.aether.permissionPrompt.onSetContent(setContent), [])
+  useEffect(
+    () =>
+      window.aether.permissionPrompt.onSetContent((c) => {
+        setContent(c)
+        setBackdrop(null)
+      }),
+    []
+  )
+
+  useEffect(() => window.aether.permissionPrompt.onSetBackdrop(setBackdrop), [])
 
   useEffect(() => {
     void window.aether.settings.get().then((s) => {
@@ -102,6 +115,7 @@ export default function PermissionPromptRoot() {
           </button>
         </div>
       </div>
+      <PopoverSurfaceBlur containerRef={rootRef} backdrop={backdrop} />
     </div>
   )
 }

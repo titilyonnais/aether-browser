@@ -799,6 +799,21 @@ export interface LocalRect {
   height: number
 }
 
+/** Capture de ce qu'il y a RÉELLEMENT derrière une fenêtre popup native (voir
+ * popoverWindow.ts/permissionPromptWindow.ts) — sert de source à un flou posé
+ * en CSS dans chaque carte `.popover-surface`, seul moyen d'obtenir un flou
+ * qui ne puisse jamais déborder de sa carte (contrairement au matériau natif
+ * Windows, qui peint sur tout le rectangle de la fenêtre — voir CHANGELOG
+ * 0.74.1). `width`/`height` en pixels CSS (DIP), PAS les pixels physiques du
+ * bitmap capturé — c'est ce que `capturePage()` a reçu en entrée, et c'est ce
+ * que `background-size` doit recevoir en sortie pour un alignement correct
+ * quel que soit le facteur d'échelle Windows. */
+export interface PopoverBackdrop {
+  dataUrl: string
+  width: number
+  height: number
+}
+
 export type PopoverKind = 'site-info' | 'tab-preview' | 'translate' | 'favorites-folder' | 'app-menu' | 'context-menu'
 
 /** Une entrée d'un menu contextuel générique (voir ContextMenuPopoverCard.tsx)

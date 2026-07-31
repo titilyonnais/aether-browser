@@ -312,19 +312,32 @@ textarea:focus-visible {
     0 0 0 1px rgb(0 0 0 / 0.4);
 }
 
-/* Surface opaque pour les fenêtres popup natives flottantes (infos de site,
-   aperçu d'onglet, profils, menu principal…) : ce sont des `BrowserWindow`
+/* Surface pour les fenêtres popup natives flottantes (infos de site, aperçu
+   d'onglet, profils, menu principal…) : ce sont des `BrowserWindow`
    transparentes SÉPARÉES de la fenêtre principale, dimensionnées un peu plus
    GRANDES que la carte visible (marge anti-rognage + largeur réservée pour un
-   flyout pas encore ouvert, voir PopoverRoot.tsx) — un vrai flou (CSS
-   `backdrop-filter`, qui n'a ici rien à flouter dans la page de ce popup ;
-   OU matériau Windows natif « Acrylic », essayé puis RETIRÉ : il peint sur
-   TOUT le rectangle de la fenêtre sans respecter ces marges volontairement
-   invisibles, débordant largement de la carte — confirmé par capture
-   utilisateur) casse cette marge invisible ou n'a aucun effet fiable. Fond
-   quasi opaque, sans flou : le seul rendu garanti de ne JAMAIS déborder de la
-   bulle elle-même. */
+   flyout pas encore ouvert, voir PopoverRoot.tsx). Deux mécanismes de flou
+   ESSAYÉS PUIS ÉCARTÉS pour cette raison précise : `backdrop-filter` CSS
+   (rien à flouter dans la page de CE popup, dont le fond est transparent) et
+   le matériau Windows natif « Acrylic » (peint sur TOUT le rectangle de la
+   fenêtre sans respecter ces marges volontairement invisibles — débordait
+   largement de la carte, confirmé par capture utilisateur, CHANGELOG 0.74.1).
+   Le flou vient donc d'un calque IMAGE injecté en enfant de CHAQUE carte
+   (`PopoverRoot.tsx`/`popoverBackdropLayout.ts`, alimenté par une capture
+   d'écran du main — popoverBackdrop.ts) : `position:absolute` + `filter:blur()`
+   + le `overflow:hidden` ci-dessous, qui le découpe au pixel près sur la
+   carte — un enfant ne peut PAS peindre en dehors de la boîte que son propre
+   parent lui refuse par `overflow:hidden`, contrairement aux deux mécanismes
+   écartés ci-dessus (contenu du DOM extérieur ou compositeur OS, aucun des
+   deux soumis au modèle de boîte de CETTE carte). `isolation:isolate` :
+   empêche le z-index négatif de ce calque de s'échapper vers un ancêtre (même
+   piège que le fond flouté de NewTabPage.tsx, CHANGELOG 0.73.0). Le fond ici
+   reste un repli opaque, visible tant qu'aucune capture n'est encore arrivée
+   (ou si elle échoue) — jamais de trou transparent. */
 @utility popover-surface {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   background: rgb(16 16 24 / 0.98);
   border: 1px solid rgb(255 255 255 / 0.1);
   /* Pas d'ombre portée FLOUE ici (contrairement à `.glass-strong`) : cette

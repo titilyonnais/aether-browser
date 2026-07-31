@@ -28,6 +28,7 @@ import { CH } from '@shared/ipc'
 import type { ProfileId, SitePermissionKind } from '@shared/types'
 import { sitePermissionsRepo } from './db/repositories'
 import { disableNativeWindowTransitions } from './dwm'
+import { captureAndSendBackdrop } from './popoverBackdrop'
 import { fadeWindowIn, fadeWindowOut } from './windowFade'
 
 interface PendingRequest {
@@ -247,6 +248,10 @@ export function resizePermissionPrompt(sourceWc: WebContents, width: number, hei
   const h = Math.max(1, height)
   const { x, y } = sanitizeToDisplay(ownerBounds.x + ANCHOR_OFFSET.x, ownerBounds.y + ANCHOR_OFFSET.y, w, h)
   s.popup.setBounds({ x, y, width: w, height: h })
+  // Capture de ce qu'il y a réellement derrière l'invite à SA position/taille
+  // finale — source du flou en CSS de la carte (voir popoverBackdrop.ts et le
+  // commentaire équivalent dans popoverWindow.ts). Fire-and-forget.
+  void captureAndSendBackdrop(owner, s.popup, { x, y, width: w, height: h }, CH.permissionPromptSetBackdrop)
   clearFallbackShow(s)
   if (!s.popup.isVisible()) fadeWindowIn(s.popup)
 }

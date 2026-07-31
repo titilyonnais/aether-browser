@@ -35,6 +35,7 @@ import type {
   PageId,
   PageMeta,
   PermissionPromptContent,
+  PopoverBackdrop,
   PopoverContent,
   PopoverShowRequest,
   Profile,
@@ -347,12 +348,17 @@ export const CH = {
   permissionPromptSetContent: 'permission-prompt:set-content',
   permissionPromptResize: 'permission-prompt:resize',
   permissionPromptRespond: 'permission-prompt:respond',
+  /** Capture de ce qu'il y a réellement derrière la fenêtre — source du flou
+   * en CSS de la carte, voir PopoverBackdrop (shared/types.ts). */
+  permissionPromptSetBackdrop: 'permission-prompt:set-backdrop',
 
   // Popover flottant (fenêtre native — infos de site, aperçu d'onglet)
   popoverShow: 'popover:show',
   popoverHide: 'popover:hide',
   popoverResize: 'popover:resize',
   popoverSetContent: 'popover:set-content',
+  /** Capture de ce qu'il y a réellement derrière la fenêtre — voir PopoverBackdrop. */
+  popoverSetBackdrop: 'popover:set-backdrop',
   popoverClosed: 'popover:closed',
   /** Depuis la bulle de menu contextuel générique (ContextMenuPopoverCard) :
    * exécute l'action associée à cet id de ligne (voir showContextMenuPopover
@@ -803,6 +809,11 @@ export interface AetherApi {
     reportSize(size: { width: number; height: number }): void
     /** Écouté par le popup pour savoir quoi afficher. */
     onSetContent(cb: (content: PopoverContent) => void): Unsubscribe
+    /** Écouté par le popup : capture de ce qu'il y a réellement derrière lui,
+     * source du flou en CSS de chaque carte (voir PopoverBackdrop). `null` tant
+     * qu'aucune capture n'est encore arrivée (la carte reste alors opaque, sans
+     * flou — jamais de flou mal aligné/périmé affiché). */
+    onSetBackdrop(cb: (backdrop: PopoverBackdrop | null) => void): Unsubscribe
     /** Écouté par la fenêtre principale : le main a fermé le popup de son propre
      * chef (clic dans une page — inatteignable en DOM) → resynchroniser l'état local. */
     onClosed(cb: () => void): Unsubscribe
@@ -815,6 +826,8 @@ export interface AetherApi {
    * native séparée, voir permissionPromptWindow.ts/PermissionPromptRoot.tsx. */
   permissionPrompt: {
     onSetContent(cb: (content: PermissionPromptContent) => void): Unsubscribe
+    /** Même rôle que `popover.onSetBackdrop` ci-dessus. */
+    onSetBackdrop(cb: (backdrop: PopoverBackdrop | null) => void): Unsubscribe
     reportSize(size: { width: number; height: number }): void
     respond(requestId: string, granted: boolean): void
   }

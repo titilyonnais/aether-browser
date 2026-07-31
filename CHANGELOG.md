@@ -4,6 +4,26 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.75.0] — 2026-07-31
+
+### Ajouté
+
+- **Vrai flou dans les bulles de l'appli (menu principal, infos de site, aperçu d'onglet, menu
+  contextuel, dossier de favoris, traduction, extensions, mise à jour prête, installation
+  d'extension, invite de permission), sans le risque de débordement de la v0.74.0.** Ces bulles
+  sont des fenêtres Windows séparées et transparentes ; ni un flou CSS classique (rien à flouter
+  dans leur propre page) ni le matériau natif Windows « Acrylic » (peint sur tout le rectangle de
+  la fenêtre, débordait de la carte) ne fonctionnaient de façon fiable. Le main capture désormais
+  une photo de ce qu'il y a RÉELLEMENT derrière chaque bulle à sa position exacte, et chaque carte
+  l'affiche elle-même, floutée, comme un calque enfant strictement DÉCOUPÉ par son propre
+  `overflow: hidden` — un enfant ne peut pas peindre en dehors de la boîte que son parent lui
+  refuse, contrairement aux deux mécanismes écartés. Vérifié pour les DEUX cartes qui peuvent
+  coexister dans le menu principal (menu + sous-menu ouvert), pas seulement la première trouvée.
+  Les deux bulles qui sont de vrais éléments de la fenêtre principale (menu Téléchargements,
+  bannière navigateur par défaut) gardaient déjà un flou réel depuis la 0.74.1, inchangé. Les
+  panneaux pleine fenêtre (Réglages, Téléchargements, Favoris, Historique…) étaient déjà
+  correctement floutés de longue date — ce ne sont pas des fenêtres séparées.
+
 ## [0.74.1] — 2026-07-31
 
 ### Corrigé

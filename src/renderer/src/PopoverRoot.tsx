@@ -5,7 +5,7 @@
  * rapporte sa taille réelle pour que le main ajuste la fenêtre en conséquence.
  */
 import { useEffect, useRef, useState } from 'react'
-import type { PopoverContent } from '@shared/types'
+import type { PopoverBackdrop, PopoverContent } from '@shared/types'
 import { AppMenuPopoverCard } from '@/components/chrome/AppMenuPopoverCard'
 import { ContextMenuPopoverCard } from '@/components/chrome/ContextMenuPopoverCard'
 import { ExtensionsMenuPopoverCard } from '@/components/chrome/ExtensionsMenuPopoverCard'
@@ -16,9 +16,16 @@ import { SiteInfoCard } from '@/components/focus/SiteInfoCard'
 import { TabPreviewCard } from '@/components/focus/TabPreviewCard'
 import { TranslatePopoverCard } from '@/components/focus/TranslatePopoverCard'
 import { applyTheme } from '@/lib/theme'
+import { PopoverSurfaceBlur } from './PopoverSurfaceBlur'
 
 export default function PopoverRoot() {
   const [content, setContent] = useState<PopoverContent>(null)
+  // `null` tant qu'aucune capture n'est encore arrivée pour l'ouverture EN
+  // COURS — remis à `null` à chaque nouveau contenu (voir l'effet plus bas) :
+  // sans ça, la toute première image d'une bulle DIFFÉRENTE resterait
+  // affichée un instant, mal alignée avec la nouvelle carte, le temps que la
+  // capture fraîche arrive.
+  const [backdrop, setBackdrop] = useState<PopoverBackdrop | null>(null)
   // Incrémenté à CHAQUE contenu poussé (donc à chaque ouverture, même du même
   // genre de popover) — sert de `key` React pour forcer un vrai remontage.
   // Sans ça, rouvrir le menu principal (ou un menu contextuel) après avoir
@@ -39,9 +46,12 @@ export default function PopoverRoot() {
       window.aether.popover.onSetContent((c) => {
         setContent(c)
         setContentNonce((n) => n + 1)
+        setBackdrop(null)
       }),
     []
   )
+
+  useEffect(() => window.aether.popover.onSetBackdrop(setBackdrop), [])
 
   useEffect(() => {
     void window.aether.settings.get().then((s) => {
@@ -150,6 +160,7 @@ export default function PopoverRoot() {
       )}
       {content.kind === 'extensions-menu' && <ExtensionsMenuPopoverCard />}
       {content.kind === 'update-ready' && <UpdateReadyPopoverCard version={content.version} />}
+      <PopoverSurfaceBlur containerRef={rootRef} backdrop={backdrop} />
     </div>
   )
 }
