@@ -94,6 +94,12 @@ describe('registerAsDefaultBrowserCandidate — structure registre réelle', () 
     expect(script).toContain('"https"="AetherHTML"')
     expect(script).toContain('[HKEY_CURRENT_USER\\Software\\RegisteredApplications]')
     expect(script).toContain('"Aether"="Software\\\\Clients\\\\StartMenuInternet\\\\Aether\\\\Capabilities"')
+    // Tous les types de fichiers qu'un navigateur complet revendique — .pdf
+    // compris, pour que sa propre fiche Windows propose bien « Définir ÆTHER
+    // par défaut » pour ce type comme pour les autres.
+    for (const ext of ['.htm', '.html', '.shtml', '.mhtml', '.mht', '.pdf', '.svg', '.webp', '.xht', '.xhtml', '.xml']) {
+      expect(script).toContain(`"${ext}"="AetherHTML"`)
+    }
     // Chemin de l'exe correctement échappé (backslashes doublés) dans les
     // commandes d'ouverture.
     expect(script).toContain('C:\\\\Program Files\\\\Aether\\\\Aether.exe')
@@ -144,9 +150,9 @@ describe('isDefaultBrowser — reflète UserChoice, jamais un signal qu\'ÆTHER 
 })
 
 describe('promptSetDefaultBrowser', () => {
-  it('ouvre la page Windows dédiée, jamais un lien arbitraire', async () => {
+  it("ouvre directement la fiche d'ÆTHER (registeredAppUser), jamais la liste générale ni un lien arbitraire", async () => {
     const mod = await freshModule()
     mod.promptSetDefaultBrowser()
-    expect(electronMock.shell.openExternal).toHaveBeenCalledWith('ms-settings:defaultapps')
+    expect(electronMock.shell.openExternal).toHaveBeenCalledWith('ms-settings:defaultapps?registeredAppUser=Aether')
   })
 })

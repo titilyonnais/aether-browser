@@ -37,8 +37,12 @@ import { join } from 'node:path'
 
 /** Nom de la clé `StartMenuInternet` ET de l'entrée `RegisteredApplications`. */
 const CLIENT_NAME = 'Aether'
-/** ProgId associé à http/https et aux fichiers .htm/.html/.shtml. */
+/** ProgId associé à http/https et à tous les types de fichiers ci-dessous. */
 const PROG_ID = 'AetherHTML'
+/** Types de fichiers qu'un navigateur complet revendique habituellement
+ * (Chrome/Brave/Edge) — chacun apparaît dans la fiche Windows d'ÆTHER avec
+ * son propre bouton « Définir ÆTHER par défaut », .pdf compris. */
+const FILE_EXTENSIONS = ['.htm', '.html', '.shtml', '.mhtml', '.mht', '.pdf', '.svg', '.webp', '.xht', '.xhtml', '.xml']
 
 /**
  * Vrai pour le build « portable » (electron-builder.yml : un seul .exe
@@ -88,9 +92,8 @@ function buildRegistrationScript(exePath: string): string {
     `"http"="${PROG_ID}"\r\n` +
     `"https"="${PROG_ID}"\r\n\r\n` +
     `[HKEY_CURRENT_USER\\Software\\Clients\\StartMenuInternet\\${CLIENT_NAME}\\Capabilities\\FileAssociations]\r\n` +
-    `".htm"="${PROG_ID}"\r\n` +
-    `".html"="${PROG_ID}"\r\n` +
-    `".shtml"="${PROG_ID}"\r\n\r\n` +
+    FILE_EXTENSIONS.map((ext) => `"${ext}"="${PROG_ID}"\r\n`).join('') +
+    '\r\n' +
     '[HKEY_CURRENT_USER\\Software\\RegisteredApplications]\r\n' +
     `"${CLIENT_NAME}"="${capabilitiesKey}"\r\n`
   )
@@ -173,7 +176,16 @@ export function getDefaultBrowserState(): { isDefault: boolean; available: boole
 }
 
 /** Ouvre la page Windows où l'utilisateur peut RÉELLEMENT confirmer le
- * changement — la seule étape qu'aucune API ne permet d'automatiser. */
+ * changement — la seule étape qu'aucune API ne permet d'automatiser.
+ * `registeredAppUser=<nom>` (le même `<nom>` que la valeur inscrite sous
+ * `RegisteredApplications`, `CLIENT_NAME`) ouvre directement la fiche
+ * d'ÆTHER (« Applications par défaut › ÆTHER », un clic pour tout définir —
+ * exactement ce que montre ce paramètre pour Chrome/Brave/Edge) plutôt que
+ * la liste générale, où l'utilisateur devrait ensuite rechercher ÆTHER
+ * lui-même. Paramètre non documenté officiellement mais stable depuis
+ * Windows 10 (c'est celui que ces navigateurs utilisent eux-mêmes) : si
+ * jamais Windows l'ignore, il retombe simplement sur la liste générale —
+ * aucun risque de page cassée. */
 export function promptSetDefaultBrowser(): void {
-  void shell.openExternal('ms-settings:defaultapps')
+  void shell.openExternal(`ms-settings:defaultapps?registeredAppUser=${CLIENT_NAME}`)
 }

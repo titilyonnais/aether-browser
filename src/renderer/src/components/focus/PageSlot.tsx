@@ -79,7 +79,12 @@ export function PageSlot({ pageId, index, fullscreen = false }: PageSlotProps) {
       {!fullscreen && (
       <div className="relative flex h-10 shrink-0 items-center gap-1 px-2">
         {!isNewTab && <Favicon url={page.url} faviconUrl={page.faviconUrl} size={14} className="ml-1.5" />}
-        <span className={cn(!isNewTab && 'max-w-[26%] fade-truncate', 'text-xs text-ink-dim')}>
+        {/* Largeur FIXE (pas un `%` de la fenêtre) : sans ça, le même site
+            décale la barre d'adresse d'une page à l'autre — voire d'une
+            simple redimension de fenêtre — puisque le titre pousse tout ce
+            qui le suit. Harmonisé sur cette taille précise, jamais ni plus
+            large ni plus étroite, qu'importe la longueur réelle du titre. */}
+        <span className={cn(!isNewTab && 'w-40 shrink-0 fade-truncate', 'text-xs text-ink-dim')}>
           {isNewTab ? t('focusCanvas.pageSlot.newTabTitle') : page.title || t('focusCanvas.pageSlot.untitled')}
         </span>
 

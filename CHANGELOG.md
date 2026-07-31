@@ -4,6 +4,35 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.74.0] — 2026-07-31
+
+### Corrigé
+
+- **Le bouton « Définir par défaut » ouvrait la liste générale des applications par défaut de
+  Windows au lieu de la fiche d'ÆTHER elle-même** — l'utilisateur devait ensuite chercher ÆTHER
+  lui-même dans la liste. Utilise désormais le même paramètre `registeredAppUser` que
+  Chrome/Brave/Edge pour s'ouvrir directement sur la fiche d'ÆTHER, un clic pour tout définir.
+- **Types de fichiers manquants pour la candidature navigateur par défaut** — seuls .htm/.html/
+  .shtml étaient déclarés. Ajout de .mhtml, .mht, .pdf, .svg, .webp, .xht, .xhtml, .xml : chacun
+  obtient désormais son propre bouton « Définir ÆTHER par défaut » dans la fiche Windows, .pdf
+  compris, comme un navigateur complet.
+- **Les bulles de l'appli (menu principal, infos de site, aperçu d'onglet…) n'étaient pas
+  vraiment floutées** — juste un fond très opaque avec un soupçon de transparence. Cause : ce
+  sont des fenêtres Windows séparées et transparentes (pas des éléments de la page), pour
+  composer par-dessus une page vivante sans jamais la rogner ; un flou CSS n'a donc rigoureusement
+  rien à flouter dans leur propre page (rien n'y est peint derrière la carte). Posé côté Windows
+  lui-même (matériau Acrylic du compositeur DWM, `backgroundMaterial` d'Electron) plutôt que côté
+  CSS, avec un fond de carte éclairci pour laisser ce flou transparaître — respecte le canal
+  alpha déjà composé, coins arrondis compris. Sans effet avant Windows 11 22H2, sans jamais rien
+  casser sur les systèmes plus anciens.
+
+### Harmonisé
+
+- **Le nom de page dans l'en-tête de chaque page (mode Focus) changeait de largeur avec la
+  longueur du titre et la taille de la fenêtre** (`26%` de la largeur disponible), décalant
+  d'autant la barre d'adresse juste à côté selon le site ou le redimensionnement. Largeur fixe
+  désormais : toujours la même taille, quel que soit le titre.
+
 ## [0.73.0] — 2026-07-31
 
 ### Corrigé
