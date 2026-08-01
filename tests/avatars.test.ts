@@ -1,11 +1,13 @@
 /**
- * `avatarImageDataUrl` sert un fichier du dossier `userData/avatars/` en
- * `data:` URI, à partir d'un `filename` reçu tel quel de l'IPC
- * (`newtab:background-image-data-url`), sans schéma Zod côté appelant.
+ * `avatarImageDataUrl`/`deleteAvatarImage` opèrent sur un fichier du dossier
+ * `userData/avatars/` à partir d'un `filename` reçu tel quel de l'IPC
+ * (`newtab:background-image-data-url`, `profileCreate`, `profileSetAvatarImage`,
+ * `profileClearAvatar`, `profileRemove`), sans schéma Zod côté appelant.
  * Régression : seule l'EXTENSION était vérifiée avant cette correction —
  * un `filename` du type `../../../ailleurs/secret.png` passait ce contrôle
- * et `join(avatarsDir(), filename)` ressortait alors du dossier prévu,
- * relisant un fichier arbitraire du disque (limité aux extensions image).
+ * et `join(avatarsDir(), filename)` ressortait alors du dossier prévu, en
+ * LECTURE comme en SUPPRESSION (cette dernière bien plus grave : `unlinkSync`
+ * est destructif et irréversible).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -14,10 +16,13 @@ const electronMock = vi.hoisted(() => ({
 }))
 vi.mock('electron', () => electronMock)
 
-const fsMock = vi.hoisted(() => ({ readFileSync: vi.fn(() => Buffer.from('fake-image-bytes')) }))
+const fsMock = vi.hoisted(() => ({
+  readFileSync: vi.fn(() => Buffer.from('fake-image-bytes')),
+  unlinkSync: vi.fn()
+}))
 vi.mock('node:fs', () => fsMock)
 
-const { avatarImageDataUrl } = await import('../src/main/avatars')
+const { avatarImageDataUrl, deleteAvatarImage } = await import('../src/main/avatars')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -45,5 +50,22 @@ describe('avatarImageDataUrl', () => {
   it('rejette toujours une extension non autorisée', () => {
     expect(avatarImageDataUrl('3fa2c9b0-1234-4abc-9def-abcdef012345.exe')).toBeNull()
     expect(fsMock.readFileSync).not.toHaveBeenCalled()
+  })
+})
+
+describe('deleteAvatarImage', () => {
+  it('supprime un fichier légitime (nom UUID généré par chooseAndSaveAvatarImage)', () => {
+    deleteAvatarImage('3fa2c9b0-1234-4abc-9def-abcdef012345.png')
+    expect(fsMock.unlinkSync).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejette une tentative de traversée de chemin SANS toucher au disque', () => {
+    deleteAvatarImage('../../../../Users/victime/Documents/important.docx.png')
+    expect(fsMock.unlinkSync).not.toHaveBeenCalled()
+  })
+
+  it('rejette un nom qui ne respecte pas le format UUID attendu', () => {
+    deleteAvatarImage('not-a-real-avatar-name.png')
+    expect(fsMock.unlinkSync).not.toHaveBeenCalled()
   })
 })

@@ -14,6 +14,17 @@ export function avatarsDir(): string {
 
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
 
+/** Tout fichier de ce dossier est nommé par `chooseAndSaveAvatarImage`
+ * ci-dessous (`randomUUID() + extension`, jamais autre chose) — même motif
+ * que `AVATAR_FILE_RE` dans protocol.ts. `imagePath`/`filename` remontent
+ * jusqu'ici depuis des handlers IPC (`profileCreate`, `profileSetAvatarImage`,
+ * `profileClearAvatar`, `profileRemove`) sans validation Zod côté appelant :
+ * sans ce contrôle, un nom fabriqué du type `../../../ailleurs/fichier.png`
+ * ressortirait de `avatarsDir()` — en LECTURE (`avatarImageDataUrl`) comme en
+ * SUPPRESSION (`deleteAvatarImage`), cette dernière bien plus grave puisque
+ * `unlinkSync` est destructif et irréversible. */
+const AVATAR_FILENAME_RE = /^[0-9a-f-]{36}\.(png|jpe?g|webp|gif)$/i
+
 /** Ouvre un sélecteur d'image ; copie le fichier choisi et retourne son nom. */
 export async function chooseAndSaveAvatarImage(win: BrowserWindow): Promise<string | null> {
   const result = await dialog.showOpenDialog(win, {
@@ -34,7 +45,7 @@ export async function chooseAndSaveAvatarImage(win: BrowserWindow): Promise<stri
 
 /** Supprime un fichier d'avatar (best-effort, silencieux si absent). */
 export function deleteAvatarImage(filename: string): void {
-  if (!filename) return
+  if (!filename || !AVATAR_FILENAME_RE.test(filename)) return
   try {
     unlinkSync(join(avatarsDir(), filename))
   } catch {
@@ -49,17 +60,6 @@ const MIME_BY_EXT: Record<string, string> = {
   '.webp': 'image/webp',
   '.gif': 'image/gif'
 }
-
-/** Tout fichier de ce dossier est nommé par `chooseAndSaveAvatarImage`
- * ci-dessus (`randomUUID() + extension`, jamais autre chose) — même motif
- * que `AVATAR_FILE_RE` dans protocol.ts, qui sert ces mêmes fichiers via
- * `aether://avatars/<fichier>`. Un simple contrôle d'extension (comme avant)
- * laissait passer un `filename` du type `../../../ailleurs/photo.png` :
- * `join(avatarsDir(), filename)` ressort alors du dossier et relit un
- * fichier arbitraire du disque (limité aux extensions image) — ce handler
- * étant exposé tel quel à l'IPC (`newtab:background-image-data-url`), sans
- * validation Zod côté appelant. */
-const AVATAR_FILENAME_RE = /^[0-9a-f-]{36}\.(png|jpe?g|webp|gif)$/i
 
 /** Relit un fichier déjà importé (avatar OU fond d'écran, même dossier géré)
  * en `data:` URI — utilisé pour l'extraction de couleur dominante côté

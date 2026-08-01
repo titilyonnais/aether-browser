@@ -4,6 +4,16 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.80.1] — 2026-08-01
+
+### Corrigé
+
+- **Un nom de fichier fabriqué pouvait faire supprimer n'importe quel fichier du disque portant
+  une extension image.** Le correctif de la 0.80.0 ne portait que sur la LECTURE
+  (`avatarImageDataUrl`) ; la même validation manquait à la SUPPRESSION (`deleteAvatarImage`,
+  utilisée en interne par les changements/suppressions de profil), plus grave puisque destructive
+  et irréversible. Corrigé avec le même contrôle de format.
+
 ## [0.80.0] — 2026-08-01
 
 ### Corrigé
