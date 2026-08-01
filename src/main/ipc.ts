@@ -92,7 +92,8 @@ import {
   openPopover,
   resizePopoverWindow,
   runContextMenuAction,
-  showContextMenuPopover
+  showContextMenuPopover,
+  topLeftAnchor
 } from './popoverWindow'
 import { resizePermissionPrompt, respondPermissionPrompt } from './permissionPromptWindow'
 import {
@@ -169,8 +170,8 @@ const POPOVER_WIDTH: Record<PopoverShowRequest['kind'], number> = {
  * rogner par `overflow-hidden` le temps que la vraie mesure arrive, coupant
  * net jusqu'au coin arrondi du bas) ; une valeur trop GRANDE ne l'est jamais
  * (fenêtre transparente, l'espace en trop est juste invisible) et se corrige
- * proprement dès la première vraie mesure grâce à `naturalY`
- * (popoverWindow.ts). Mieux vaut donc systématiquement surestimer. `app-menu`
+ * proprement dès la première vraie mesure grâce au coin fixe (`pinnedAnchor`,
+ * popoverWindow.ts). Mieux vaut donc systématiquement surestimer. `app-menu`
  * est volontairement bien au-dessus de la hauteur réelle du panneau racine
  * (16 lignes + 6 séparateurs) pour cette raison. */
 const POPOVER_DEFAULT_HEIGHT: Record<PopoverShowRequest['kind'], number> = {
@@ -182,9 +183,10 @@ const POPOVER_DEFAULT_HEIGHT: Record<PopoverShowRequest['kind'], number> = {
   'extensions-menu': 220,
   'update-ready': 150
 }
-/** Espace visible entre l'ancre (onglet, bouton) et le popup — la bulle
- * paraissait collée à l'onglet avec 8px. */
-const POPOVER_GAP = 12
+/** Espace visible entre l'ancre (bouton) et le popup — quasi nul par demande
+ * explicite (« à peine 1 mm », capture utilisateur) : une bulle classique
+ * doit coller sous son bouton, pas flotter avec un espace visible. */
+const POPOVER_GAP = 3
 
 /** Convertit l'ancrage (coordonnées locales à la fenêtre principale) en bornes écran absolues.
  * `getContentBounds()`, PAS `getBounds()` : cette fenêtre est frameless mais RESIZABLE
@@ -2127,9 +2129,24 @@ export function registerIpc(router: AiRouter): void {
         topY: winBounds.y + req.anchor.y + req.anchor.height + POPOVER_GAP
       })
     }
-    const pinnedRightEdge =
-      req.placement === 'below-right' ? win.getContentBounds().x + req.anchor.x + req.anchor.width : null
-    openPopover(win, computePopoverBounds(win, req), content, pinnedRightEdge)
+    const bounds = computePopoverBounds(win, req)
+    // Bord DROIT du bouton fixe pour `below-right` (menu principal, sous le
+    // bouton "⋯" en haut-droit…) : le popup grandit alors vers la GAUCHE en
+    // gardant CE bord au bouton — jamais son bord gauche, qui dériverait dès
+    // que le popup change de largeur (sous-menu, voir AppMenuPopoverCard.tsx).
+    // Les autres placements restent ancrés par leur coin haut-gauche déjà
+    // calculé par `computePopoverBounds` — aucun de ces popovers ne se
+    // retourne verticalement (contrairement au menu contextuel générique,
+    // voir `pinnedAnchorFor`/showContextMenuPopover).
+    const pinnedAnchor =
+      req.placement === 'below-right'
+        ? {
+            x: 'right' as const,
+            y: 'top' as const,
+            point: { x: win.getContentBounds().x + req.anchor.x + req.anchor.width, y: bounds.y }
+          }
+        : topLeftAnchor({ x: bounds.x, y: bounds.y })
+    openPopover(win, bounds, content, pinnedAnchor)
   })
 
   ipcMain.on(CH.popoverHide, (e) => {
@@ -2258,16 +2275,8 @@ export function createViewDelegate(
       const wb = win.getContentBounds()
       // Ancrée en haut de la fenêtre (comme la vraie bulle de confirmation de
       // Chrome, sous la barre d'adresse) — pas centrée verticalement.
-      openPopover(
-        win,
-        {
-          x: wb.x + Math.round((wb.width - width) / 2),
-          y: wb.y + 72,
-          width,
-          height
-        },
-        { kind: 'webstore-confirm', extensionId, name, iconUrl }
-      )
+      const point = { x: wb.x + Math.round((wb.width - width) / 2), y: wb.y + 72 }
+      openPopover(win, { ...point, width, height }, { kind: 'webstore-confirm', extensionId, name, iconUrl }, topLeftAnchor(point))
     },
     onCreateQrCode(url, title) {
       send(CH.qrCodeShow, { url, title })

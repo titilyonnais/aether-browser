@@ -5,6 +5,7 @@
  * rapporte sa taille réelle pour que le main ajuste la fenêtre en conséquence.
  */
 import { useEffect, useRef, useState } from 'react'
+import { POPOVER_SAFETY_PX } from '@shared/popoverGeometry'
 import type { PopoverBackdrop, PopoverContent } from '@shared/types'
 import { AppMenuPopoverCard } from '@/components/chrome/AppMenuPopoverCard'
 import { ContextMenuPopoverCard } from '@/components/chrome/ContextMenuPopoverCard'
@@ -118,13 +119,12 @@ export default function PopoverRoot() {
     // absorbent cet écart (et tout autre écart de sous-pixel similaire) sans
     // aucun risque : la fenêtre est intégralement transparente, l'espace en
     // trop est invisible.
-    const SAFETY_PX = 8
     const report = (): void => {
       const rect = el.getBoundingClientRect()
       if (rect.width > 0 && rect.height > 0) {
         window.aether.popover.reportSize({
-          width: Math.ceil(rect.width) + SAFETY_PX,
-          height: Math.ceil(rect.height) + SAFETY_PX
+          width: Math.ceil(rect.width) + POPOVER_SAFETY_PX,
+          height: Math.ceil(rect.height) + POPOVER_SAFETY_PX
         })
       }
     }

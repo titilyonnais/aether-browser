@@ -4,6 +4,27 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.77.0] — 2026-08-01
+
+### Corrigé
+
+- **La vraie cause du décalage des bulles, trouvée.** Chaque popover natif ajoute 8px de marge
+  invisible à sa taille réellement mesurée (anti-rognage sur un facteur d'échelle Windows non
+  entier) — pour une bulle ancrée par son bord DROIT (menu principal, infos de site, traduction,
+  extensions…), cette marge était comptée AVANT le bouton plutôt qu'après : la carte visible,
+  plus étroite que la fenêtre qui l'héberge, se retrouvait décalée de ces 8px par rapport au
+  bouton. Corrigé : l'ancrage se calcule désormais sur la taille RÉELLE de la carte, jamais sur
+  la fenêtre. L'hypothèse de la 0.76.0 (bordure Windows invisible, `getContentBounds()`) n'était
+  vraisemblablement pas la bonne piste ; conservée malgré tout, elle reste correcte en principe.
+- **Le placement du menu contextuel (clic droit) ne se retournait jamais** — la bulle partait
+  toujours du coin haut-gauche du clic, quitte à déborder de l'écran puis se faire recaler en
+  bloc contre son bord, complètement déconnectée du point cliqué (« aimantée »). Il se retourne
+  désormais horizontalement et verticalement, indépendamment, selon la place réellement
+  disponible : le coin de la bulle qui reste sous la souris s'adapte à la position du clic,
+  jamais un bord de fenêtre qui reste collé à l'écran pendant que la bulle dérive.
+- **L'espace entre une bulle classique et son bouton était trop large** — réduit au minimum
+  (bulle collée sous son bouton, comme demandé).
+
 ## [0.76.1] — 2026-08-01
 
 ### Corrigé

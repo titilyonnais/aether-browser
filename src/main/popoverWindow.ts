@@ -19,10 +19,39 @@
 import { BrowserWindow, screen, type BrowserWindow as BW, type Rectangle, type WebContents } from 'electron'
 import { join } from 'node:path'
 import { CH } from '@shared/ipc'
+import { POPOVER_SAFETY_PX } from '@shared/popoverGeometry'
 import type { ContextMenuRow, LocalRect, PopoverContent } from '@shared/types'
 import { disableNativeWindowTransitions } from './dwm'
 import { captureAndSendBackdrop } from './popoverBackdrop'
 import { fadeWindowIn, fadeWindowOut } from './windowFade'
+
+/**
+ * Décrit quel COIN du popup reste FIXE au point d'ancrage — bouton cliqué,
+ * ou point de clic droit — lors d'un redimensionnement ultérieur (flyout,
+ * contenu asynchrone…) : le popup grandit/rétrécit alors depuis le coin
+ * OPPOSÉ, jamais depuis celui-ci. Généralise l'ancien `pinnedRightEdge`
+ * (toujours associé à un haut fixe) aux QUATRE combinaisons — nécessaire au
+ * retournement du menu contextuel (voir `pinnedAnchorFor`), qui doit pouvoir
+ * s'ancrer par n'importe lequel de ses quatre coins selon la place restante
+ * près du bord de l'écran, plutôt que de systématiquement partir du
+ * haut-gauche et se faire recaler (« aimanté ») par `sanitizeToDisplay` en
+ * cas de débordement — le point cliqué n'est alors plus tenu du tout,
+ * contrairement à un vrai retournement.
+ */
+interface PopoverAnchor {
+  /** Quel bord horizontal reste sur `point.x`. */
+  x: 'left' | 'right'
+  /** Quel bord vertical reste sur `point.y`. */
+  y: 'top' | 'bottom'
+  point: { x: number; y: number }
+}
+
+/** Ancrage par défaut : coin haut-gauche au point donné (comportement
+ * d'avant l'introduction du retournement — inchangé pour tout appelant qui
+ * n'a pas besoin de choisir un autre coin). */
+export function topLeftAnchor(point: { x: number; y: number }): PopoverAnchor {
+  return { x: 'left', y: 'top', point }
+}
 
 interface PopoverState {
   popup: BW | null
@@ -38,26 +67,20 @@ interface PopoverState {
   /** Action réelle associée à chaque id de la dernière bulle de menu
    * contextuel ouverte DANS CETTE fenêtre (voir ContextMenuPopoverCard.tsx). */
   contextMenuActions: Record<string, () => void>
-  /** Bord DROIT (écran) auquel ce popover reste collé, s'il a été ouvert avec
-   * `placement: 'below-right'` (ex. menu principal, sous le bouton "⋯" en
-   * haut-droit) — `null` sinon. Un sous-menu qui élargit le popup (flyout,
-   * voir AppMenuPopoverCard.tsx) doit grandir vers la GAUCHE en gardant ce
-   * bord fixe, jamais recalculer `x` depuis la largeur courante : sans ça,
-   * grandir vers la droite pousse hors écran près du bouton, et
-   * `sanitizeToDisplay` rattrape en décalant TOUT le popup (donc le menu
-   * racine, déjà affiché) vers la gauche au lieu de garder sa position. */
-  pinnedRightEdge: number | null
-  /** Position Y écran demandée à l'ouverture (`openPopover`, AVANT le clamp de
+  /** Coin + point fixés à l'ouverture (`openPopover`, AVANT le clamp de
    * `sanitizeToDisplay`) — sert de base à CHAQUE recalcul dans
-   * `resizePopoverWindow`, plutôt que `popup.getBounds().y` (qui peut déjà
-   * être une valeur clampée par un précédent appel, ex. à cause d'une
-   * hauteur initiale devinée trop grande). Sans ce point de référence fixe,
-   * un premier clamp (guess trop haut) ne se défaisait jamais une fois la
-   * vraie taille, plus petite, mesurée : `sanitizeToDisplay` re-clampait la
-   * valeur DÉJÀ remontée contre la nouvelle hauteur au lieu de repartir de la
-   * position naturelle — le popup restait décalé vers le haut en
-   * permanence. */
-  naturalY: number
+   * `resizePopoverWindow`, plutôt que `popup.getBounds()` (qui peut déjà être
+   * une valeur clampée par un précédent appel, ex. à cause d'une taille
+   * initiale devinée trop grande, ou par un précédent redimensionnement).
+   * Sans ce point de référence fixe : (a) un sous-menu qui élargit/agrandit
+   * le popup (flyout, voir AppMenuPopoverCard.tsx) perdrait son bord ancré
+   * (droit ou bas) à chaque recalcul depuis la taille courante plutôt que
+   * depuis ce point fixe — poussant le popup hors écran puis le faisant
+   * recaler par `sanitizeToDisplay` en déplaçant TOUT le popup (donc son
+   * contenu déjà affiché) au lieu de grandir depuis le coin voulu ; (b) un
+   * premier clamp (taille initiale devinée trop grande) ne se déferait
+   * jamais une fois la vraie taille, plus petite, mesurée. */
+  pinnedAnchor: PopoverAnchor
 }
 
 const states = new Map<number, PopoverState>()
@@ -72,8 +95,7 @@ function stateFor(owner: BW): PopoverState {
       fallbackShowTimer: null,
       boundsDebounceTimer: null,
       contextMenuActions: {},
-      pinnedRightEdge: null,
-      naturalY: 0
+      pinnedAnchor: topLeftAnchor({ x: 0, y: 0 })
     }
     states.set(owner.id, s)
     owner.on('closed', () => states.delete(owner.id))
@@ -155,18 +177,11 @@ function ensurePopup(parent: BW): { win: BW; s: PopoverState } {
 }
 
 /** Ouvre (ou déplace) le popup aux bornes écran données et lui pousse son
- * contenu. `pinnedRightEdge` (bord droit écran fixe, popovers ouverts en
- * `placement: 'below-right'`) est mémorisé pour que `resizePopoverWindow`
- * puisse y grandir sans jamais déplacer ce bord. */
-export function openPopover(
-  parent: BW,
-  bounds: Rectangle,
-  content: PopoverContent,
-  pinnedRightEdge: number | null = null
-): void {
+ * contenu. `anchor` (coin + point écran fixe) est mémorisé pour que
+ * `resizePopoverWindow` puisse grandir/rétrécir sans jamais déplacer ce coin. */
+export function openPopover(parent: BW, bounds: Rectangle, content: PopoverContent, anchor: PopoverAnchor): void {
   const { win, s } = ensurePopup(parent)
-  s.pinnedRightEdge = pinnedRightEdge
-  s.naturalY = bounds.y
+  s.pinnedAnchor = anchor
   win.setBounds(sanitizeToDisplay(bounds))
 
   const push = (): void => {
@@ -230,13 +245,53 @@ export function isPopoverWebContents(wc: WebContents): boolean {
   return false
 }
 
-const CONTEXT_MENU_WIDTH = 240
+// Estimation avant mesure réelle (voir POPOVER_DEFAULT_HEIGHT/WIDTH, ipc.ts,
+// pour la même logique) — plutôt généreuse : ces menus n'ont plus de
+// troncature de libellé (v0.76.0), une ligne réellement longue («  Ouvrir
+// dans une nouvelle fenêtre en navigation privée ») peut dépasser 240px.
+const CONTEXT_MENU_WIDTH = 320
 const CONTEXT_MENU_DEFAULT_HEIGHT = 160
+
+/**
+ * Détermine, pour un point d'ancrage (clic droit) et une taille ESTIMÉE
+ * donnés, quels bords doivent rester COLLÉS à ce point plutôt que déborder de
+ * l'écran — retournement horizontal et vertical INDÉPENDANTS, jamais un
+ * simple recalage post-hoc. C'est la différence avec `sanitizeToDisplay`
+ * (qui ne fait QUE ramener une fenêtre déjà positionnée dans l'écran, en la
+ * décalant sans se soucier du point cliqué) : ici, quand ça déborde, c'est
+ * un AUTRE coin du popup qui se pose exactement sur le point cliqué, jamais
+ * un bord de la fenêtre qui reste « aimanté » au bord de l'écran alors que
+ * le popup, lui, a dérivé loin du clic — signalé par capture utilisateur.
+ */
+export function pinnedAnchorFor(point: { x: number; y: number }, size: { width: number; height: number }): PopoverAnchor {
+  const display = screen.getDisplayNearestPoint(point)
+  const area = display.workArea
+  const pinRight = point.x + size.width > area.x + area.width
+  const pinBottom = point.y + size.height > area.y + area.height
+  return { x: pinRight ? 'right' : 'left', y: pinBottom ? 'bottom' : 'top', point }
+}
+
+/** Bornes initiales (avant mesure réelle) correspondant à `anchor`, pour le
+ * tout premier `win.setBounds()` d'`openPopover` — recalculées à l'identique
+ * par `resizePopoverWindow` une fois la vraie taille connue. */
+export function boundsForAnchor(anchor: PopoverAnchor, size: { width: number; height: number }): Rectangle {
+  return {
+    x: anchor.x === 'right' ? anchor.point.x - size.width : anchor.point.x,
+    y: anchor.y === 'bottom' ? anchor.point.y - size.height : anchor.point.y,
+    width: size.width,
+    height: size.height
+  }
+}
 
 /** Ouvre la bulle de menu contextuel générique, ancrée au point donné
  * (coordonnées locales à `win` — un clic droit, pas un bouton, donc pas de
  * largeur/hauteur d'ancre à gérer). Remplace `Menu.buildFromTemplate` : une
- * bulle DOM mesure sa vraie taille et se positionne avec précision. */
+ * bulle DOM mesure sa vraie taille et se positionne avec précision. Se
+ * RETOURNE (voir `pinnedAnchorFor`) plutôt que de systématiquement partir du
+ * coin haut-gauche du clic : un clic près du bord droit/bas de l'écran doit
+ * ouvrir le menu vers la gauche/le haut, avec le coin cliqué qui reste
+ * exactement sous la souris — jamais une bulle qui déborderait puis se
+ * ferait recaler en bloc contre le bord de l'écran. */
 export function showContextMenuPopover(
   win: BW,
   anchor: LocalRect,
@@ -247,11 +302,10 @@ export function showContextMenuPopover(
   stateFor(win).contextMenuActions = actions
   // `getContentBounds()` — voir le commentaire de `computePopoverBounds` (ipc.ts).
   const winBounds = win.getContentBounds()
-  openPopover(
-    win,
-    { x: winBounds.x + anchor.x, y: winBounds.y + anchor.y + 2, width: CONTEXT_MENU_WIDTH, height: CONTEXT_MENU_DEFAULT_HEIGHT },
-    { kind: 'context-menu', rows, title }
-  )
+  const point = { x: winBounds.x + anchor.x, y: winBounds.y + anchor.y + 2 }
+  const estimate = { width: CONTEXT_MENU_WIDTH, height: CONTEXT_MENU_DEFAULT_HEIGHT }
+  const pinnedAnchor = pinnedAnchorFor(point, estimate)
+  openPopover(win, boundsForAnchor(pinnedAnchor, estimate), { kind: 'context-menu', rows, title }, pinnedAnchor)
 }
 
 /** Exécute l'action de la ligne `id` du menu contextuel actuellement ouvert
@@ -329,20 +383,28 @@ export function resizePopoverWindow(sourceWc: WebContents, width: number, height
     // exactement le « se ferme puis se rouvre immédiatement ». La prochaine
     // ouverture repositionnera de toute façon la fenêtre via `openPopover`.
     if (!popup.isVisible() && !s.pendingShow) return
-    const current = popup.getBounds()
     const w = Math.max(1, width)
     const h = Math.max(1, height)
-    // Bord droit fixe (menu principal) : recalcule toujours `x` depuis ce
-    // bord plutôt que de garder `current.x` — sans ça, un flyout qui élargit
-    // le popup pousse son bord droit hors écran, et `sanitizeToDisplay`
-    // rattrape en décalant tout le popup (donc le panneau déjà affiché)
-    // vers la gauche au lieu de grandir en gardant sa position d'origine.
-    const x = s.pinnedRightEdge !== null ? s.pinnedRightEdge - w : current.x
-    // `y: s.naturalY` (pas `current.y`) : repart TOUJOURS de la position
-    // idéale d'origine plutôt que de la valeur déjà affichée — voir le
-    // commentaire sur `naturalY` (PopoverState) pour pourquoi `current.y`
-    // laissait un clamp initial se figer au lieu de se corriger.
-    const next = sanitizeToDisplay({ ...current, x, y: s.naturalY, width: w, height: h })
+    // La carte VISIBLE (`.popover-surface`) est plus étroite/basse que cette
+    // fenêtre de `POPOVER_SAFETY_PX` (marge anti-rognage ajoutée par CHAQUE
+    // popover, voir PopoverRoot.tsx) — pour un bord ancré à DROITE ou en BAS,
+    // recaler la fenêtre sur `w`/`h` (pleine taille, marge comprise) plaçait
+    // la carte RÉELLE cette marge trop tôt : signalé par capture utilisateur,
+    // chaque bulle décalée de son bouton d'exactement cette poignée de
+    // pixels. On ancre donc sur la taille RÉELLE de la carte, jamais sur la
+    // fenêtre qui l'héberge — l'excédent (`POPOVER_SAFETY_PX`) part du côté
+    // OPPOSÉ au coin ancré, où il n'a jamais été visible de toute façon.
+    const realW = Math.max(1, w - POPOVER_SAFETY_PX)
+    const realH = Math.max(1, h - POPOVER_SAFETY_PX)
+    // Coin fixe (`pinnedAnchor`) : recalcule toujours `x`/`y` depuis LUI
+    // plutôt que depuis `current` — sans ça, un flyout qui élargit/agrandit
+    // le popup pousserait son bord ancré hors écran, et `sanitizeToDisplay`
+    // rattraperait en décalant TOUT le popup (donc son contenu déjà affiché)
+    // au lieu de grandir en gardant le coin visé fixe.
+    const x = s.pinnedAnchor.x === 'right' ? s.pinnedAnchor.point.x - realW : s.pinnedAnchor.point.x
+    const y = s.pinnedAnchor.y === 'bottom' ? s.pinnedAnchor.point.y - realH : s.pinnedAnchor.point.y
+    const current = popup.getBounds()
+    const next = sanitizeToDisplay({ x, y, width: w, height: h })
     // Capture de ce qu'il y a réellement derrière le popup à SA position/
     // taille FINALE — source du flou en CSS de chaque carte (voir
     // popoverBackdrop.ts). Toujours tentée ici, même quand les bornes ne

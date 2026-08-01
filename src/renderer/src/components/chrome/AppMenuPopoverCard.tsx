@@ -204,7 +204,7 @@ export function AppMenuPopoverCard() {
   // bas que le menu racine (« Aide »). Le flyout étant en `position:absolute`
   // (hors flux), il n'étend pas tout seul la boîte : on pose donc une hauteur
   // explicite = max(menu, bas du flyout). Résultat : la fenêtre popup ne grandit
-  // que vers le BAS (son haut est épinglé, `naturalY` dans popoverWindow.ts),
+  // que vers le BAS (son haut est épinglé, `pinnedAnchor` dans popoverWindow.ts),
   // jamais vers le haut — le menu racine ne bouge donc pas d'un pixel, et le
   // flyout reste aligné sur la ligne cliquée même en dépassant. `useLayoutEffect`
   // mesure et applique AVANT peinture : aucun scintillement. Un flyout haut de
@@ -233,10 +233,10 @@ export function AppMenuPopoverCard() {
     // explicitement par `boxHeight` : normalement celle du menu racine, mais
     // agrandie vers le BAS quand le flyout descend plus bas (« Aide »), pour le
     // rendre entièrement visible SANS remonter le menu (haut épinglé par
-    // `naturalY`, popoverWindow.ts) — la fenêtre ne grandit que vers le bas, le
-    // menu ne bouge pas. Ancrage à DROITE (`pinnedRightEdge`) : le menu racine
-    // reste collé au bord droit sous le bouton "⋯", le flyout s'ouvre vers la
-    // gauche où il y a la place.
+    // `pinnedAnchor`, popoverWindow.ts) — la fenêtre ne grandit que vers le bas,
+    // le menu ne bouge pas. Ancrage à DROITE (`pinnedAnchor.x === 'right'`) :
+    // le menu racine reste collé au bord droit sous le bouton "⋯", le flyout
+    // s'ouvre vers la gauche où il y a la place.
     <div className="relative" style={{ width: TOTAL_W, height: boxHeight ?? undefined }}>
       {/* Flyout : absolu, calé à gauche. Hors flux, il n'agrandit pas tout seul
           la boîte — c'est `boxHeight` (calculé plus haut) qui l'englobe quand il
