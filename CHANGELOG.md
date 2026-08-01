@@ -4,6 +4,21 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.80.0] — 2026-08-01
+
+### Corrigé
+
+- **Un nom de fichier fabriqué (`../../../ailleurs/photo.png`) pouvait faire relire n'importe quel
+  fichier du disque portant une extension image.** `avatarImageDataUrl` (utilisée pour l'avatar de
+  profil et le fond d'écran du nouvel onglet) ne vérifiait que l'extension du nom reçu par IPC avant
+  de le joindre au dossier des avatars — une traversée de chemin en ressortait, contrairement au
+  protocole `aether://avatars/…` qui, lui, impose déjà le bon format (UUID). Le même contrôle
+  s'applique désormais ici.
+- **Désactiver une extension juste après l'avoir déjà désactivée (ou pendant qu'une autre fenêtre le
+  faisait) pouvait planter toute l'application.** Cause : la même famille de bug que la 0.79.0 — un
+  appel pouvant lever de façon synchrone n'était pas protégé à cet endroit précis, alors qu'il
+  l'était déjà pour le cas équivalent ailleurs dans le même fichier.
+
 ## [0.79.0] — 2026-08-01
 
 ### Corrigé

@@ -294,7 +294,20 @@ export async function setExtensionEnabled(
   extensionsRepo.setEnabled(id, enabled)
   const webSession = session.fromPartition(partition)
   if (!enabled && row.extensionId) {
-    webSession.extensions.removeExtension(row.extensionId)
+    // `try/catch` — même garde que `removeExtension` plus bas (« déjà
+    // déchargée — sans conséquence ») : cet appel peut lever de façon
+    // SYNCHRONE (ex. double-clic rapide sur « désactiver », ou extension
+    // déjà retirée par une autre fenêtre partageant ce profil) ; comme
+    // `setExtensionEnabled` est `async`, un throw synchrone ici devient un
+    // rejet de la promesse qu'elle renvoie — et son appelant IPC
+    // (ipc.ts, `extensionsSetEnabled`) ne l'attend ni ne le rattrape, donc
+    // un rejet non intercepté plantait tout le process (même classe de bug
+    // corrigée pour `savePage`/`captureScreenshot`, viewManager.ts).
+    try {
+      webSession.extensions.removeExtension(row.extensionId)
+    } catch {
+      // Déjà déchargée — sans conséquence.
+    }
   } else if (enabled && existsSync(join(row.path, 'manifest.json'))) {
     try {
       const loaded = await webSession.extensions.loadExtension(row.path, { allowFileAccess: true })

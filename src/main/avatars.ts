@@ -50,12 +50,24 @@ const MIME_BY_EXT: Record<string, string> = {
   '.gif': 'image/gif'
 }
 
+/** Tout fichier de ce dossier est nommé par `chooseAndSaveAvatarImage`
+ * ci-dessus (`randomUUID() + extension`, jamais autre chose) — même motif
+ * que `AVATAR_FILE_RE` dans protocol.ts, qui sert ces mêmes fichiers via
+ * `aether://avatars/<fichier>`. Un simple contrôle d'extension (comme avant)
+ * laissait passer un `filename` du type `../../../ailleurs/photo.png` :
+ * `join(avatarsDir(), filename)` ressort alors du dossier et relit un
+ * fichier arbitraire du disque (limité aux extensions image) — ce handler
+ * étant exposé tel quel à l'IPC (`newtab:background-image-data-url`), sans
+ * validation Zod côté appelant. */
+const AVATAR_FILENAME_RE = /^[0-9a-f-]{36}\.(png|jpe?g|webp|gif)$/i
+
 /** Relit un fichier déjà importé (avatar OU fond d'écran, même dossier géré)
  * en `data:` URI — utilisé pour l'extraction de couleur dominante côté
  * renderer (un `<img>` chargé depuis une `data:` URI ne pollue JAMAIS le
  * canvas contrairement à une image cross-origin via `aether://`, quel que
  * soit le réglage CORS du protocole personnalisé). */
 export function avatarImageDataUrl(filename: string): string | null {
+  if (!AVATAR_FILENAME_RE.test(filename)) return null
   const mime = MIME_BY_EXT[extname(filename).toLowerCase()]
   if (!mime) return null
   try {
