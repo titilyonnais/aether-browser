@@ -31,6 +31,21 @@ export function installCertificateObserver(partition: string): void {
   })
 }
 
+/** Contrepartie de `installCertificateObserver` pour une partition de
+ * navigation privée dont le dernier profil vient de disparaître (voir
+ * `releasePrivatePartition`, webSession.ts, même raison d'être) : sans elle,
+ * `rawCertCache` accumulait indéfiniment une entrée par hôte visité dans
+ * CHAQUE fenêtre privée jamais ouverte durant la vie du process, sans qu'un
+ * seul octet n'en soit jamais repris — un onglet Certificat n'étant, par
+ * définition, plus jamais consultable une fois la fenêtre privée fermée. */
+export function releaseCertificateObserver(partition: string): void {
+  observed.delete(partition)
+  const prefix = `${partition}|`
+  for (const key of rawCertCache.keys()) {
+    if (key.startsWith(prefix)) rawCertCache.delete(key)
+  }
+}
+
 /** SHA-256 de la clé publique (technique SPKI — même méthode que Chrome :
  * `openssl x509 -pubkey | openssl pkey -pubin -outform der | openssl dgst -sha256`). */
 function publicKeyFingerprint(x509: X509Certificate): string {

@@ -353,3 +353,26 @@ export function ensurePartitionHardened(partition: string, profileId: ProfileId)
 
   return webSession
 }
+
+/** Contrepartie de `ensurePartitionHardened`, pour une partition de
+ * navigation PRIVÉE dont le dernier profil/fenêtre vient de disparaître
+ * (`ipc.ts` : `switchToProfile`, fermeture de la fenêtre secondaire).
+ *
+ * Sans elle, `hardened` ne s'est JAMAIS vidé de toute sa vie : chaque
+ * fenêtre privée reçoit une partition en mémoire portant un `randomUUID()`
+ * neuf (`webPartitionForProfile`), jamais réutilisée — donc jamais
+ * re-durcie non plus, ce qui masquait le problème. Ouvrir puis fermer un
+ * grand nombre de fenêtres privées au fil d'une session longue accumulait
+ * silencieusement autant de `Session` Electron orpheline en mémoire
+ * (cookies, cache, workers…) que de fenêtres ouvertes, jamais libérées
+ * avant la fermeture de l'appli — contraire à l'attente d'une navigation
+ * privée censée ne RIEN laisser derrière elle une fois fermée. Electron
+ * n'expose aucune API pour détruire un `Session` en mémoire ; vider son
+ * contenu et retirer l'entrée de `hardened` est le maximum possible. */
+export function releasePrivatePartition(partition: string): void {
+  hardened.delete(partition)
+  void session
+    .fromPartition(partition)
+    .clearStorageData()
+    .catch(() => undefined)
+}

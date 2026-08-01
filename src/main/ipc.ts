@@ -52,7 +52,7 @@ import { classifyIntent } from './ai/intent'
 import type { AiRouter } from './ai/router'
 import { avatarImageDataUrl, chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
 import { getDefaultBrowserState, promptSetDefaultBrowser } from './defaultBrowser'
-import { getCertificateDetail } from './certificates'
+import { getCertificateDetail, releaseCertificateObserver } from './certificates'
 import { getNewTabNews, getNewTabWeather, getSearchSuggestions, searchNewTabCities } from './newtab'
 import { invalidateSiteDataCache, listSiteDataGroups, registrableDomain, siteDataGroupFor } from './siteDataRegistry'
 import {
@@ -126,7 +126,13 @@ import {
 } from './settings'
 import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
 import { ViewManager } from './viewManager'
-import { applyProxy, applySpellcheckLanguages, liveDownloads, webPartitionForProfile } from './webSession'
+import {
+  applyProxy,
+  applySpellcheckLanguages,
+  liveDownloads,
+  releasePrivatePartition,
+  webPartitionForProfile
+} from './webSession'
 import { allWindowContexts, registerWindowContext, resolveWindowContext, windowContextsForProfile } from './windowRegistry'
 
 /** Palette de teintes attribuées aux espaces et profils, en rotation. */
@@ -311,6 +317,17 @@ function applyStartupTabsCleanup(views: ViewManager, profileId: ProfileId): void
   setFocusState(activeSpaceId, { slots: [row.id], orientation: 'h', ratio: 0.5, activeSlot: 0 })
 }
 
+/** Libère la session Electron d'un profil privé qui vient d'être supprimé
+ * (plus aucune fenêtre dessus) — voir `releasePrivatePartition`/
+ * `releaseCertificateObserver` pour la raison d'être : sans cet appel, la
+ * session en mémoire de cette partition (et le cache de certificats associé)
+ * restait indéfiniment vivante jusqu'à la fermeture de l'appli. */
+function releasePrivateSession(profileId: ProfileId): void {
+  const partition = webPartitionForProfile(profileId, true)
+  releasePrivatePartition(partition)
+  releaseCertificateObserver(partition)
+}
+
 /** Bascule CETTE fenêtre vers un profil : ferme ses vues, change de
  * partition, recharge ses extensions. */
 async function switchToProfile(views: ViewManager, id: ProfileId): Promise<Workspace> {
@@ -331,7 +348,10 @@ async function switchToProfile(views: ViewManager, id: ProfileId): Promise<Works
   if (outgoingId && outgoingId !== id) {
     const outgoing = profilesRepo.get(outgoingId)
     const stillInUse = windowContextsForProfile(outgoingId).some((ctx) => ctx.views !== views)
-    if (outgoing?.isPrivate && !stillInUse) profilesRepo.remove(outgoingId)
+    if (outgoing?.isPrivate && !stillInUse) {
+      profilesRepo.remove(outgoingId)
+      releasePrivateSession(outgoingId)
+    }
   }
   return workspace
 }
@@ -506,6 +526,7 @@ function createSecondaryContentWindow(
     // filet que `switchToProfile`/`profileRemove` ci-dessous).
     if (isPrivate && windowContextsForProfile(profileId).length === 0) {
       profilesRepo.remove(profileId)
+      releasePrivateSession(profileId)
       broadcastProfiles()
     }
   })

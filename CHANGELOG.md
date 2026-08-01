@@ -4,6 +4,20 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.81.0] — 2026-08-01
+
+### Corrigé
+
+- **Chaque fenêtre de navigation privée ouverte puis fermée laissait sa session (cookies, cache,
+  autorisations, certificats observés) vivre indéfiniment en mémoire jusqu'à la fermeture complète
+  de l'appli.** Cause : chaque fenêtre privée reçoit une partition en mémoire à usage unique, jamais
+  réutilisée — rien ne la libérait donc jamais quand son profil disparaissait (fermeture de la
+  fenêtre, ou changement de profil dans la même fenêtre). Une session longue avec de nombreuses
+  fenêtres privées ouvertes au fil du temps accumulait ainsi silencieusement autant de sessions
+  orphelines que de fenêtres — contraire à l'attente d'une navigation privée censée ne rien laisser
+  derrière elle une fois fermée. La partition et le cache de certificats associés sont désormais
+  explicitement vidés dès que le dernier usage d'un profil privé se termine.
+
 ## [0.80.2] — 2026-08-01
 
 ### Corrigé
