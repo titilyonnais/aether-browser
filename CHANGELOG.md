@@ -4,6 +4,17 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.80.2] — 2026-08-01
+
+### Corrigé
+
+- **`reg.exe` était invoqué par son simple nom, résolu par recherche dans le PATH** (répertoire
+  courant compris) plutôt que par son chemin absolu — durcissement en défense en profondeur contre
+  un binaire malveillant placé plus tôt dans un dossier du PATH accessible en écriture. Sans
+  élévation de privilège possible dans ce cas précis, mais corrigé par prudence : les deux appels
+  (candidature navigateur par défaut, lecture du choix de l'utilisateur) ciblent désormais
+  explicitement `%SystemRoot%\System32\reg.exe`.
+
 ## [0.80.1] — 2026-08-01
 
 ### Corrigé

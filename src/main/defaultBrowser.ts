@@ -35,6 +35,20 @@ import { execFileSync } from 'node:child_process'
 import { unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+/** Chemin ABSOLU de `reg.exe` — jamais son simple nom. `execFileSync('reg', …)`
+ * le fait résoudre par recherche dans le PATH (répertoire courant puis
+ * variable d'environnement) : un `reg.exe`/`reg.cmd` malveillant placé plus
+ * tôt dans un dossier du PATH accessible en écriture à l'utilisateur (dossier
+ * courant compris, en tête de résolution sur Windows) s'exécuterait alors à
+ * la place du vrai binaire système. Sans élévation de privilège possible
+ * (le process tourne déjà avec les droits de l'utilisateur), mais un simple
+ * durcissement en défense en profondeur pour éviter toute exécution
+ * détournée. `SystemRoot` est toujours défini par Windows lui-même ; `windir`
+ * en filet de secours (alias historique équivalent). */
+function regExePath(): string {
+  return join(process.env.SystemRoot ?? process.env.windir ?? 'C:\\Windows', 'System32', 'reg.exe')
+}
+
 /** Nom de la clé `StartMenuInternet` ET de l'entrée `RegisteredApplications`. */
 const CLIENT_NAME = 'Aether'
 /** ProgId associé à http/https et à tous les types de fichiers ci-dessous. */
@@ -118,7 +132,7 @@ export function registerAsDefaultBrowserCandidate(): void {
     // la boîte de dialogue de confirmation que déclenche un double-clic sur
     // un .reg via l'interface de `regedit.exe` — les deux sont des binaires
     // distincts. `windowsHide` évite en plus le flash de fenêtre console.
-    execFileSync('reg', ['import', tmpFile], { windowsHide: true, stdio: 'ignore' })
+    execFileSync(regExePath(), ['import', tmpFile], { windowsHide: true, stdio: 'ignore' })
   } catch {
     // Écriture registre refusée (permissions, antivirus…) — sans conséquence
     // bloquante : la bannière proposera simplement de réessayer plus tard,
@@ -143,7 +157,7 @@ export function registerAsDefaultBrowserCandidate(): void {
 function queryUserChoiceProgId(protocol: 'http' | 'https'): string | null {
   try {
     const output = execFileSync(
-      'reg',
+      regExePath(),
       [
         'query',
         `HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\${protocol}\\UserChoice`,

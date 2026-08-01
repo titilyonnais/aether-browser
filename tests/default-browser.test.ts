@@ -104,8 +104,11 @@ describe('registerAsDefaultBrowserCandidate — structure registre réelle', () 
     // commandes d'ouverture.
     expect(script).toContain('C:\\\\Program Files\\\\Aether\\\\Aether.exe')
 
+    // Chemin ABSOLU, jamais le simple nom `'reg'` (résolu via une recherche
+    // dans le PATH — détournable par un binaire malveillant placé plus tôt
+    // dans un dossier du PATH accessible en écriture à l'utilisateur).
     expect(childProcessMock.execFileSync).toHaveBeenCalledWith(
-      'reg',
+      expect.stringMatching(/[\\/]System32[\\/]reg\.exe$/i),
       ['import', tmpPath],
       expect.objectContaining({ windowsHide: true })
     )
