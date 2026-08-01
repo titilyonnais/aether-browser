@@ -4,6 +4,25 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.77.1] — 2026-08-01
+
+### Corrigé
+
+- **L'animation du menu principal (les 3 petits points) était redevenue saccadée.** Cause : la
+  capture d'écran source du flou (ajoutée en 0.76.1) s'exécutait à CHAQUE redimensionnement,
+  y compris l'appel immédiat volontaire de chaque rafale (ouvrir/fermer un sous-menu enchaîne
+  plusieurs redimensionnements par seconde) — une vraie prise d'écran a un coût GPU réel, assez
+  pour saccader une animation qui en déclenche autant. La capture a son propre anti-rebond
+  maintenant, découplé de celui des bornes : elle n'attrape que l'état final, une fois la rafale
+  calmée, jamais pendant.
+- **Le retournement du menu contextuel ne se déclenchait pas toujours** — un clic dont
+  l'ESTIMATION initiale (avant mesure réelle) semblait tenir à l'écran, mais dont le menu
+  RÉELLEMENT mesuré dépassait finalement (liste plus longue que prévu), gardait la décision prise
+  sur cette estimation : le menu débordait bel et bien, puis se faisait recaler en bloc contre le
+  bord de l'écran, déconnecté du clic. Le retournement se recalcule désormais sur la taille
+  RÉELLE à chaque mesure, pas seulement sur l'estimation de départ. Vérifié par test : un clic où
+  l'estimation dit « pas de place » mais la vraie taille, plus petite, tient très bien.
+
 ## [0.77.0] — 2026-08-01
 
 ### Corrigé

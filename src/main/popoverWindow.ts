@@ -81,6 +81,32 @@ interface PopoverState {
    * premier clamp (taille initiale devinée trop grande) ne se déferait
    * jamais une fois la vraie taille, plus petite, mesurée. */
   pinnedAnchor: PopoverAnchor
+  /** Point de clic BRUT (coordonnées écran), pour le menu contextuel
+   * SEULEMENT (`null` sinon) — son retournement (`pinnedAnchorFor`) dépend de
+   * la TAILLE, connue seulement par estimation à l'ouverture (`showContextMenuPopover`,
+   * `CONTEXT_MENU_WIDTH`/`HEIGHT`). Un menu réellement plus grand que
+   * l'estimation (liste longue, libellé large — plus aucune troncature
+   * depuis la 0.76.0) avait décidé « ça tient en dessous » à tort, gardait ce
+   * choix figé (comme `pinnedAnchor` pour tout le reste), débordait bel et
+   * bien une fois sa vraie taille appliquée, et se faisait recaler en bloc
+   * par `sanitizeToDisplay` — la bulle « aimantée » au bord de l'écran,
+   * signalé par capture utilisateur. `resizePopoverWindow` RECALCULE donc le
+   * retournement à chaque mesure réelle quand ce champ est renseigné, plutôt
+   * que de se fier à une décision figée prise sur une estimation. */
+  dynamicAnchorPoint: { x: number; y: number } | null
+  /** Anti-rebond DÉDIÉ à la capture d'arrière-plan (voir `captureAndSendBackdrop`),
+   * DÉCOUPLÉ de `boundsDebounceTimer` : cette capture est une vraie prise
+   * d'écran (coût GPU réel, pas gratuit), alors que `boundsDebounceTimer`
+   * laisse volontairement passer un appel IMMÉDIAT par rafale pour que la
+   * fenêtre suive le contenu sans latence perçue (voir son commentaire).
+   * Sans ce découplage, CETTE capture s'exécutait aussi à CHAQUE appel
+   * immédiat — plusieurs par seconde pendant l'animation d'un sous-menu
+   * (menu principal) — assez pour la faire saccader, signalé par capture
+   * utilisateur : seul ce menu enchaîne autant de redimensionnements en
+   * rafale. Le flou n'a de toute façon pas besoin d'être temps réel — une
+   * capture qui n'attrape que l'état FINAL, une fois la rafale calmée, ne se
+   * remarque pas. */
+  captureDebounceTimer: ReturnType<typeof setTimeout> | null
 }
 
 const states = new Map<number, PopoverState>()
@@ -95,7 +121,9 @@ function stateFor(owner: BW): PopoverState {
       fallbackShowTimer: null,
       boundsDebounceTimer: null,
       contextMenuActions: {},
-      pinnedAnchor: topLeftAnchor({ x: 0, y: 0 })
+      pinnedAnchor: topLeftAnchor({ x: 0, y: 0 }),
+      dynamicAnchorPoint: null,
+      captureDebounceTimer: null
     }
     states.set(owner.id, s)
     owner.on('closed', () => states.delete(owner.id))
@@ -115,6 +143,23 @@ function clearBoundsDebounce(s: PopoverState): void {
     clearTimeout(s.boundsDebounceTimer)
     s.boundsDebounceTimer = null
   }
+}
+
+function clearCaptureDebounce(s: PopoverState): void {
+  if (s.captureDebounceTimer) {
+    clearTimeout(s.captureDebounceTimer)
+    s.captureDebounceTimer = null
+  }
+}
+
+/** N'exécute la capture (coûteuse, GPU) qu'une fois les redimensionnements en
+ * rafale calmés — voir le commentaire de `captureDebounceTimer`. */
+function scheduleBackdropCapture(owner: BW, popup: BW, bounds: Rectangle, s: PopoverState): void {
+  clearCaptureDebounce(s)
+  s.captureDebounceTimer = setTimeout(() => {
+    s.captureDebounceTimer = null
+    void captureAndSendBackdrop(owner, popup, bounds, CH.popoverSetBackdrop)
+  }, 120)
 }
 
 function createPopup(parent: BW, s: PopoverState): BW {
@@ -178,10 +223,20 @@ function ensurePopup(parent: BW): { win: BW; s: PopoverState } {
 
 /** Ouvre (ou déplace) le popup aux bornes écran données et lui pousse son
  * contenu. `anchor` (coin + point écran fixe) est mémorisé pour que
- * `resizePopoverWindow` puisse grandir/rétrécir sans jamais déplacer ce coin. */
-export function openPopover(parent: BW, bounds: Rectangle, content: PopoverContent, anchor: PopoverAnchor): void {
+ * `resizePopoverWindow` puisse grandir/rétrécir sans jamais déplacer ce coin.
+ * `dynamicAnchorPoint` (menu contextuel seulement, voir son commentaire dans
+ * `PopoverState`) fait recalculer ce retournement à CHAQUE mesure réelle
+ * plutôt que de figer la décision prise sur une estimation. */
+export function openPopover(
+  parent: BW,
+  bounds: Rectangle,
+  content: PopoverContent,
+  anchor: PopoverAnchor,
+  dynamicAnchorPoint: { x: number; y: number } | null = null
+): void {
   const { win, s } = ensurePopup(parent)
   s.pinnedAnchor = anchor
+  s.dynamicAnchorPoint = dynamicAnchorPoint
   win.setBounds(sanitizeToDisplay(bounds))
 
   const push = (): void => {
@@ -305,7 +360,10 @@ export function showContextMenuPopover(
   const point = { x: winBounds.x + anchor.x, y: winBounds.y + anchor.y + 2 }
   const estimate = { width: CONTEXT_MENU_WIDTH, height: CONTEXT_MENU_DEFAULT_HEIGHT }
   const pinnedAnchor = pinnedAnchorFor(point, estimate)
-  openPopover(win, boundsForAnchor(pinnedAnchor, estimate), { kind: 'context-menu', rows, title }, pinnedAnchor)
+  // `point` transmis comme ancrage DYNAMIQUE : `resizePopoverWindow`
+  // recalculera ce retournement une fois la vraie taille du menu connue,
+  // cette estimation pouvant se tromper (liste plus longue que prévu…).
+  openPopover(win, boundsForAnchor(pinnedAnchor, estimate), { kind: 'context-menu', rows, title }, pinnedAnchor, point)
 }
 
 /** Exécute l'action de la ligne `id` du menu contextuel actuellement ouvert
@@ -329,6 +387,7 @@ export function hidePopoverWindow(owner?: BW): void {
     s.pendingShow = false
     clearFallbackShow(s)
     clearBoundsDebounce(s)
+    clearCaptureDebounce(s)
     if (s.popup && !s.popup.isDestroyed()) fadeWindowOut(s.popup)
     return
   }
@@ -339,6 +398,7 @@ export function hidePopoverWindow(owner?: BW): void {
     s.pendingShow = false
     clearFallbackShow(s)
     clearBoundsDebounce(s)
+    clearCaptureDebounce(s)
     if (s.popup && !s.popup.isDestroyed()) fadeWindowOut(s.popup)
   }
 }
@@ -396,6 +456,13 @@ export function resizePopoverWindow(sourceWc: WebContents, width: number, height
     // OPPOSÉ au coin ancré, où il n'a jamais été visible de toute façon.
     const realW = Math.max(1, w - POPOVER_SAFETY_PX)
     const realH = Math.max(1, h - POPOVER_SAFETY_PX)
+    // Menu contextuel SEULEMENT (`dynamicAnchorPoint` non nul) : RECALCULE le
+    // retournement sur la taille RÉELLE plutôt que de se fier à la décision
+    // figée à l'ouverture (prise sur une estimation) — voir le commentaire de
+    // `dynamicAnchorPoint` (PopoverState) pour le bug que ça corrige.
+    if (s.dynamicAnchorPoint) {
+      s.pinnedAnchor = pinnedAnchorFor(s.dynamicAnchorPoint, { width: realW, height: realH })
+    }
     // Coin fixe (`pinnedAnchor`) : recalcule toujours `x`/`y` depuis LUI
     // plutôt que depuis `current` — sans ça, un flyout qui élargit/agrandit
     // le popup pousserait son bord ancré hors écran, et `sanitizeToDisplay`
@@ -407,12 +474,14 @@ export function resizePopoverWindow(sourceWc: WebContents, width: number, height
     const next = sanitizeToDisplay({ x, y, width: w, height: h })
     // Capture de ce qu'il y a réellement derrière le popup à SA position/
     // taille FINALE — source du flou en CSS de chaque carte (voir
-    // popoverBackdrop.ts). Toujours tentée ici, même quand les bornes ne
-    // changent pas concrètement (branche ci-dessous) : le CONTENU peut avoir
-    // changé à taille égale (ex. menu contextuel rouvert ailleurs). Jamais
-    // attendue avant de révéler le popup (fire-and-forget) — la carte reste
-    // opaque, sans flou, tant que cette capture n'est pas arrivée.
-    void captureAndSendBackdrop(owner, popup, next, CH.popoverSetBackdrop)
+    // popoverBackdrop.ts). Anti-rebond DÉDIÉ (voir `captureDebounceTimer`) :
+    // n'attrape que l'état une fois la rafale de redimensionnements calmée,
+    // jamais à chaque appel immédiat de cette fonction (coût GPU réel, sans
+    // quoi une animation qui enchaîne les reflows — sous-menu du menu
+    // principal — saccadait, signalé par capture utilisateur). Jamais
+    // attendue avant de révéler le popup — la carte reste opaque, sans flou,
+    // tant que cette capture n'est pas arrivée.
+    scheduleBackdropCapture(owner, popup, next, s)
     // Le ResizeObserver du renderer (PopoverRoot.tsx) se redéclenche à CHAQUE
     // reflow (ex. ouvrir/fermer un sous-menu change `opacity`/`inert`, ce qui
     // recalcule le layout même quand les dimensions FINALES ne bougent pas
