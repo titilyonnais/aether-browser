@@ -291,6 +291,11 @@ export const CH = {
   settingsClearData: 'settings:clear-data',
   settingsChooseDownloadDir: 'settings:choose-download-dir',
   settingsReset: 'settings:reset',
+  /** Diffusé aux fenêtres popup/invite de permission (contexte JS séparé, pas
+   * de store partagé) après CHAQUE `settings:set`/`settings:reset` — sans ce
+   * signal, un changement de thème n'y était répercuté qu'au prochain
+   * lancement de l'appli (`applyTheme` n'y tournait qu'une fois, au montage). */
+  settingsChanged: 'settings:changed',
   previewsCleanup: 'previews:cleanup',
   performanceStats: 'performance:stats',
 
@@ -360,6 +365,15 @@ export const CH = {
   /** Capture de ce qu'il y a réellement derrière la fenêtre — voir PopoverBackdrop. */
   popoverSetBackdrop: 'popover:set-backdrop',
   popoverClosed: 'popover:closed',
+  /** Depuis le popup lui-même : rend la fenêtre transparente aux clics (et les
+   * transmet à ce qu'il y a en dessous) tant que le curseur n'est pas sur une
+   * carte visible — voir PopoverRoot.tsx et le commentaire de `createPopup`
+   * (popoverWindow.ts). Sans ça, la fenêtre — plus grande que la carte
+   * visible et non focusable, donc jamais activée par un clic — captait quand
+   * même TOUT clic (y compris un clic droit) tombant dans ses bornes,
+   * empêchant la page en dessous de jamais recevoir ce second clic droit :
+   * la bulle se refermait sans que la nouvelle ne s'ouvre. */
+  popoverSetIgnoreMouseEvents: 'popover:set-ignore-mouse-events',
   /** Depuis la bulle de menu contextuel générique (ContextMenuPopoverCard) :
    * exécute l'action associée à cet id de ligne (voir showContextMenuPopover
    * dans popoverWindow.ts, qui garde la vraie callback côté main). */
@@ -718,6 +732,10 @@ export interface AetherApi {
     chooseDownloadDir(): Promise<string | null>
     /** Réinitialise toutes les préférences (garde clés API & mémoire). */
     reset(): Promise<AppSettings>
+    /** Écouté par les fenêtres popup/invite de permission (contexte JS séparé,
+     * sans store partagé) pour réappliquer le thème sans attendre un
+     * redémarrage — voir `CH.settingsChanged`. */
+    onChanged(cb: (settings: AppSettings) => void): Unsubscribe
   }
   previews: {
     /** Supprime les aperçus orphelins + évince les plus anciens si les
@@ -821,6 +839,9 @@ export interface AetherApi {
     runContextMenuAction(id: string): void
     /** Depuis la bulle de confirmation d'installation (Chrome Web Store). */
     confirmWebstoreInstall(confirmed: boolean): void
+    /** Rend le popup transparent aux clics (les transmet à ce qu'il y a en
+     * dessous) tant que `false` — voir `CH.popoverSetIgnoreMouseEvents`. */
+    setIgnoreMouseEvents(ignore: boolean): void
   }
   /** Invite de permission (caméra/micro, localisation, notifications) — fenêtre
    * native séparée, voir permissionPromptWindow.ts/PermissionPromptRoot.tsx. */

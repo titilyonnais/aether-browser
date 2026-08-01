@@ -68,6 +68,18 @@ export default function PermissionPromptRoot() {
     })
   }, [])
 
+  // Cette fenêtre n'est jamais remontée entre deux invites — sans cet
+  // abonnement, un changement de thème restait invisible ici jusqu'au
+  // prochain lancement de l'appli, même raison que PopoverRoot.tsx.
+  useEffect(
+    () =>
+      window.aether.settings.onChanged((s) => {
+        applyTheme(document.documentElement, s.newTabBackground, s.accent, s.accentCustom)
+        document.documentElement.style.setProperty('zoom', String(s.uiScale))
+      }),
+    []
+  )
+
   useEffect(() => {
     const el = rootRef.current
     if (!el) return

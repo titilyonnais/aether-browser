@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { POPOVER_SAFETY_PX } from '@shared/popoverGeometry'
-import type { PopoverBackdrop, PopoverContent } from '@shared/types'
+import type { AppSettings, PopoverBackdrop, PopoverContent } from '@shared/types'
 import { AppMenuPopoverCard } from '@/components/chrome/AppMenuPopoverCard'
 import { ContextMenuPopoverCard } from '@/components/chrome/ContextMenuPopoverCard'
 import { ExtensionsMenuPopoverCard } from '@/components/chrome/ExtensionsMenuPopoverCard'
@@ -18,6 +18,21 @@ import { TabPreviewCard } from '@/components/focus/TabPreviewCard'
 import { TranslatePopoverCard } from '@/components/focus/TranslatePopoverCard'
 import { applyTheme } from '@/lib/theme'
 import { PopoverSurfaceBlur } from './PopoverSurfaceBlur'
+
+/** Réapplique les quelques réglages dont ce contexte JS séparé a besoin —
+ * appelé au montage ET à chaque `CH.settingsChanged` (voir plus bas) : sans
+ * ce second appel, changer de thème dans Réglages ne se répercutait ici
+ * qu'au prochain lancement de l'appli (cette fenêtre popup n'est jamais
+ * détruite entre deux usages, donc jamais re-montée pour relire les réglages
+ * d'elle-même). */
+function applySettingsToDocument(s: AppSettings): void {
+  applyTheme(document.documentElement, s.newTabBackground, s.accent, s.accentCustom)
+  // Même échelle que la fenêtre principale (Réglages › Apparence), sinon le
+  // contenu du popup resterait à 100 % pendant que le reste de l'interface
+  // est agrandi/réduit — `reportSize` mesure déjà la taille post-zoom, donc
+  // la fenêtre popup s'ajuste automatiquement.
+  document.documentElement.style.setProperty('zoom', String(s.uiScale))
+}
 
 export default function PopoverRoot() {
   const [content, setContent] = useState<PopoverContent>(null)
@@ -57,18 +72,23 @@ export default function PopoverRoot() {
   useEffect(() => {
     void window.aether.settings.get().then((s) => {
       setShowPreview(s.showTabHoverPreview)
-      // Pas de store partagé avec la fenêtre principale (contexte JS séparé,
-      // donc `:root` distinct) : le thème doit être réappliqué ICI, sinon les
-      // menus contextuels resteraient sur la teinte par défaut alors que le
-      // reste de l'interface a changé de thème.
-      applyTheme(document.documentElement, s.newTabBackground, s.accent, s.accentCustom)
-      // Même échelle que la fenêtre principale (Réglages › Apparence), sinon
-      // le contenu du popup resterait à 100 % pendant que le reste de
-      // l'interface est agrandi/réduit — `reportSize` (plus bas) mesure déjà
-      // la taille post-zoom, donc la fenêtre popup s'ajuste automatiquement.
-      document.documentElement.style.setProperty('zoom', String(s.uiScale))
+      applySettingsToDocument(s)
     })
   }, [])
+
+  // Cette fenêtre n'est JAMAIS remontée entre deux popovers (juste masquée,
+  // voir `ensurePopup`/`hidePopoverWindow`) — sans cet abonnement, un
+  // changement de thème fait ailleurs (Réglages, fenêtre principale) restait
+  // invisible ici jusqu'au prochain lancement de l'appli, signalé par
+  // capture utilisateur pour le menu contextuel et « certaines autres » bulles.
+  useEffect(
+    () =>
+      window.aether.settings.onChanged((s) => {
+        setShowPreview(s.showTabHoverPreview)
+        applySettingsToDocument(s)
+      }),
+    []
+  )
 
   // Cette fenêtre popup est délibérément un peu plus GRANDE que la carte
   // visible : marge anti-rognage (`SAFETY_PX` plus bas) et, pour le menu
@@ -131,7 +151,27 @@ export default function PopoverRoot() {
     const ro = new ResizeObserver(report)
     ro.observe(el)
     report()
-    return () => ro.disconnect()
+
+    // Rend la fenêtre transparente aux clics (les transmet à la page en
+    // dessous) tant que le curseur n'est pas sur cette carte — voir
+    // `CH.popoverSetIgnoreMouseEvents`. Repart TOUJOURS non-transparente à
+    // l'ouverture (`openPopover`, popoverWindow.ts) : le curseur est presque
+    // toujours DÉJÀ sur la carte au moment où elle apparaît (menu contextuel
+    // ancré au clic, menu ancré au bouton survolé) — un `mouseenter` ne s'y
+    // déclencherait jamais puisque rien n'« entre », le curseur y étant déjà.
+    // Ce n'est qu'au `mouseleave` (curseur qui s'en va vraiment, évènement
+    // fiable) que le clic-à-travers s'active ; `mouseenter` le désactive à
+    // nouveau si le curseur revient dessus.
+    const onMouseLeave = (): void => window.aether.popover.setIgnoreMouseEvents(true)
+    const onMouseEnter = (): void => window.aether.popover.setIgnoreMouseEvents(false)
+    el.addEventListener('mouseleave', onMouseLeave)
+    el.addEventListener('mouseenter', onMouseEnter)
+
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('mouseleave', onMouseLeave)
+      el.removeEventListener('mouseenter', onMouseEnter)
+    }
   }, [content])
 
   if (!content) return null

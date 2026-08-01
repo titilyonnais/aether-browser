@@ -234,7 +234,8 @@ const api: AetherApi = {
     clearBrowsingData: (kinds: BrowsingDataKind[], range: ClearDataRange) =>
       ipcRenderer.invoke(CH.settingsClearData, kinds, range),
     chooseDownloadDir: () => ipcRenderer.invoke(CH.settingsChooseDownloadDir),
-    reset: () => ipcRenderer.invoke(CH.settingsReset)
+    reset: () => ipcRenderer.invoke(CH.settingsReset),
+    onChanged: (cb) => on(CH.settingsChanged, cb)
   },
   previews: {
     cleanup: () => ipcRenderer.invoke(CH.previewsCleanup)
@@ -294,7 +295,8 @@ const api: AetherApi = {
     onSetBackdrop: (cb) => on(CH.popoverSetBackdrop, cb),
     onClosed: (cb) => on(CH.popoverClosed, cb),
     runContextMenuAction: (id: string) => ipcRenderer.send(CH.contextMenuAction, id),
-    confirmWebstoreInstall: (confirmed: boolean) => ipcRenderer.send(CH.webstoreInstallConfirm, confirmed)
+    confirmWebstoreInstall: (confirmed: boolean) => ipcRenderer.send(CH.webstoreInstallConfirm, confirmed),
+    setIgnoreMouseEvents: (ignore: boolean) => ipcRenderer.send(CH.popoverSetIgnoreMouseEvents, ignore)
   },
   permissionPrompt: {
     onSetContent: (cb) => on(CH.permissionPromptSetContent, cb),

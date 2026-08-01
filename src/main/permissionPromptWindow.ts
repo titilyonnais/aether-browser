@@ -197,6 +197,18 @@ function cancelRequest(owner: BW, requestId: string): void {
   if (idx === 0) showNext(owner, s)
 }
 
+/** Relaie un évènement à TOUTES les invites de permission actuellement
+ * ouvertes (une par fenêtre propriétaire) — même patron que
+ * `broadcastToPopover` (popoverWindow.ts). Utilisé pour `CH.settingsChanged` :
+ * cette fenêtre a son propre contexte JS (pas de store partagé avec la
+ * fenêtre principale), un changement de thème n'y était sinon répercuté
+ * qu'au prochain lancement de l'appli. */
+export function broadcastToPermissionPrompt(channel: string, ...args: unknown[]): void {
+  for (const s of states.values()) {
+    if (s.popup && !s.popup.isDestroyed()) s.popup.webContents.send(channel, ...args)
+  }
+}
+
 /** Point d'entrée appelé par `webSession.ts` — ne JAMAIS résoudre autrement
  * qu'en appelant cette promesse à `true`/`false` : c'est ce qui débloque le
  * `callback` Electron d'origine, en attente côté Chromium. */

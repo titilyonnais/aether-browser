@@ -238,6 +238,13 @@ export function openPopover(
   s.pinnedAnchor = anchor
   s.dynamicAnchorPoint = dynamicAnchorPoint
   win.setBounds(sanitizeToDisplay(bounds))
+  // Repart TOUJOURS cliquable — cette fenêtre est RÉUTILISÉE d'un popover à
+  // l'autre (jamais détruite entre deux usages, voir `ensurePopup`) : sans
+  // cette remise à zéro, un précédent passage en clic-transparent (curseur
+  // sorti de la carte avant fermeture, voir `setPopoverIgnoreMouseEvents`)
+  // laisserait le TOUT PROCHAIN contenu injoignable tant que le curseur n'a
+  // pas quitté puis retrouvé la fenêtre.
+  win.setIgnoreMouseEvents(false)
 
   const push = (): void => {
     if (!win.isDestroyed()) win.webContents.send(CH.popoverSetContent, content)
@@ -298,6 +305,24 @@ export function isPopoverWebContents(wc: WebContents): boolean {
     if (s.popup && !s.popup.isDestroyed() && s.popup.webContents === wc) return true
   }
   return false
+}
+
+/**
+ * Rend LE POPUP (celui de `sourceWc`, son propre webContents — cet appel
+ * vient toujours du popup lui-même) transparent aux clics tant que `ignore`
+ * est vrai, en les transmettant à ce qu'il y a en dessous (`forward: true`) —
+ * voir PopoverRoot.tsx (bascule au survol de la carte) et le commentaire de
+ * `CH.popoverSetIgnoreMouseEvents` pour le bug que ça corrige : sans ça,
+ * cette fenêtre (plus grande que la carte visible, non focusable — donc
+ * jamais « activée » par un clic) captait quand même TOUT clic tombant dans
+ * ses bornes, y compris un second clic droit destiné à la page en dessous,
+ * qui ne recevait alors jamais son propre évènement `context-menu` — la
+ * bulle actuelle se refermait (clic hors carte) sans qu'aucune nouvelle
+ * bulle ne s'ouvre à la place.
+ */
+export function setPopoverIgnoreMouseEvents(sourceWc: WebContents, ignore: boolean): void {
+  const popup = BrowserWindow.fromWebContents(sourceWc)
+  if (popup && !popup.isDestroyed()) popup.setIgnoreMouseEvents(ignore, { forward: true })
 }
 
 // Estimation avant mesure réelle (voir POPOVER_DEFAULT_HEIGHT/WIDTH, ipc.ts,

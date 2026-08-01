@@ -71,49 +71,50 @@ describe('pinnedAnchorFor — retournement du menu contextuel', () => {
   })
 })
 
-describe('resizePopoverWindow — intégration', () => {
-  // Fenêtres minimales imitant l'API BrowserWindow réellement utilisée par
-  // popoverWindow.ts — juste assez pour exercer `openPopover`/`resizePopoverWindow`
-  // de bout en bout sans dépendre d'Electron.
-  function makeFakeWindow(overrides: Partial<Record<string, unknown>> = {}) {
-    const closedHandlers: Array<() => void> = []
-    const win = {
-      id: Math.floor(Math.random() * 1_000_000),
-      bounds: { x: 0, y: 0, width: 0, height: 0 },
-      destroyed: false,
-      visible: false,
-      webContents: {
-        send: vi.fn(),
-        once: (event: string, cb: () => void) => {
-          if (event === 'did-finish-load') cb()
-        }
-      },
-      getBounds() {
-        return this.bounds
-      },
-      setBounds(b: { x: number; y: number; width: number; height: number }) {
-        this.bounds = b
-        this.visible = true
-      },
-      getContentBounds() {
-        return { x: 0, y: 0, width: 1920, height: 1080 }
-      },
-      isDestroyed() {
-        return this.destroyed
-      },
-      isVisible() {
-        return this.visible
-      },
-      loadURL: vi.fn(),
-      loadFile: vi.fn(),
-      on(event: string, cb: () => void) {
-        if (event === 'closed') closedHandlers.push(cb)
-      },
-      ...overrides
-    }
-    return win
+// Fenêtre minimale imitant l'API BrowserWindow réellement utilisée par
+// popoverWindow.ts — juste assez pour exercer `openPopover`/`resizePopoverWindow`/
+// `setPopoverIgnoreMouseEvents` de bout en bout sans dépendre d'Electron.
+function makeFakeWindow(overrides: Partial<Record<string, unknown>> = {}) {
+  const closedHandlers: Array<() => void> = []
+  const win = {
+    id: Math.floor(Math.random() * 1_000_000),
+    bounds: { x: 0, y: 0, width: 0, height: 0 },
+    destroyed: false,
+    visible: false,
+    webContents: {
+      send: vi.fn(),
+      once: (event: string, cb: () => void) => {
+        if (event === 'did-finish-load') cb()
+      }
+    },
+    getBounds() {
+      return this.bounds
+    },
+    setBounds(b: { x: number; y: number; width: number; height: number }) {
+      this.bounds = b
+      this.visible = true
+    },
+    setIgnoreMouseEvents: vi.fn(),
+    getContentBounds() {
+      return { x: 0, y: 0, width: 1920, height: 1080 }
+    },
+    isDestroyed() {
+      return this.destroyed
+    },
+    isVisible() {
+      return this.visible
+    },
+    loadURL: vi.fn(),
+    loadFile: vi.fn(),
+    on(event: string, cb: () => void) {
+      if (event === 'closed') closedHandlers.push(cb)
+    },
+    ...overrides
   }
+  return win
+}
 
+describe('resizePopoverWindow — intégration', () => {
   it("un menu contextuel plus GRAND que l'estimation initiale se retourne quand même correctement une fois sa vraie taille connue", async () => {
     vi.resetModules()
     const owner = makeFakeWindow()
@@ -172,6 +173,46 @@ describe('resizePopoverWindow — intégration', () => {
     await vi.advanceTimersByTimeAsync(100)
     expect(captureAndSendBackdrop).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
+  })
+
+  it("openPopover repart TOUJOURS cliquable, même si le clic-à-travers était actif à la fermeture précédente", async () => {
+    vi.resetModules()
+    const owner = makeFakeWindow()
+    const popup = makeFakeWindow({ getParentWindow: () => owner })
+    electronMock.BrowserWindow = Object.assign(
+      vi.fn(function FakeBrowserWindow() {
+        return popup
+      }),
+      { fromWebContents: () => popup }
+    ) as never
+    setWorkArea({ x: 0, y: 0, width: 1920, height: 1080 })
+
+    const mod = await import('../src/main/popoverWindow')
+    mod.showContextMenuPopover(owner as never, { x: 100, y: 100, width: 0, height: 0 }, [], {})
+    // Fenêtre RÉUTILISÉE (jamais détruite) : `openPopover` doit annuler tout
+    // clic-à-travers laissé actif par un usage précédent, sans quoi le
+    // TOUT PROCHAIN contenu resterait injoignable au premier survol.
+    expect(popup.setIgnoreMouseEvents).toHaveBeenCalledWith(false)
+  })
+})
+
+describe('setPopoverIgnoreMouseEvents', () => {
+  it('bascule le popup EN COURS (celui du webContents appelant), en transmettant les clics en dessous', async () => {
+    vi.resetModules()
+    const popup = makeFakeWindow()
+    electronMock.BrowserWindow = Object.assign(vi.fn(), { fromWebContents: () => popup }) as never
+
+    const mod = await import('../src/main/popoverWindow')
+    mod.setPopoverIgnoreMouseEvents(popup.webContents as never, true)
+    expect(popup.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true })
+  })
+
+  it("ne fait rien si le webContents ne correspond à aucune fenêtre (déjà détruite)", async () => {
+    vi.resetModules()
+    electronMock.BrowserWindow = Object.assign(vi.fn(), { fromWebContents: () => null }) as never
+
+    const mod = await import('../src/main/popoverWindow')
+    expect(() => mod.setPopoverIgnoreMouseEvents({} as never, true)).not.toThrow()
   })
 })
 

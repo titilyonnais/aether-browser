@@ -4,6 +4,34 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.78.0] — 2026-08-01
+
+### Corrigé
+
+- **Un second clic droit refermait la bulle en cours au lieu d'en ouvrir une nouvelle.** Cause :
+  la fenêtre popup, plus grande que la carte visible et non focusable (donc jamais « activée » par
+  un clic), captait quand même TOUT clic tombant dans ses bornes — y compris un second clic droit
+  destiné à la page en dessous, qui ne recevait alors jamais son propre évènement, et la bulle se
+  refermait simplement (clic hors carte) sans qu'aucune nouvelle ne s'ouvre à sa place. Le popup
+  transmet désormais les clics à ce qu'il y a en dessous dès que le curseur n'est plus sur sa
+  carte, pour qu'un second clic droit ailleurs atteigne réellement la page.
+- **Le fond des bulles clignotait (fond sombre puis clair) à l'ouverture.** La capture qui sert de
+  source au flou arrive toujours un peu après que la carte soit déjà affichée (son fond opaque de
+  repli) — elle remplaçait alors ce fond d'un coup, sans transition, ce qui pouvait sauter aux
+  yeux si la page derrière était nettement plus claire. Le calque flouté apparaît désormais en
+  fondu (160ms) plutôt que d'un coup.
+- **Changer le thème dans Réglages ne se répercutait pas sur le menu contextuel et certaines
+  autres bulles avant de redémarrer l'appli.** Ces fenêtres ont leur propre contexte JS, sans
+  store partagé avec la fenêtre principale — elles ne relisaient les réglages qu'une fois, à leur
+  tout premier affichage, jamais revisité ensuite (une fenêtre popup n'est jamais détruite entre
+  deux usages, donc jamais remontée). Un changement de réglages est désormais diffusé à ces
+  fenêtres, qui réappliquent le thème immédiatement.
+
+### Note
+
+- **Fermer/minimiser l'appli** — ce réglage existe déjà et fonctionne : Réglages › Système ›
+  « Minimiser au lieu de quitter ». Rien à ajouter, juste à l'activer si souhaité.
+
 ## [0.77.1] — 2026-08-01
 
 ### Corrigé

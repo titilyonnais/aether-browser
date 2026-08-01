@@ -92,10 +92,11 @@ import {
   openPopover,
   resizePopoverWindow,
   runContextMenuAction,
+  setPopoverIgnoreMouseEvents,
   showContextMenuPopover,
   topLeftAnchor
 } from './popoverWindow'
-import { resizePermissionPrompt, respondPermissionPrompt } from './permissionPromptWindow'
+import { broadcastToPermissionPrompt, resizePermissionPrompt, respondPermissionPrompt } from './permissionPromptWindow'
 import {
   boundsSchema,
   canvasRectSchema,
@@ -1854,6 +1855,11 @@ export function registerIpc(router: AiRouter): void {
     const next = applySettingsPatch(patch)
     applySideEffects(views, patch, before)
     void router.refreshStatus()
+    // Fenêtres popup/invite de permission : contexte JS séparé, pas de store
+    // partagé avec la fenêtre principale — sans ce signal, un changement de
+    // thème n'y était répercuté qu'au prochain lancement de l'appli.
+    broadcastToPopover(CH.settingsChanged, next)
+    broadcastToPermissionPrompt(CH.settingsChanged, next)
     return next
   })
 
@@ -1883,6 +1889,8 @@ export function registerIpc(router: AiRouter): void {
     applyProxy(webPartitionForProfile(activeProfileOf(views), isPrivate))
     views.applyZoomToAll()
     void router.refreshStatus()
+    broadcastToPopover(CH.settingsChanged, next)
+    broadcastToPermissionPrompt(CH.settingsChanged, next)
     return next
   })
 
@@ -2163,6 +2171,10 @@ export function registerIpc(router: AiRouter): void {
 
   ipcMain.on(CH.popoverResize, (e, size: { width: number; height: number }) => {
     resizePopoverWindow(e.sender, size.width, size.height)
+  })
+
+  ipcMain.on(CH.popoverSetIgnoreMouseEvents, (e, ignore: boolean) => {
+    setPopoverIgnoreMouseEvents(e.sender, Boolean(ignore))
   })
 
   // ─── Invite de permission (fenêtre native séparée) ─────────────────────────

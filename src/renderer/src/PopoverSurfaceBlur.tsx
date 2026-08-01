@@ -21,6 +21,53 @@ import { computePopoverBackdropLayers } from '@/lib/popoverBackdropLayout'
 // `.popover-surface`/`.glass-strong` (global.css) pour rester cohérent.
 const TINT = 'color-mix(in srgb, var(--color-glacier) 9%, rgb(16 16 24 / 0.62))'
 
+/** Un calque, pour une carte précise — composant à part entière (pas juste un
+ * élément retourné par `.map()`) pour pouvoir lui donner son PROPRE cycle de
+ * vie : la capture arrive toujours un peu APRÈS que la carte soit déjà
+ * affichée (son fond opaque de repli, `.popover-surface`, global.css) — sans
+ * fondu, ce calque apparaît alors d'un coup, remplaçant instantanément ce
+ * fond sombre uni par une photo potentiellement bien plus claire : un
+ * clignotement franc, signalé par capture utilisateur. Monté à `opacity: 0`
+ * puis basculé à `1` juste après (un `useEffect`, donc après la peinture du
+ * premier état) pour que la transition CSS ait un point de départ réel à
+ * partir duquel s'animer — sans ce décalage d'une frame, l'élément apparaît
+ * déjà à son opacité finale dès son premier rendu, rien à transitionner. */
+function BlurLayer({
+  target,
+  cardOffset,
+  backdrop
+}: {
+  target: HTMLElement
+  cardOffset: { left: number; top: number }
+  backdrop: PopoverBackdrop
+}) {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  const layers = computePopoverBackdropLayers(cardOffset, backdrop)
+
+  return createPortal(
+    <div
+      aria-hidden
+      className="pointer-events-none absolute -z-10"
+      style={{
+        inset: layers.inset,
+        backgroundImage: `linear-gradient(${TINT}, ${TINT}), url(${backdrop.dataUrl})`,
+        backgroundPosition: layers.backgroundPosition,
+        backgroundSize: layers.backgroundSize,
+        backgroundRepeat: 'no-repeat',
+        filter: 'blur(22px)',
+        opacity: visible ? 1 : 0,
+        transition: 'opacity 160ms ease-out'
+      }}
+    />,
+    target
+  )
+}
+
 export function PopoverSurfaceBlur({
   containerRef,
   backdrop
@@ -60,26 +107,9 @@ export function PopoverSurfaceBlur({
 
   return (
     <>
-      {surfaces.map((el, i) => {
-        const rect = el.getBoundingClientRect()
-        const layers = computePopoverBackdropLayers(rect, backdrop)
-        return createPortal(
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -z-10"
-            style={{
-              inset: layers.inset,
-              backgroundImage: `linear-gradient(${TINT}, ${TINT}), url(${backdrop.dataUrl})`,
-              backgroundPosition: layers.backgroundPosition,
-              backgroundSize: layers.backgroundSize,
-              backgroundRepeat: 'no-repeat',
-              filter: 'blur(22px)'
-            }}
-          />,
-          el,
-          `popover-blur-${i}`
-        )
-      })}
+      {surfaces.map((el, i) => (
+        <BlurLayer key={i} target={el} cardOffset={el.getBoundingClientRect()} backdrop={backdrop} />
+      ))}
     </>
   )
 }
