@@ -4,6 +4,20 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.82.0] — 2026-08-01
+
+### Corrigé
+
+- **Impossible de se connecter à un compte Google (YouTube et ailleurs) : « Ce navigateur ou cette
+  application ne sont peut-être pas sécurisés ».** Cause : toute ouverture de fenêtre par un site
+  (`window.open`) était systématiquement refusée puis rouverte comme un nouvel onglet ÆTHER
+  totalement indépendant — y compris les VRAIS popups (taille fixe demandée explicitement), le motif
+  qu'utilisent la quasi-totalité des connexions OAuth (Google, Microsoft, GitHub…). Cela cassait la
+  relation `window.opener`/`postMessage` dont ces flux dépendent pour renvoyer le jeton de connexion
+  à la page d'origine, un motif que Google détecte et bloque explicitement (il ressemble à un
+  webview embarqué tentant de voler des identifiants). Un vrai popup natif est désormais autorisé
+  dans ce cas précis, sans rien changer pour un lien ouvert normalement dans un nouvel onglet.
+
 ## [0.81.0] — 2026-08-01
 
 ### Corrigé

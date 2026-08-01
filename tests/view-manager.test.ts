@@ -526,3 +526,54 @@ describe('ViewManager — savePage/captureScreenshot ne plantent jamais le proce
     ).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ViewManager — setWindowOpenHandler', () => {
+  // Régression : un VRAI popup (`window.open(url, nom, 'width=...')`,
+  // `disposition === 'new-window'`) était jusqu'ici toujours refusé puis
+  // rouvert comme un nouvel onglet ÆTHER totalement indépendant — cassant la
+  // relation JS `window.opener`/`postMessage` dont dépendent la quasi-
+  // totalité des flux de connexion OAuth (Google en particulier la DÉTECTE
+  // et refuse la connexion : « Ce navigateur ou cette application ne sont
+  // peut-être pas sécurisés »). Un vrai popup natif doit désormais être
+  // autorisé pour ce cas précis, sans rien changer pour un lien normal.
+  type OpenHandler = (details: { url: string; disposition: string }) => {
+    action: string
+    overrideBrowserWindowOptions?: Record<string, unknown>
+  }
+
+  function handlerFor(vm: InstanceType<typeof ViewManager>, id: string): OpenHandler {
+    const wc = contentsOf(vm, id)
+    return (wc.setWindowOpenHandler as unknown as { mock: { calls: [OpenHandler][] } }).mock.calls[0][0]
+  }
+
+  it('autorise un vrai popup (disposition new-window) comme une fenêtre native, pas une carte', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://accounts.example.com/o/oauth2')
+    vm.setVisible(['a'])
+    contentsOf(vm, 'a').__commit('https://accounts.example.com/o/oauth2')
+
+    const result = handlerFor(vm, 'a')({ url: 'https://accounts.google.com/signin', disposition: 'new-window' })
+
+    expect(result.action).toBe('allow')
+    const opts = result.overrideBrowserWindowOptions as { webPreferences?: Record<string, unknown> }
+    expect(opts.webPreferences).toMatchObject({
+      partition: vm.activePartition(),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
+    })
+    expect(delegate.onOpenRequest).not.toHaveBeenCalled()
+  })
+
+  it('continue d’ouvrir un lien normal (target=_blank) comme une carte ÆTHER', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://example.com')
+    vm.setVisible(['a'])
+    contentsOf(vm, 'a').__commit('https://example.com')
+
+    const result = handlerFor(vm, 'a')({ url: 'https://example.com/article', disposition: 'foreground-tab' })
+
+    expect(result.action).toBe('deny')
+    expect(delegate.onOpenRequest).toHaveBeenCalledWith('a', 'https://example.com/article')
+  })
+})

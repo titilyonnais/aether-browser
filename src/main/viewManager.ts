@@ -907,8 +907,9 @@ export class ViewManager {
       })
     })
 
-    // Les ouvertures de fenêtres deviennent des cartes dans l'espace courant.
-    wc.setWindowOpenHandler(({ url }) => {
+    // Les ouvertures de fenêtres deviennent des cartes dans l'espace courant —
+    // SAUF le cas `disposition === 'new-window'` ci-dessous.
+    wc.setWindowOpenHandler(({ url, disposition }) => {
       if (url.startsWith('http://') || url.startsWith('https://')) {
         // Popups : vérifiée EN PREMIER, additive — ne change rien pour les
         // origines autorisées (réglage global par défaut à `true`), bloque
@@ -923,6 +924,40 @@ export class ViewManager {
         }
         if (pageOrigin && siteBlocksPopups(this.activeProfileId, pageOrigin)) {
           return { action: 'deny' }
+        }
+        // `disposition === 'new-window'` : le site a explicitement demandé un
+        // VRAI popup (`window.open(url, nom, 'width=...,height=...')`), le
+        // motif qu'utilisent la quasi-totalité des flux de connexion OAuth
+        // (Google, Microsoft, GitHub…). Refuser ce popup puis rouvrir son URL
+        // comme un nouvel onglet ÆTHER totalement indépendant — ce que faisait
+        // ce handler jusqu'ici, dans TOUS les cas — casse la relation JS
+        // `window.opener`/`postMessage` dont ces flux dépendent pour renvoyer
+        // le jeton à la page d'origine une fois la connexion faite. Google en
+        // particulier DÉTECTE ce motif côté serveur (un « popup » sans opener
+        // ressemble à un webview embarqué tentant de voler des identifiants)
+        // et refuse purement et simplement la connexion (« Ce navigateur ou
+        // cette application ne sont peut-être pas sécurisés ») — exactement
+        // l'erreur observée en pratique en essayant de se connecter à un
+        // compte Google depuis ÆTHER). Laisser Electron créer un vrai popup
+        // natif préserve cette relation, sans rien changer au comportement
+        // existant pour un simple lien `target="_blank"` (`disposition`
+        // vaut alors `'foreground-tab'`/`'background-tab'`, toujours ouvert
+        // comme une carte ÆTHER ci-dessous).
+        if (disposition === 'new-window') {
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+              parent: this.win,
+              width: 500,
+              height: 650,
+              webPreferences: {
+                partition: this.activePartition(),
+                sandbox: true,
+                contextIsolation: true,
+                nodeIntegration: false
+              }
+            }
+          }
         }
         this.delegate.onOpenRequest(pageId, url)
       }
