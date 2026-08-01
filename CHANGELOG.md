@@ -4,6 +4,20 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.79.0] — 2026-08-01
+
+### Corrigé
+
+- **Une simple erreur d'enregistrement (clé USB éjectée, disque plein, permission refusée) pouvait
+  planter TOUTE l'application, toutes fenêtres confondues.** Cause : `savePage`/`captureScreenshot`
+  (« Enregistrer sous… », capture d'écran) n'entouraient pas leurs opérations d'un `try/catch`, et
+  leur appelant IPC ne rattrapait pas non plus le rejet — sur Node, un rejet de promesse non
+  intercepté équivaut à une exception fatale pour tout le process. Ces deux méthodes affichent
+  désormais un message d'erreur clair au lieu de faire tomber l'appli. Le même filet de sécurité
+  manquait à trois autres endroits repérés au passage (téléchargement d'une mise à jour coupé par
+  le réseau, écriture d'un embedding échouant sur une erreur SQLite, bulle d'une extension tierce
+  au chemin cassé) : tous corrigés selon le même principe.
+
 ## [0.78.0] — 2026-08-01
 
 ### Corrigé

@@ -74,7 +74,14 @@ export function initUpdater(mainWindow: BrowserWindow): void {
   autoUpdater.on('update-available', (info) => {
     checkRetryAttempt = 0
     setStatus({ state: 'downloading', version: info.version, percent: 0 })
-    void autoUpdater.downloadUpdate()
+    // `.catch(() => undefined)` — même raison que `checkForUpdates()` plus
+    // bas : l'écouteur `'error'` ci-dessus traite déjà l'échec (message,
+    // statut) AVANT que cette promesse ne rejette à son tour ; sans ce
+    // `.catch()`, ce second rejet n'était intercepté NULLE PART — une simple
+    // coupure réseau pendant le téléchargement d'une mise à jour plantait
+    // alors TOUT le process (voir la même classe de bug corrigée pour
+    // `savePage`/`captureScreenshot`, viewManager.ts).
+    void autoUpdater.downloadUpdate().catch(() => undefined)
   })
 
   autoUpdater.on('update-not-available', () => {

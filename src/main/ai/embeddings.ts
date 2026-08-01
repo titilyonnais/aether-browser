@@ -17,7 +17,14 @@ export function queuePageEmbedding(router: AiRouter, pageId: string, text: strin
   const existing = queue.findIndex((q) => q.pageId === pageId)
   if (existing >= 0) queue.splice(existing, 1)
   queue.push({ pageId, text })
-  void drain(router)
+  // `.catch(() => undefined)` — le `try/catch` interne à `drain` protège déjà
+  // l'appel réseau (`router.embed`), mais PAS les accès SQLite synchrones
+  // (`pagesRepo.get`/`embeddingsRepo.upsert`) : une exception là (verrou,
+  // disque plein, corruption) sortirait de `drain` sans être rattrapée, et un
+  // rejet de promesse non intercepté plante tout le process (même classe de
+  // bug corrigée pour `savePage`/`captureScreenshot`, viewManager.ts) — pour
+  // une simple embedding manquée, qui ne doit jamais perturber la navigation.
+  void drain(router).catch(() => undefined)
 }
 
 async function drain(router: AiRouter): Promise<void> {

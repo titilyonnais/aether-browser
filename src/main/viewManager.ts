@@ -1618,7 +1618,16 @@ export class ViewManager {
     if (!this.win.isDestroyed()) this.win.webContents.send(CH.downloadUpdated, id)
   }
 
-  /** Enregistre la page (HTML complet) via un sélecteur d'emplacement natif. */
+  /** Enregistre la page (HTML complet) via un sélecteur d'emplacement natif.
+   * `try/catch` INDISPENSABLE ici : `wc.savePage`/l'écriture du journal
+   * peuvent échouer pour une raison purement matérielle (clé USB éjectée,
+   * disque plein, permission refusée) une fois le dialogue déjà validé — sans
+   * lui, ce rejet n'était intercepté NULLE PART (l'appelant IPC utilise
+   * `void`, sans `.catch()`) : sur Node 15+, un rejet de promesse non
+   * intercepté équivaut à une exception non attrapée, que ce process traite
+   * comme fatale (voir `process.on('uncaughtException')`, index.ts) — une
+   * simple erreur d'E/S plantait donc TOUTE l'application, toutes fenêtres
+   * confondues, pas seulement cet onglet. */
   async savePage(id: PageId): Promise<void> {
     const wc = this.liveContents(id)
     const row = pagesRepo.get(id)
@@ -1629,23 +1638,36 @@ export class ViewManager {
       filters: [{ name: 'Page web complète', extensions: ['html'] }]
     })
     if (canceled || !filePath) return
-    await wc.savePage(filePath, 'HTMLComplete')
-    await this.recordManualDownload(filePath, row.url)
+    try {
+      await wc.savePage(filePath, 'HTMLComplete')
+      await this.recordManualDownload(filePath, row.url)
+    } catch {
+      if (!this.win.isDestroyed()) {
+        dialog.showErrorBox('Enregistrement impossible', `ÆTHER n'a pas pu enregistrer la page à cet emplacement.`)
+      }
+    }
   }
 
-  /** Capture la vue actuelle de la page et propose de l'enregistrer en PNG. */
+  /** Capture la vue actuelle de la page et propose de l'enregistrer en PNG —
+   * même raison d'être pour ce `try/catch` que `savePage` ci-dessus. */
   async captureScreenshot(id: PageId): Promise<void> {
     const wc = this.liveContents(id)
     if (!wc) return
     const row = pagesRepo.get(id)
-    const image = await wc.capturePage()
-    const { canceled, filePath } = await dialog.showSaveDialog(this.win, {
-      defaultPath: 'capture.png',
-      filters: [{ name: 'Image PNG', extensions: ['png'] }]
-    })
-    if (canceled || !filePath) return
-    await writeFile(filePath, image.toPNG())
-    await this.recordManualDownload(filePath, row?.url ?? '')
+    try {
+      const image = await wc.capturePage()
+      const { canceled, filePath } = await dialog.showSaveDialog(this.win, {
+        defaultPath: 'capture.png',
+        filters: [{ name: 'Image PNG', extensions: ['png'] }]
+      })
+      if (canceled || !filePath) return
+      await writeFile(filePath, image.toPNG())
+      await this.recordManualDownload(filePath, row?.url ?? '')
+    } catch {
+      if (!this.win.isDestroyed()) {
+        dialog.showErrorBox('Capture impossible', `ÆTHER n'a pas pu enregistrer la capture d'écran à cet emplacement.`)
+      }
+    }
   }
 
   /** Recherche dans la page (barre locale, Ctrl+F) — résultat via l'événement `found-in-page`. */

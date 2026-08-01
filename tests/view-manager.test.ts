@@ -89,6 +89,7 @@ function fakeWebContents() {
     getTitle: vi.fn(() => ''),
     getOSProcessId: vi.fn(() => 1234),
     loadURL: vi.fn(async () => undefined),
+    savePage: vi.fn(async () => undefined),
     close: vi.fn(),
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       const list = handlers.get(event) ?? []
@@ -484,5 +485,44 @@ describe('ViewManager — retour vers la page d’accueil', () => {
     // page d'accueil.
     expect(await clickBack(vm, 'a')).toBe('https://google.com/search?q=animal')
     expect(wc.navigationHistory.goBack).toHaveBeenCalled()
+  })
+})
+
+describe('ViewManager — savePage/captureScreenshot ne plantent jamais le process', () => {
+  // Régression : un rejet non intercepté (clé USB éjectée, disque plein…)
+  // dans ces deux méthodes plantait TOUT le process — l'appelant IPC utilise
+  // `void` sans `.catch()`, et sur Node 15+ un rejet de promesse non
+  // intercepté équivaut à une exception non attrapée que `index.ts` traite
+  // comme fatale. Ces tests vérifient que l'échec reste local (une boîte de
+  // dialogue d'erreur), pas que la boîte de dialogue elle-même est correcte.
+  beforeEach(() => {
+    ;(electronMock.dialog as { showSaveDialog?: unknown; showErrorBox?: unknown }).showSaveDialog = vi.fn(
+      async () => ({ canceled: false, filePath: 'C:\\fake\\out.html' })
+    )
+    ;(electronMock.dialog as { showErrorBox?: unknown }).showErrorBox = vi.fn()
+  })
+
+  it('savePage : un échec d’écriture affiche une erreur au lieu de rejeter', async () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a')
+    vm.setVisible(['a'])
+    contentsOf(vm, 'a').savePage.mockRejectedValueOnce(new Error('disque plein'))
+
+    await expect(vm.savePage('a')).resolves.toBeUndefined()
+    expect(
+      (electronMock.dialog as unknown as { showErrorBox: ReturnType<typeof vi.fn> }).showErrorBox
+    ).toHaveBeenCalledTimes(1)
+  })
+
+  it('captureScreenshot : un échec de capture affiche une erreur au lieu de rejeter', async () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a')
+    vm.setVisible(['a'])
+    contentsOf(vm, 'a').capturePage.mockRejectedValueOnce(new Error('capture impossible'))
+
+    await expect(vm.captureScreenshot('a')).resolves.toBeUndefined()
+    expect(
+      (electronMock.dialog as unknown as { showErrorBox: ReturnType<typeof vi.fn> }).showErrorBox
+    ).toHaveBeenCalledTimes(1)
   })
 })

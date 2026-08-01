@@ -171,7 +171,13 @@ export function openExtensionPopup(
     }
   }, 600)
 
-  void win.loadURL(popupUrl)
+  // `.catch(() => undefined)` : `popupUrl` vient du manifest d'une extension
+  // tierce (pas un fichier qu'on contrôle) — un chemin manquant/corrompu y
+  // ferait rejeter `loadURL`, et un rejet de promesse non intercepté plante
+  // tout le process (même classe de bug corrigée pour `savePage`/
+  // `captureScreenshot`, viewManager.ts) pour une simple bulle d'extension
+  // cassée.
+  void win.loadURL(popupUrl).catch(() => undefined)
 }
 
 /** Rapporté par le preload de la fenêtre de bulle elle-même (voir
