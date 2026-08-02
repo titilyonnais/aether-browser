@@ -75,6 +75,9 @@ interface UiState {
    * (menu « … », définitif). Jamais persisté : la bannière redemande à la
    * prochaine ouverture d'ÆTHER, comme le font Chrome/Edge. */
   defaultBrowserBannerSnoozed: boolean
+  /** Page + URL sur laquelle Google a rendu sa page de refus (« Ce navigateur
+   * ou cette application ne sont peut-être pas sécurisés »), ou null. */
+  googleSignInBlocked: { pageId: PageId; url: string } | null
 
   setReady(ready: boolean): void
   startCoach(): void
@@ -104,6 +107,7 @@ interface UiState {
   setSiteDataTarget(target: { pageId: PageId; origin: string } | null): void
   setSiteDetailsOrigin(origin: string | null): void
   snoozeDefaultBrowserBanner(): void
+  setGoogleSignInBlocked(target: { pageId: PageId; url: string } | null): void
 }
 
 export const useUiStore = create<UiState>()((set, get) => ({
@@ -129,6 +133,7 @@ export const useUiStore = create<UiState>()((set, get) => ({
   siteDataTarget: null,
   siteDetailsOrigin: null,
   defaultBrowserBannerSnoozed: false,
+  googleSignInBlocked: null,
 
   setReady: (ready) => set({ ready }),
   startCoach: () => set({ coachActive: true }),
@@ -172,5 +177,6 @@ export const useUiStore = create<UiState>()((set, get) => ({
   setCertificateTarget: (certificateTargetPageId) => set({ certificateTargetPageId }),
   setSiteDataTarget: (siteDataTarget) => set({ siteDataTarget }),
   setSiteDetailsOrigin: (siteDetailsOrigin) => set({ siteDetailsOrigin }),
-  snoozeDefaultBrowserBanner: () => set({ defaultBrowserBannerSnoozed: true })
+  snoozeDefaultBrowserBanner: () => set({ defaultBrowserBannerSnoozed: true }),
+  setGoogleSignInBlocked: (googleSignInBlocked) => set({ googleSignInBlocked })
 }))

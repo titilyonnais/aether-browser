@@ -206,6 +206,7 @@ export const CH = {
   pagePreview: 'page:preview',
   pageFullscreenChanged: 'page:fullscreen-changed',
   pageZoomChanged: 'page:zoom-changed',
+  googleSignInBlocked: 'google:signin-blocked',
 
   // Informations de site (HTTPS, certificat, permissions)
   siteInfo: 'site:info',
@@ -511,6 +512,10 @@ export interface AetherApi {
     onFullscreenChanged(cb: (p: { id: PageId; fullscreen: boolean }) => void): Unsubscribe
     /** Niveau de zoom d'une page modifié (Ctrl+±/0, Ctrl+molette) — pourcentage arrondi. */
     onZoomChanged(cb: (p: { id: PageId; percent: number }) => void): Unsubscribe
+    /** Google a rendu sa page de refus (« Ce navigateur ou cette application ne
+     * sont peut-être pas sécurisés ») sur cette page — propose d'ouvrir `url`
+     * dans le navigateur par défaut. */
+    onGoogleSignInBlocked(cb: (p: { pageId: PageId; url: string }) => void): Unsubscribe
     /** Zoom déclenché depuis le menu principal (même logique que Ctrl+±/0). */
     zoom(id: PageId, direction: 'in' | 'out' | 'reset'): void
     print(id: PageId): void

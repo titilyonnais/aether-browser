@@ -110,6 +110,7 @@ const api: AetherApi = {
     onPreview: (cb) => on(CH.pagePreview, cb),
     onFullscreenChanged: (cb) => on(CH.pageFullscreenChanged, cb),
     onZoomChanged: (cb) => on(CH.pageZoomChanged, cb),
+    onGoogleSignInBlocked: (cb) => on(CH.googleSignInBlocked, cb),
     zoom: (id: PageId, direction: 'in' | 'out' | 'reset') => ipcRenderer.send(CH.pageZoom, id, direction),
     print: (id: PageId) => ipcRenderer.send(CH.pagePrint, id),
     copy: (id: PageId) => ipcRenderer.send(CH.pageCopy, id),

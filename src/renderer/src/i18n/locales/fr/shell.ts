@@ -71,5 +71,10 @@ export const shell: Record<string, string> = {
   'defaultBrowser.banner.setDefault': 'Définir par défaut',
   'defaultBrowser.banner.later': 'Plus tard',
   'defaultBrowser.banner.moreOptions': 'Plus d’options',
-  'defaultBrowser.banner.dismissForGood': 'Ne plus afficher'
+  'defaultBrowser.banner.dismissForGood': 'Ne plus afficher',
+
+  'googleSignIn.banner.text':
+    'Google refuse la connexion depuis ÆTHER (limite connue des navigateurs indépendants). Ouvrez cette page dans votre navigateur par défaut pour vous connecter.',
+  'googleSignIn.banner.openExternal': 'Ouvrir dans le navigateur par défaut',
+  'googleSignIn.banner.dismiss': 'Ignorer'
 }

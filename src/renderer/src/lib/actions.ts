@@ -61,6 +61,13 @@ export async function initBridge(): Promise<void> {
   window.aether.pages.onUpdated((meta) => {
     usePagesStore.getState().upsert(meta)
     if (!meta.isLoading) scheduleAffinityRefresh()
+    // La bannière de refus Google ne concerne qu'un instant précis de la
+    // navigation — une fois l'onglet reparti ailleurs (nouvelle recherche,
+    // retour…), elle n'a plus de sens.
+    const blocked = useUiStore.getState().googleSignInBlocked
+    if (blocked?.pageId === meta.id && !meta.url.includes('accounts.google.com')) {
+      useUiStore.getState().setGoogleSignInBlocked(null)
+    }
   })
 
   window.aether.pages.onOpened((meta) => {
@@ -68,7 +75,17 @@ export async function initBridge(): Promise<void> {
     useUiStore.getState().toast(tShell('shell.toast.newCard', { domain: domainOf(meta.url) }))
   })
 
-  window.aether.pages.onRemoved((id) => usePagesStore.getState().removeLocal(id))
+  window.aether.pages.onRemoved((id) => {
+    usePagesStore.getState().removeLocal(id)
+    // La bannière ne doit jamais survivre à la fermeture de l'onglet qu'elle concerne.
+    if (useUiStore.getState().googleSignInBlocked?.pageId === id) {
+      useUiStore.getState().setGoogleSignInBlocked(null)
+    }
+  })
+
+  window.aether.pages.onGoogleSignInBlocked(({ pageId, url }) =>
+    useUiStore.getState().setGoogleSignInBlocked({ pageId, url })
+  )
 
   window.aether.pages.onPreview(({ id, version }) =>
     usePagesStore.getState().bumpPreview(id, version)

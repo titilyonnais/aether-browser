@@ -232,7 +232,8 @@ const delegate = {
   onFindResult: vi.fn(),
   onInstallExtensionRequested: vi.fn(),
   onCreateQrCode: vi.fn(),
-  onOpenInNewWindow: vi.fn()
+  onOpenInNewWindow: vi.fn(),
+  onGoogleSignInBlocked: vi.fn()
 }
 
 beforeEach(() => {
@@ -714,10 +715,87 @@ describe('ViewManager — User-Agent dédié à accounts.google.com', () => {
     seedRow('a', 'https://example.com')
     vm.setVisible(['a'])
     const wc = contentsOf(vm, 'a')
-    const popupWc = { setUserAgent: vi.fn() }
+    const popupWc = { setUserAgent: vi.fn(), on: vi.fn() }
 
     wc.__emit('did-create-window', { webContents: popupWc }, { url: 'https://accounts.google.com/o/oauth2' })
 
     expect(popupWc.setUserAgent).toHaveBeenCalledWith('UA-GOOGLE-EDG')
+  })
+})
+
+describe('ViewManager — détection du refus explicite de Google', () => {
+  // Régression : le contournement de User-Agent (ci-dessus) n'est pas garanti
+  // déjouer le blocage — recherche 2026 confirme que Google s'appuie sur
+  // plusieurs signaux au-delà du seul User-Agent. Quand le blocage survient
+  // malgré tout, ÆTHER doit au moins le détecter pour proposer d'ouvrir la
+  // page dans le navigateur par défaut (seul contournement fiable connu).
+  it('détecte le chemin dédié signin/rejected et notifie le délégué', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://accounts.google.com/v3/signin/identifier')
+    vm.setVisible(['a'])
+
+    contentsOf(vm, 'a').__commit('https://accounts.google.com/v3/signin/rejected')
+
+    expect(delegate.onGoogleSignInBlocked).toHaveBeenCalledWith(
+      'a',
+      'https://accounts.google.com/v3/signin/rejected'
+    )
+  })
+
+  it('détecte error=disallowed_useragent sur le flux OAuth', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://accounts.google.com/o/oauth2/auth')
+    vm.setVisible(['a'])
+
+    contentsOf(vm, 'a').__commit(
+      'https://accounts.google.com/signin/oauth/error?error=disallowed_useragent'
+    )
+
+    expect(delegate.onGoogleSignInBlocked).toHaveBeenCalledWith(
+      'a',
+      'https://accounts.google.com/signin/oauth/error?error=disallowed_useragent'
+    )
+  })
+
+  it('ne notifie rien pour une page de connexion Google normale (pas de refus)', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://accounts.google.com/v3/signin/identifier')
+    vm.setVisible(['a'])
+
+    contentsOf(vm, 'a').__commit('https://accounts.google.com/v3/signin/identifier')
+
+    expect(delegate.onGoogleSignInBlocked).not.toHaveBeenCalled()
+  })
+
+  it('ne notifie rien pour un autre site, même avec un chemin similaire', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://example.com')
+    vm.setVisible(['a'])
+
+    contentsOf(vm, 'a').__commit('https://example.com/signin/rejected')
+
+    expect(delegate.onGoogleSignInBlocked).not.toHaveBeenCalled()
+  })
+
+  it('détecte aussi le refus survenant DANS une popup native de connexion', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://example.com')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    let navigateHandler: ((e: unknown, url: string) => void) | undefined
+    const popupWc = {
+      setUserAgent: vi.fn(),
+      on: vi.fn((event: string, handler: (e: unknown, url: string) => void) => {
+        if (event === 'did-navigate') navigateHandler = handler
+      })
+    }
+
+    wc.__emit('did-create-window', { webContents: popupWc }, { url: 'https://accounts.google.com/o/oauth2' })
+    navigateHandler?.(null, 'https://accounts.google.com/v3/signin/rejected')
+
+    expect(delegate.onGoogleSignInBlocked).toHaveBeenCalledWith(
+      'a',
+      'https://accounts.google.com/v3/signin/rejected'
+    )
   })
 })

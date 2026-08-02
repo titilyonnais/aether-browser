@@ -2340,6 +2340,9 @@ export function createViewDelegate(
       if (isPrivate) createPrivateWindow(router, url)
       else createSecondaryContentWindow(activeProfileOf(getViews()), false, url, router)
     },
+    onGoogleSignInBlocked(pageId, url) {
+      send(CH.googleSignInBlocked, { pageId, url })
+    },
     onVisit(pageId, url, title) {
       const views = getViews()
       // La navigation privée ne laisse aucune trace dans l'historique.

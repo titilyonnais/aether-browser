@@ -4,6 +4,22 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.88.0] — 2026-08-02
+
+### Ajouté
+
+- **Bascule automatique vers le navigateur par défaut quand Google refuse la connexion.** Recherche
+  approfondie (4 agents, sources citées dans le commit) : le blocage « Ce navigateur ou cette
+  application ne sont peut-être pas sécurisés » ne repose pas que sur le User-Agent — Google
+  documente lui-même des vérifications supplémentaires (conformité aux standards web, en-têtes
+  internes que seul le vrai Chrome peut produire), confirmées par des rapports de janvier 2026
+  montrant que même des webviews natives du système (pas seulement Electron) s'y heurtent encore.
+  Aucun réglage de User-Agent ne peut donc garantir ce blocage déjoué à coup sûr. ÆTHER détecte
+  désormais la page de refus explicite de Google (chemin dédié `signin/rejected`, ou
+  `error=disallowed_useragent`) et propose une bannière pour ouvrir la page dans le navigateur par
+  défaut du système — le seul contournement fiable à 100 %, au prix de terminer la connexion hors
+  d'ÆTHER.
+
 ## [0.87.0] — 2026-08-02
 
 ### Corrigé

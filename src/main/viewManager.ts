@@ -282,6 +282,11 @@ export interface ViewManagerDelegate {
   /** Menu contextuel d'un lien (« Ouvrir dans une nouvelle fenêtre » / « …en
    * navigation privée ») — ouvre une VRAIE fenêtre ÆTHER séparée sur `url`. */
   onOpenInNewWindow(url: string, isPrivate: boolean): void
+  /** Google a rendu sa page de refus (« Ce navigateur ou cette application ne
+   * sont peut-être pas sécurisés ») — voir `checkGoogleSignInBlocked`. Le
+   * délégué propose à l'utilisateur d'ouvrir `url` dans son navigateur par
+   * défaut, seul contournement fiable connu pour ce blocage. */
+  onGoogleSignInBlocked(pageId: PageId, url: string): void
 }
 
 /** Taille de lot partagée entre la collecte et l'application (voir
@@ -677,6 +682,29 @@ export class ViewManager {
     wc.setUserAgent(googleUa ?? getPartitionUserAgent(this.activePartition()))
   }
 
+  /** Détecte la page de refus explicite de Google (« Ce navigateur ou cette
+   * application ne sont peut-être pas sécurisés ») malgré le User-Agent dédié
+   * ci-dessus — recherche confirme (2026) que ce blocage repose sur PLUSIEURS
+   * signaux au-delà du User-Agent (conformité aux standards web, en-têtes
+   * internes que seul le vrai Chrome peut produire…), qu'aucun changement de
+   * ce seul côté ne peut garantir déjoués. Deux formes CONNUES et stables de
+   * cette page, toutes deux sur `accounts.google.com` : le chemin dédié
+   * `…/signin/rejected`, et `error=disallowed_useragent` sur le paramètre de
+   * requête (flux OAuth). Plutôt que reconnaître le texte affiché — variable
+   * selon la langue du compte Google de l'utilisateur, donc peu fiable — ces
+   * deux formes d'URL sont stables et indépendantes de la langue. */
+  private checkGoogleSignInBlocked(pageId: PageId, url: string): void {
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      return
+    }
+    if (parsed.hostname !== 'accounts.google.com') return
+    const blocked = parsed.pathname.includes('/signin/rejected') || parsed.searchParams.get('error') === 'disallowed_useragent'
+    if (blocked) this.delegate.onGoogleSignInBlocked(pageId, url)
+  }
+
   /** Mémoire (Ko) du processus hébergeant cette page, ou null si non mesurable. */
   getMemoryKB(id: PageId): number | null {
     const wc = this.liveContents(id)
@@ -824,6 +852,7 @@ export class ViewManager {
       const row = pagesRepo.get(pageId)
       if (row) pagesRepo.updateNavigation(pageId, url)
       this.applyAudioMute(wc, url, Boolean(row?.muted))
+      this.checkGoogleSignInBlocked(pageId, url)
       // Le drapeau « à un pas de la page d'accueil » N'EST PLUS recalculé ici.
       // Une version précédente le faisait, et c'était LA cause du retour qui
       // ramenait à la recherche précédente : `did-navigate-in-page` se
@@ -1039,6 +1068,13 @@ export class ViewManager {
     // User-Agent dédié dès le tout premier chargement.
     wc.on('did-create-window', (popup, details) => {
       this.prepareUserAgentFor(popup.webContents, details.url)
+      // Cette popup est une VRAIE fenêtre Electron séparée (`overrideBrowserWindowOptions`
+      // plus haut), jamais câblée par `wire()` — sans cet écouteur dédié, un
+      // refus de Google DANS la popup (le cas le plus courant : les flux par
+      // popup, cf. `disposition === 'new-window'`) ne serait jamais détecté.
+      popup.webContents.on('did-navigate', (_e, navigatedUrl) => {
+        this.checkGoogleSignInBlocked(pageId, navigatedUrl)
+      })
     })
 
     // Redirections automatiques (même catégorie que les popups pour
