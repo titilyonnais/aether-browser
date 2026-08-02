@@ -78,6 +78,7 @@ import {
   listExtensions,
   loadExtensionsForProfile,
   removeExtension,
+  removeProfileExtensionFiles,
   setExtensionEnabled
 } from './extensions'
 import { openExtensionPopup, resizeExtensionPopup } from './extensionPopupWindow'
@@ -349,6 +350,7 @@ async function switchToProfile(views: ViewManager, id: ProfileId): Promise<Works
     const outgoing = profilesRepo.get(outgoingId)
     const stillInUse = windowContextsForProfile(outgoingId).some((ctx) => ctx.views !== views)
     if (outgoing?.isPrivate && !stillInUse) {
+      removeProfileExtensionFiles(outgoingId)
       profilesRepo.remove(outgoingId)
       releasePrivateSession(outgoingId)
     }
@@ -525,6 +527,7 @@ function createSecondaryContentWindow(
     // n'affiche plus ce profil, il n'a plus aucune raison de survivre (même
     // filet que `switchToProfile`/`profileRemove` ci-dessous).
     if (isPrivate && windowContextsForProfile(profileId).length === 0) {
+      removeProfileExtensionFiles(profileId)
       profilesRepo.remove(profileId)
       releasePrivateSession(profileId)
       broadcastProfiles()
@@ -801,6 +804,7 @@ export function registerIpc(router: AiRouter): void {
       // qui n'existe plus.
       for (const ctx of windowContextsForProfile(id)) ctx.views.closeAll()
       if (removed?.avatarImage) deleteAvatarImage(removed.avatarImage)
+      removeProfileExtensionFiles(id)
       profilesRepo.remove(id)
       const profiles = profilesRepo.list()
       let switched: { activeProfileId: ProfileId; workspace: Workspace } | null = null

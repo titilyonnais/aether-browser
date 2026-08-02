@@ -4,6 +4,23 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.86.0] — 2026-08-02
+
+### Corrigé
+
+- **Installer la même extension depuis le Store sur deux profils différents pouvait casser
+  l'instance déjà en cours d'exécution sur le premier profil.** Le dossier d'extraction n'était
+  indexé QUE par l'identifiant de l'extension, jamais par profil — deux profils censés être
+  totalement cloisonnés finissaient par partager (et se marcher dessus) les mêmes fichiers sur
+  disque. Chaque profil a désormais son propre dossier.
+- **Retirer une extension du Store ne libérait jamais l'espace disque qu'elle occupait** — la ligne
+  disparaissait des réglages, mais ses fichiers restaient indéfiniment sur le disque. Corrigé aussi
+  bien pour un retrait explicite que pour un profil (notamment de navigation privée) qui disparaît :
+  une extension installée pendant une session privée ne laisse plus son code source derrière elle.
+- **Une icône d'extension fabriquée dans un manifeste pouvait pointer hors du dossier de
+  l'extension** — même famille de traversée de chemin que celle déjà corrigée pour les avatars de
+  profil, appliquée ici aussi.
+
 ## [0.85.1] — 2026-08-02
 
 ### Corrigé

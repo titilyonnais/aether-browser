@@ -18,7 +18,7 @@
 import { app, dialog, session, type BrowserWindow, type Extension } from 'electron'
 import AdmZip from 'adm-zip'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { ExtensionInfo, ProfileId } from '@shared/types'
 import { extensionsRepo } from './db/repositories'
@@ -50,6 +50,21 @@ interface ManifestLike {
 /** Trouve le fichier icône le plus probable — `icons` racine en priorité
  * (généralement la plus grande résolution en dernier), sinon l'icône du
  * bouton de barre d'outils (`action`/`browser_action`/`page_action`, MV3 ou MV2). */
+/** Résout `relativePath` sous `baseDir`, ou `null` s'il en ressortirait — même
+ * classe de garde que celle déjà posée pour les avatars (`AVATAR_FILENAME_RE`,
+ * avatars.ts) : un champ de manifeste (`icons`, `action.default_icon`) est
+ * censé rester une DÉCLARATION RELATIVE au dossier de l'extension, mais rien
+ * ne l'y oblige structurellement — sans ce contrôle, une icône déclarée
+ * `"../../../../fichier"` produirait une URL `file://` pointant hors du
+ * dossier de l'extension, envoyée telle quelle au renderer comme `src`
+ * d'`<img>`. */
+function resolveWithinDir(baseDir: string, relativePath: string): string | null {
+  const base = resolve(baseDir)
+  const target = resolve(base, relativePath)
+  if (target !== base && !target.startsWith(base + sep)) return null
+  return target
+}
+
 function resolveIconFile(manifest: ManifestLike): string | null {
   if (manifest.icons) {
     const fromIcons = Object.values(manifest.icons).at(-1)
@@ -218,7 +233,11 @@ function toInfo(
     addedAt: row.addedAt,
     // `file://${join(...)}` produisait une URL invalide sous Windows (backslashes,
     // pas de 3e slash pour la lettre de lecteur) — `pathToFileURL` gère ça correctement.
-    iconUrl: iconFile ? pathToFileURL(join(row.path, iconFile)).href : null
+    iconUrl: (() => {
+      if (!iconFile) return null
+      const resolved = resolveWithinDir(row.path, iconFile)
+      return resolved ? pathToFileURL(resolved).href : null
+    })()
   }
 }
 
@@ -332,13 +351,53 @@ export function removeExtension(profileId: ProfileId, partition: string, id: str
     }
   }
   dirSizeCache.delete(row.path)
+  // Seules les extensions du Store (`userData/extensions/…`) sont NOTRE
+  // propre copie extraite — une extension non empaquetée pointe vers un
+  // dossier choisi par l'utilisateur sur son propre disque (`addUnpackedExtension`),
+  // qu'on ne possède pas et qu'on ne doit jamais supprimer nous-mêmes. Sans
+  // cette distinction, retirer une extension du Store ne libérait jamais
+  // l'espace disque qu'elle occupait — la ligne disparaissait de la base,
+  // mais ses fichiers restaient indéfiniment sur le disque.
+  if (row.path.startsWith(webStoreExtensionsRoot())) {
+    rmSync(row.path, { recursive: true, force: true })
+  }
   extensionsRepo.remove(id)
+}
+
+/** Libère les fichiers du Store des extensions d'un profil sur le point de
+ * disparaître — à appeler AVANT `profilesRepo.remove()` (qui efface les
+ * lignes `extensions` correspondantes, rendant `listByProfile` incapable de
+ * les retrouver ensuite). Même raison d'être que `removeExtension` ci-dessus,
+ * pour les chemins où un profil disparaît sans passer par un retrait
+ * explicite extension par extension (suppression de profil, fermeture d'une
+ * fenêtre de navigation privée) : sans cet appel, une extension installée
+ * depuis le Store pendant une session privée laissait son code source
+ * complet sur le disque pour de bon — plus aucune ligne en base pour la
+ * retrouver ni la nettoyer depuis l'UI, en contradiction directe avec la
+ * promesse « aucune trace » de la navigation privée. */
+export function removeProfileExtensionFiles(profileId: ProfileId): void {
+  const root = webStoreExtensionsRoot()
+  for (const row of extensionsRepo.listByProfile(profileId)) {
+    if (!row.path.startsWith(root)) continue
+    dirSizeCache.delete(row.path)
+    rmSync(row.path, { recursive: true, force: true })
+  }
 }
 
 // ─── Installation réelle depuis le Chrome Web Store ────────────────────────
 
-function webStoreExtensionDir(extensionId: string): string {
-  return join(webStoreExtensionsRoot(), extensionId)
+/** Un dossier PAR PROFIL, jamais partagé — avant cette correction, le dossier
+ * d'extraction n'était indexé QUE par `extensionId` (`extensions/<id>`), donc
+ * deux profils installant la MÊME extension depuis le Store finissaient par
+ * pointer sur exactement les mêmes fichiers sur disque : le second `rmSync`
+ * (ré-installation « propre » avant extraction, plus bas) supprimait les
+ * fichiers que la session du PREMIER profil avait déjà chargés en mémoire
+ * (`session.extensions.loadExtension`), potentiellement en cours d'exécution
+ * (service worker, popup ouverte) — deux profils censés être totalement
+ * cloisonnés se retrouvaient de fait à partager (et à casser mutuellement)
+ * la même installation. */
+function webStoreExtensionDir(profileId: ProfileId, extensionId: string): string {
+  return join(webStoreExtensionsRoot(), profileId, extensionId)
 }
 
 /** Retire l'en-tête CRX (CRX2 ou CRX3) pour ne garder que le ZIP qu'il enveloppe. */
@@ -399,7 +458,7 @@ export async function installExtensionFromWebStore(
   if (installsInFlight.has(extensionId)) {
     return { ok: false, name: null, alreadyInstalled: false, error: 'Installation déjà en cours' }
   }
-  const dir = webStoreExtensionDir(extensionId)
+  const dir = webStoreExtensionDir(profileId, extensionId)
   const already = extensionsRepo.listByProfile(profileId).find((r) => r.path === dir)
   if (already) {
     await setExtensionEnabled(profileId, partition, already.id, true)
