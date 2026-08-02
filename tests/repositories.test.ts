@@ -12,6 +12,8 @@ import {
   notesRepo,
   pagesRepo,
   profilesRepo,
+  searchQueriesRepo,
+  sitePermissionsRepo,
   spacesRepo,
   visitsRepo
 } from '../src/main/db/repositories'
@@ -49,6 +51,26 @@ describe('profilesRepo', () => {
     profilesRepo.remove(p.id)
 
     expect(embeddingsRepo.forRefs([page.id])).toHaveLength(0)
+  })
+
+  it('supprime les autorisations de site et l’historique de recherche du profil', () => {
+    // Régression : `site_permissions`/`search_queries` ont, comme les autres
+    // tables par profil, une colonne `profile_id` SANS contrainte de clé
+    // étrangère — mais `remove()` ne les nettoyait pas comme le reste
+    // (espaces, visites, téléchargements, extensions, favoris), les laissant
+    // orphelines pour de bon. Plus gênant pour la recherche : du texte
+    // littéral potentiellement sensible qui aurait dû disparaître avec le
+    // profil.
+    const p = profilesRepo.create('Test', 210, { icon: '✦', color: '' })
+    sitePermissionsRepo.set(p.id, 'https://exemple.test', 'camera', 'allow')
+    searchQueriesRepo.record(p.id, 'requête sensible')
+    expect(sitePermissionsRepo.get(p.id, 'https://exemple.test', 'camera')).toBe('allow')
+    expect(searchQueriesRepo.recent(p.id)).toHaveLength(1)
+
+    profilesRepo.remove(p.id)
+
+    expect(sitePermissionsRepo.get(p.id, 'https://exemple.test', 'camera')).toBeNull()
+    expect(searchQueriesRepo.recent(p.id)).toHaveLength(0)
   })
 })
 

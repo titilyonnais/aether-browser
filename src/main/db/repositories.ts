@@ -134,6 +134,14 @@ export const profilesRepo = {
     db.prepare('DELETE FROM extensions WHERE profile_id = ?').run(id)
     db.prepare('DELETE FROM favorite_folders WHERE profile_id = ?').run(id)
     db.prepare('DELETE FROM favorites WHERE profile_id = ?').run(id)
+    // `site_permissions`/`search_queries` : mêmes colonnes `profile_id TEXT
+    // NOT NULL` SANS contrainte de clé étrangère que les tables ci-dessus —
+    // oubliées ici jusqu'à cette correction, elles restaient orphelines pour
+    // de bon à chaque suppression de profil. Plus gênant pour la seconde :
+    // du texte de recherche littéral (potentiellement sensible), qui aurait
+    // dû disparaître avec le profil comme le reste de son historique.
+    db.prepare('DELETE FROM site_permissions WHERE profile_id = ?').run(id)
+    db.prepare('DELETE FROM search_queries WHERE profile_id = ?').run(id)
     db.prepare('DELETE FROM profiles WHERE id = ?').run(id)
   },
 

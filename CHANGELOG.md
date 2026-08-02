@@ -4,6 +4,17 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.84.0] — 2026-08-02
+
+### Corrigé
+
+- **Supprimer un profil ne supprimait pas ses autorisations par site ni son historique de
+  recherche.** Toutes les autres données du profil (espaces, pages, favoris, téléchargements,
+  extensions) disparaissaient bien en le supprimant — ces deux tables avaient été oubliées et
+  restaient orphelines en base pour de bon. Plus gênant pour l'historique de recherche : il contient
+  le texte littéral des recherches, potentiellement sensible, qui aurait dû disparaître avec le
+  profil comme le reste. Les deux sont désormais bien effacées.
+
 ## [0.83.1] — 2026-08-02
 
 ### Corrigé
