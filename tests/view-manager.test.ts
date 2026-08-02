@@ -582,6 +582,24 @@ describe('ViewManager — setWindowOpenHandler', () => {
     expect(result.action).toBe('deny')
     expect(delegate.onOpenRequest).toHaveBeenCalledWith('a', 'https://example.com/article')
   })
+
+  it('autorise aussi un vrai popup vers accounts.google.com même SANS disposition new-window', () => {
+    // Régression du correctif précédent : un `window.open(url)` SANS
+    // dimensions explicites (le cas d'une bonne partie du flux de connexion
+    // Google) est classé `'foreground-tab'` par Chromium — EXACTEMENT comme
+    // un simple lien `target="_blank"` — alors que `window.opener` reste
+    // posé dans les deux cas. Se limiter à `disposition === 'new-window'`
+    // laissait donc passer le même bris d'opener pour cette variante.
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://youtube.com')
+    vm.setVisible(['a'])
+    contentsOf(vm, 'a').__commit('https://youtube.com')
+
+    const result = handlerFor(vm, 'a')({ url: 'https://accounts.google.com/signin', disposition: 'foreground-tab' })
+
+    expect(result.action).toBe('allow')
+    expect(delegate.onOpenRequest).not.toHaveBeenCalled()
+  })
 })
 
 describe('ViewManager — permission de site « Son »', () => {

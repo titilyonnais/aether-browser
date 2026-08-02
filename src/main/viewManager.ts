@@ -954,23 +954,35 @@ export class ViewManager {
         }
         // `disposition === 'new-window'` : le site a explicitement demandé un
         // VRAI popup (`window.open(url, nom, 'width=...,height=...')`), le
-        // motif qu'utilisent la quasi-totalité des flux de connexion OAuth
-        // (Google, Microsoft, GitHub…). Refuser ce popup puis rouvrir son URL
-        // comme un nouvel onglet ÆTHER totalement indépendant — ce que faisait
-        // ce handler jusqu'ici, dans TOUS les cas — casse la relation JS
+        // motif qu'utilisent la plupart des flux de connexion OAuth
+        // (Microsoft, GitHub…). Refuser ce popup puis rouvrir son URL comme
+        // un nouvel onglet ÆTHER totalement indépendant — ce que faisait ce
+        // handler jusqu'ici, dans TOUS les cas — casse la relation JS
         // `window.opener`/`postMessage` dont ces flux dépendent pour renvoyer
-        // le jeton à la page d'origine une fois la connexion faite. Google en
-        // particulier DÉTECTE ce motif côté serveur (un « popup » sans opener
-        // ressemble à un webview embarqué tentant de voler des identifiants)
-        // et refuse purement et simplement la connexion (« Ce navigateur ou
-        // cette application ne sont peut-être pas sécurisés ») — exactement
-        // l'erreur observée en pratique en essayant de se connecter à un
-        // compte Google depuis ÆTHER). Laisser Electron créer un vrai popup
-        // natif préserve cette relation, sans rien changer au comportement
-        // existant pour un simple lien `target="_blank"` (`disposition`
-        // vaut alors `'foreground-tab'`/`'background-tab'`, toujours ouvert
-        // comme une carte ÆTHER ci-dessous).
-        if (disposition === 'new-window') {
+        // le jeton à la page d'origine une fois la connexion faite.
+        //
+        // Pour `accounts.google.com` précisément, cette relation doit être
+        // préservée QUEL QUE SOIT `disposition` : Chromium classe un
+        // `window.open(url)` SANS dimensions explicites en
+        // `'foreground-tab'`/`'background-tab'` (exactement la même valeur
+        // qu'un simple lien `target="_blank"`, aucun moyen fiable de les
+        // distinguer par `disposition` seul) — mais `window.opener` reste
+        // bien posé par Chromium dans les deux cas, et Google le lit tout
+        // autant pour valider la connexion. Se limiter à `'new-window'`
+        // laissait donc passer exactement le même bris d'opener pour toute
+        // variante de son flux qui n'impose pas de taille de fenêtre — cause
+        // la plus probable du blocage persistant (« Ce navigateur ou cette
+        // application ne sont peut-être pas sécurisés ») malgré le correctif
+        // précédent. Cible nommément ce host plutôt que d'élargir la règle à
+        // TOUT `window.open()` : un lien normal, `target="_blank"` compris,
+        // doit continuer à s'ouvrir comme une carte ÆTHER ci-dessous.
+        let host = ''
+        try {
+          host = new URL(url).hostname
+        } catch {
+          // Laisse passer, en échec ouvert — voir le commentaire équivalent plus haut.
+        }
+        if (disposition === 'new-window' || host === 'accounts.google.com') {
           return {
             action: 'allow',
             overrideBrowserWindowOptions: {

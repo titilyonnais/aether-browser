@@ -4,6 +4,18 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.83.1] — 2026-08-02
+
+### Corrigé
+
+- **La connexion à un compte Google restait bloquée malgré le correctif de la 0.82.0.** Cause :
+  cette première correction ne couvrait que les popups demandant explicitement une taille de
+  fenêtre (`disposition === 'new-window'`) — or un `window.open(url)` SANS dimensions explicites,
+  ce qu'utilise une partie du flux de connexion Google, est classé exactement comme un simple lien
+  `target="_blank"` par Chromium, alors que la relation `window.opener` dont ce flux dépend reste
+  posée dans les deux cas. Un vrai popup natif préservant cette relation est désormais autorisé
+  spécifiquement vers `accounts.google.com`, quel que soit ce classement.
+
 ## [0.83.0] — 2026-08-01
 
 ### Corrigé
