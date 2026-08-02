@@ -149,9 +149,20 @@ export class AiRouter {
     }
     try {
       let lastError: Error | null = null
+      // Compte pour UN SEUL message utilisateur, pas par candidat essayé —
+      // sans ce drapeau, un premier fournisseur cloud échouant avant tout
+      // token émis (ex. coupure réseau transitoire) faisait consommer le
+      // plafond quotidien une SECONDE fois au fournisseur cloud suivant
+      // tenté pour ce même message, l'épuisant plus vite que ce que Réglages
+      // › IA laisse anticiper.
+      let chargedCloudBudget = false
       for (const candidate of candidates) {
         if (controller.signal.aborted) break
         try {
+          if (candidate.kind !== 'ollama' && !chargedCloudBudget) {
+            this.consumeCloudBudgetOrThrow()
+            chargedCloudBudget = true
+          }
           await this.runCandidate(candidate, {
             model: candidate.model,
             system,
@@ -182,19 +193,16 @@ export class AiRouter {
       case 'anthropic': {
         const key = readSecret('anthropic')
         if (!key) throw new Error('Clé Claude absente.')
-        this.consumeCloudBudgetOrThrow()
         return anthropicChat(key, params)
       }
       case 'openai': {
         const key = readSecret('openai')
         if (!key) throw new Error('Clé OpenAI absente.')
-        this.consumeCloudBudgetOrThrow()
         return openaiCompatChat('https://api.openai.com/v1', key, 'OpenAI', params)
       }
       case 'xai': {
         const key = readSecret('xai')
         if (!key) throw new Error('Clé xAI absente.')
-        this.consumeCloudBudgetOrThrow()
         return openaiCompatChat('https://api.x.ai/v1', key, 'xAI', params)
       }
     }

@@ -118,6 +118,29 @@ describe('AiRouter.chat — repli entre candidats', () => {
     await expect(router.chat('req-5', 'system', [], () => {})).rejects.toThrow('Plafond quotidien')
     expect(providersMock.anthropicChat).not.toHaveBeenCalled()
   })
+
+  it('ne consomme le plafond IA cloud qu’UNE FOIS par message, même en repli entre deux fournisseurs cloud', async () => {
+    // Régression : `consumeCloudBudgetOrThrow` était auparavant appelée à
+    // CHAQUE candidat cloud essayé — un premier fournisseur échouant avant
+    // tout token (coupure réseau transitoire) faisait consommer le plafond
+    // une seconde fois au fournisseur suivant tenté pour ce même message.
+    settingsMock.hasSecret.mockImplementation((k: string) => k === 'anthropic' || k === 'openai')
+    settingsMock.readSecret.mockReturnValue('sk-test')
+    const router = new AiRouter()
+    ;(router as unknown as { status: { ollama: { reachable: boolean; models: string[] } } }).status.ollama = {
+      reachable: false,
+      models: []
+    }
+    providersMock.anthropicChat.mockRejectedValue(new Error('coupure réseau transitoire'))
+    providersMock.openaiCompatChat.mockResolvedValue(undefined)
+
+    const used = await router.chat('req-6', 'system', [], () => {})
+
+    expect(used).toBe('openai')
+    expect(providersMock.anthropicChat).toHaveBeenCalledTimes(1)
+    expect(providersMock.openaiCompatChat).toHaveBeenCalledTimes(1)
+    expect(settingsMock.tryConsumeAiCloudBudget).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('AiRouter.embed — repli Ollama → OpenAI', () => {

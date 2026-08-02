@@ -4,6 +4,21 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.85.0] — 2026-08-02
+
+### Corrigé
+
+- **Muse (l'assistant IA) n'avait aucune consigne pour distinguer le texte d'une page web du reste
+  de ses instructions.** Le contenu d'une page (activé via « inclure le contexte de la page »)
+  était injecté tel quel dans le prompt envoyé au modèle, sans délimiteur ni consigne — une page
+  contenant un texte formulé comme une instruction (même invisible) aurait pu tenter de détourner
+  ses réponses. Le contenu de page est désormais clairement délimité et explicitement signalé comme
+  une donnée non fiable à ne jamais traiter comme une instruction.
+- **Un message pouvait consommer deux fois le plafond quotidien d'appels IA cloud** si le premier
+  fournisseur configuré échouait avant tout token (coupure réseau transitoire) et que la bascule se
+  faisait vers un second fournisseur cloud — chacun décomptait indépendamment le même plafond pour
+  un seul message envoyé. Compté une seule fois par message désormais.
+
 ## [0.84.0] — 2026-08-02
 
 ### Corrigé
