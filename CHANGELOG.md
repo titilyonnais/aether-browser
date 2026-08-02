@@ -4,6 +4,16 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.85.1] — 2026-08-02
+
+### Corrigé
+
+- **Supprimer un espace pouvait ramener de force sur un autre espace que celui choisi entre-temps.**
+  `removeSpace` décidait s'il fallait basculer d'espace en relisant un instantané de l'état capturé
+  AVANT l'appel réseau vers le processus principal — cliquer sur un autre espace pendant cette brève
+  fenêtre pouvait donc être écrasé au retour de l'appel, ramenant vers un espace non choisi. La
+  décision se base désormais sur l'état réel au moment où elle est prise.
+
 ## [0.85.0] — 2026-08-02
 
 ### Corrigé

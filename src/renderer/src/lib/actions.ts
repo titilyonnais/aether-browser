@@ -610,13 +610,20 @@ export async function renameSpace(id: SpaceId, name: string): Promise<void> {
 }
 
 export async function removeSpace(id: SpaceId): Promise<void> {
-  const spaces = useSpacesStore.getState()
   const pages = usePagesStore.getState()
   for (const page of pages.bySpace(id)) pages.removeLocal(page.id)
   const replacement = await window.aether.spaces.remove(id)
+  const spaces = useSpacesStore.getState()
   spaces.removeLocal(id)
   if (replacement) spaces.upsert(replacement)
-  if (spaces.activeSpaceId === id) {
+  // Relu APRÈS l'attente IPC, jamais depuis le snapshot capturé avant —
+  // sinon un changement d'espace actif pendant cette fenêtre (l'utilisateur
+  // clique sur un AUTRE espace pendant que celui-ci finit de se supprimer)
+  // se voyait écrasé : le test portait sur une valeur déjà périmée, qui
+  // pouvait encore désigner l'espace en cours de suppression alors que
+  // l'utilisateur avait déjà basculé ailleurs, renvoyant `switchSpace` le
+  // ramener de force à un espace qu'il n'avait pas choisi.
+  if (useSpacesStore.getState().activeSpaceId === id) {
     const next = replacement?.id ?? useSpacesStore.getState().spaces[0]?.id
     if (next) switchSpace(next)
   }
