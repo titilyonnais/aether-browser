@@ -124,6 +124,17 @@ export function noteMainFrameNavigation(webContentsId: number): void {
   downloadedSinceNav.delete(webContentsId)
 }
 
+/** Contrepartie de `noteMainFrameNavigation` pour un onglet FERMÉ (pas juste
+ * navigué) — à appeler depuis `ViewManager.destroyView`. Sans elle, `id`
+ * restait indéfiniment dans `downloadedSinceNav` si l'onglet avait déjà
+ * téléchargé un fichier puis était fermé sans navigation ultérieure : sur
+ * une session longue avec beaucoup d'onglets/téléchargements, une croissance
+ * non bornée (même famille de fuite que `rawCertCache`/les sessions de
+ * navigation privée, corrigées plus tôt dans cet audit). */
+export function noteWebContentsClosed(webContentsId: number): void {
+  downloadedSinceNav.delete(webContentsId)
+}
+
 /** Heuristique façon Chrome : le PREMIER téléchargement après une navigation
  * est toujours autorisé ; un second déclenché par la même page sans
  * nouvelle navigation entre les deux est traité comme automatique et soumis

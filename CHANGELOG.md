@@ -4,6 +4,20 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.83.0] — 2026-08-01
+
+### Corrigé
+
+- **Bloquer le son d'un site (Réglages › Autorisations par site) n'avait jusqu'ici AUCUN effet
+  réel.** Le réglage s'enregistrait bien et la case restait cochée, mais rien ne le relisait jamais
+  au chargement d'une page — seul le bouton « Muet » manuel par onglet coupait vraiment le son. Un
+  site réglé sur Son → Bloquer coupe désormais bien le son, dès le chargement et à chaque nouvelle
+  navigation ; le rétablissement manuel via le bouton « Muet » reste toujours prioritaire.
+- **Un onglet ayant téléchargé un fichier puis fermé sans navigation ultérieure laissait une entrée
+  orpheline** dans le compteur qui distingue un premier téléchargement (toujours autorisé) d'un
+  second traité comme automatique — fuite non bornée sur une session longue avec beaucoup d'onglets/
+  téléchargements, purgée désormais à la fermeture de l'onglet.
+
 ## [0.82.0] — 2026-08-01
 
 ### Corrigé

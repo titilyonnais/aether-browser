@@ -76,6 +76,7 @@ function fakeWebContents() {
       pending.url = null
       this.__commit(url)
     },
+    id: 1,
     isDestroyed: vi.fn(() => false),
     isCrashed: vi.fn(() => false),
     isLoading: vi.fn(() => pending.url !== null),
@@ -161,11 +162,15 @@ const pagesRepoMock = vi.hoisted(() => ({
     updateTitle: vi.fn(),
     updateFavicon: vi.fn(),
     setMuted: vi.fn()
+  },
+  sitePermissionsRepo: {
+    get: vi.fn((_profileId: string, _origin: string, _kind: string): 'allow' | 'block' | null => null)
   }
 }))
 vi.mock('../src/main/db/repositories', () => pagesRepoMock)
 vi.mock('../src/main/contentBlocking', () => ({
   noteMainFrameNavigation: vi.fn(),
+  noteWebContentsClosed: vi.fn(),
   siteBlocksPopups: vi.fn(() => false)
 }))
 
@@ -247,6 +252,7 @@ beforeEach(() => {
     if (row) rows.set(id, { ...row, url })
   })
   ;(pagesRepoMock.pagesRepo as unknown as { _rows: Map<string, PageRow> })._rows = rows
+  pagesRepoMock.sitePermissionsRepo.get.mockImplementation(() => null)
 })
 
 function seedRow(id: string, url?: string): void {
@@ -575,5 +581,70 @@ describe('ViewManager — setWindowOpenHandler', () => {
 
     expect(result.action).toBe('deny')
     expect(delegate.onOpenRequest).toHaveBeenCalledWith('a', 'https://example.com/article')
+  })
+})
+
+describe('ViewManager — permission de site « Son »', () => {
+  // Régression : `'sound'` existe comme `SitePermissionKind` réglable dans
+  // l'UI (Réglages › Autorisations par site) et bien écrite en base, mais
+  // rien ne la relisait jamais — la seule coupure de son réellement câblée
+  // était le bouton « Muet » manuel par onglet (`pages.muted`), totalement
+  // indépendant. Bloquer le son d'un site dans les réglages n'avait donc
+  // AUCUN effet réel.
+  it('coupe le son au chargement si le site a Son → Bloquer', () => {
+    pagesRepoMock.sitePermissionsRepo.get.mockImplementation(
+      (_profileId: string, origin: string, kind: string) =>
+        origin === 'https://bruyant.example' && kind === 'sound' ? 'block' : null
+    )
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://bruyant.example')
+    vm.setVisible(['a'])
+
+    expect(contentsOf(vm, 'a').setAudioMuted).toHaveBeenCalledWith(true)
+  })
+
+  it('ne coupe pas le son si le site est réglé sur Bloquer mais que la page est sur une AUTRE origine', () => {
+    pagesRepoMock.sitePermissionsRepo.get.mockImplementation(
+      (_profileId: string, origin: string, kind: string) =>
+        origin === 'https://bruyant.example' && kind === 'sound' ? 'block' : null
+    )
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://silencieux.example')
+    vm.setVisible(['a'])
+
+    expect(contentsOf(vm, 'a').setAudioMuted).toHaveBeenCalledWith(false)
+  })
+
+  it('réévalue la permission de site à chaque navigation de premier niveau (changement d’origine)', () => {
+    pagesRepoMock.sitePermissionsRepo.get.mockImplementation(
+      (_profileId: string, origin: string, kind: string) =>
+        origin === 'https://bruyant.example' && kind === 'sound' ? 'block' : null
+    )
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://silencieux.example')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    expect(wc.setAudioMuted).toHaveBeenCalledWith(false)
+
+    wc.__commit('https://bruyant.example')
+    expect(wc.setAudioMuted).toHaveBeenLastCalledWith(true)
+  })
+
+  it('le blocage par site ne masque pas le rétablissement manuel du son (toggleMute)', () => {
+    const rows = (pagesRepoMock.pagesRepo as unknown as { _rows: Map<string, PageRow> })._rows
+    pagesRepoMock.pagesRepo.setMuted.mockImplementation((id: string, muted: boolean) => {
+      const row = rows.get(id)
+      if (row) rows.set(id, { ...row, muted: muted ? 1 : 0 })
+    })
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://example.com')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    expect(wc.setAudioMuted).toHaveBeenCalledWith(false)
+
+    vm.toggleMute('a')
+    expect(wc.setAudioMuted).toHaveBeenLastCalledWith(true)
+    vm.toggleMute('a')
+    expect(wc.setAudioMuted).toHaveBeenLastCalledWith(false)
   })
 })

@@ -27,8 +27,8 @@ import type {
   SpaceId
 } from '@shared/types'
 import { getSettings } from './settings'
-import { downloadsRepo, pagesRepo, type PageRow } from './db/repositories'
-import { noteMainFrameNavigation, siteBlocksPopups } from './contentBlocking'
+import { downloadsRepo, pagesRepo, sitePermissionsRepo, type PageRow } from './db/repositories'
+import { noteMainFrameNavigation, noteWebContentsClosed, siteBlocksPopups } from './contentBlocking'
 import { hidePopoverWindow, showContextMenuPopover } from './popoverWindow'
 import { capturePreview, deletePreview } from './previews'
 import { ensurePartitionHardened, webPartitionForProfile } from './webSession'
@@ -579,7 +579,7 @@ export class ViewManager {
     const v = view as unknown as { setBorderRadius?: (r: number) => void }
     v.setBorderRadius?.(10)
 
-    view.webContents.setAudioMuted(Boolean(row.muted))
+    this.applyAudioMute(view.webContents, row.url, Boolean(row.muted))
 
     this.views.set(row.id, view)
     if (this.isNewTabUrl(row.url)) this.everNewTab.add(row.id)
@@ -620,6 +620,31 @@ export class ViewManager {
     pagesRepo.setMuted(id, next)
     this.views.get(id)?.webContents.setAudioMuted(next)
     this.delegate.onMetaChanged(id)
+  }
+
+  /** Applique le son effectif d'une page : coupé si l'onglet l'est
+   * MANUELLEMENT (`toggleMute`, persisté par page), OU si la permission
+   * « Son » de ce SITE est réglée sur Bloquer (`sitePermissionsRepo`,
+   * Réglages › Autorisations par site). Cette seconde surcharge n'était
+   * auparavant JAMAIS relue nulle part : `'sound'` existe bien comme
+   * `SitePermissionKind` réglable dans l'UI et bien écrite en base, mais
+   * `toSiteKind`/`decide` (webSession.ts) ne la reconnaissent pas — il n'y a
+   * pas de permission Electron `setPermissionCheckHandler` nommée « sound »
+   * à intercepter, contrairement à caméra/micro/notifications. L'utilisateur
+   * pouvait donc bloquer le son d'un site dans les réglages sans le moindre
+   * effet réel : le réglage semblait actif (case cochée), mais la page
+   * suivante sur ce site jouait le son normalement. Réévaluée à chaque
+   * chargement/navigation de premier niveau (l'origine peut changer), pas
+   * seulement à la création de la vue. */
+  private applyAudioMute(wc: WebContents, url: string, manuallyMuted: boolean): void {
+    let soundBlocked = false
+    try {
+      const origin = new URL(url).origin
+      soundBlocked = sitePermissionsRepo.get(this.activeProfileId, origin, 'sound') === 'block'
+    } catch {
+      // URL sans origine valable (aether://, about:blank…) — aucune surcharge possible.
+    }
+    wc.setAudioMuted(manuallyMuted || soundBlocked)
   }
 
   /** Mémoire (Ko) du processus hébergeant cette page, ou null si non mesurable. */
@@ -766,7 +791,9 @@ export class ViewManager {
 
     const onNavigated = (url: string): void => {
       this.lastCommittedUrl.set(pageId, url)
-      if (pagesRepo.get(pageId)) pagesRepo.updateNavigation(pageId, url)
+      const row = pagesRepo.get(pageId)
+      if (row) pagesRepo.updateNavigation(pageId, url)
+      this.applyAudioMute(wc, url, Boolean(row?.muted))
       // Le drapeau « à un pas de la page d'accueil » N'EST PLUS recalculé ici.
       // Une version précédente le faisait, et c'était LA cause du retour qui
       // ramenait à la recherche précédente : `did-navigate-in-page` se
@@ -1955,6 +1982,7 @@ export class ViewManager {
         if (!this.win.isDestroyed()) this.win.contentView.removeChildView(view)
         this.attached.delete(id)
       }
+      noteWebContentsClosed(view.webContents.id)
       if (!view.webContents.isDestroyed()) view.webContents.close()
       this.views.delete(id)
     }
