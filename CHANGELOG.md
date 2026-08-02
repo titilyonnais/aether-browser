@@ -4,6 +4,22 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.87.0] — 2026-08-02
+
+### Corrigé
+
+- **La connexion à un compte Google restait bloquée malgré les correctifs des 0.82.0/0.83.1.**
+  Ceux-ci corrigeaient un vrai bug (la relation technique dont ces connexions dépendent), mais la
+  cause du blocage lui-même est différente et plus profonde : Google refuse, depuis juillet 2023,
+  toute connexion à un compte Google depuis un moteur Chromium **embarqué** (politique délibérée et
+  documentée, qui vise Electron par nature — Brave/Edge/Vivaldi/Arc y échappent parce qu'ils SONT
+  eux-mêmes de vrais navigateurs autonomes, pas parce qu'ils déguisent quoi que ce soit). Après
+  recherche (qutebrowser, un navigateur indépendant confronté au même blocage pour la même raison,
+  documente ce contournement depuis des années), `accounts.google.com` reçoit désormais un
+  User-Agent Edge dédié — rien que pour ce site précis, jamais pour le reste de la navigation. Ce
+  n'est pas garanti définitif : Google ajuste sa détection de temps en temps (déjà arrivé par le
+  passé à d'autres navigateurs indépendants), un futur ajustement pourra être nécessaire.
+
 ## [0.86.0] — 2026-08-02
 
 ### Corrigé

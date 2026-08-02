@@ -84,6 +84,7 @@ function fakeWebContents() {
       pending.url = null
     }),
     setAudioMuted: vi.fn(),
+    setUserAgent: vi.fn(),
     setZoomFactor: vi.fn(),
     getZoomFactor: vi.fn(() => 1),
     getURL: vi.fn(() => history.entries[history.activeIndex] ?? ''),
@@ -184,7 +185,9 @@ vi.mock('../src/main/previews', () => ({
 }))
 vi.mock('../src/main/webSession', () => ({
   ensurePartitionHardened: vi.fn(),
-  webPartitionForProfile: vi.fn(() => 'persist:test')
+  webPartitionForProfile: vi.fn(() => 'persist:test'),
+  getGoogleAccountsUserAgent: vi.fn(() => 'UA-GOOGLE-EDG'),
+  getPartitionUserAgent: vi.fn(() => 'UA-NORMAL-CHROME')
 }))
 
 const { ViewManager } = await import('../src/main/viewManager')
@@ -664,5 +667,57 @@ describe('ViewManager — permission de site « Son »', () => {
     expect(wc.setAudioMuted).toHaveBeenLastCalledWith(true)
     vm.toggleMute('a')
     expect(wc.setAudioMuted).toHaveBeenLastCalledWith(false)
+  })
+})
+
+describe('ViewManager — User-Agent dédié à accounts.google.com', () => {
+  // Régression : Google refuse toute connexion à un compte Google depuis un
+  // moteur Chromium embarqué (Electron compris), quelle que soit la qualité
+  // du reste du User-Agent — un User-Agent dédié à ce host précis (voir
+  // webSession.ts) doit être posé AVANT que son document ne charge (jamais
+  // après coup : la page lit `navigator.userAgent` dès son premier tour de
+  // boucle), et restauré dès qu'on le quitte.
+  it('pose le User-Agent Google dès la création de la vue si l’URL initiale y mène', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://accounts.google.com/signin')
+    vm.setVisible(['a'])
+
+    expect(contentsOf(vm, 'a').setUserAgent).toHaveBeenCalledWith('UA-GOOGLE-EDG')
+  })
+
+  it('pose le User-Agent normal pour toute autre URL', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://example.com')
+    vm.setVisible(['a'])
+
+    expect(contentsOf(vm, 'a').setUserAgent).toHaveBeenCalledWith('UA-NORMAL-CHROME')
+  })
+
+  it('bascule vers le User-Agent Google puis revient au normal en quittant le host', async () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://example.com')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit('https://example.com')
+    wc.setUserAgent.mockClear()
+
+    await vm.navigate('a', 'https://accounts.google.com/signin')
+    expect(wc.setUserAgent).toHaveBeenLastCalledWith('UA-GOOGLE-EDG')
+
+    wc.__commit('https://accounts.google.com/signin')
+    wc.__clickLink('https://example.com/apres-connexion')
+    expect(wc.setUserAgent).toHaveBeenLastCalledWith('UA-NORMAL-CHROME')
+  })
+
+  it('pose le User-Agent Google sur une VRAIE popup native ouverte vers accounts.google.com', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://example.com')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    const popupWc = { setUserAgent: vi.fn() }
+
+    wc.__emit('did-create-window', { webContents: popupWc }, { url: 'https://accounts.google.com/o/oauth2' })
+
+    expect(popupWc.setUserAgent).toHaveBeenCalledWith('UA-GOOGLE-EDG')
   })
 })

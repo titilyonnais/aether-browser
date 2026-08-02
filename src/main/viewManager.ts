@@ -31,7 +31,12 @@ import { downloadsRepo, pagesRepo, sitePermissionsRepo, type PageRow } from './d
 import { noteMainFrameNavigation, noteWebContentsClosed, siteBlocksPopups } from './contentBlocking'
 import { hidePopoverWindow, showContextMenuPopover } from './popoverWindow'
 import { capturePreview, deletePreview } from './previews'
-import { ensurePartitionHardened, webPartitionForProfile } from './webSession'
+import {
+  ensurePartitionHardened,
+  getGoogleAccountsUserAgent,
+  getPartitionUserAgent,
+  webPartitionForProfile
+} from './webSession'
 
 /** Paliers de zoom façon Chrome (25 % à 500 %) — `setZoomFactor` cible directement
  * un pourcentage exact, contrairement à `setZoomLevel` dont les incréments ne
@@ -602,6 +607,7 @@ export class ViewManager {
     // bouton « retour » ne peut jamais revenir à cette page après avoir
     // recherché/navigué ailleurs depuis le nouvel onglet.
     this.syncStoreShim(row.id, view.webContents, row.url)
+    this.prepareUserAgentFor(view.webContents, row.url)
     const initialLoad = view.webContents.loadURL(row.url).catch(() => undefined)
     this.pendingInitialLoad.set(row.id, initialLoad)
     void initialLoad.then(() => {
@@ -645,6 +651,30 @@ export class ViewManager {
       // URL sans origine valable (aether://, about:blank…) — aucune surcharge possible.
     }
     wc.setAudioMuted(manuallyMuted || soundBlocked)
+  }
+
+  /** À appeler AVANT que `url` ne commence réellement à charger sur `wc`
+   * (`ensureLive`, `navigate`, `will-navigate`, `will-redirect`) — jamais
+   * après coup (`did-navigate`) : le script de la page lit `navigator.userAgent`
+   * dès son tout premier tour de boucle, potentiellement avant qu'un
+   * changement posé APRÈS le commit n'ait pu prendre effet.
+   *
+   * `accounts.google.com` reçoit un User-Agent dédié (voir
+   * `ensurePartitionHardened`, webSession.ts, pour la raison d'être complète :
+   * Google refuse depuis juillet 2023 toute connexion à un compte Google
+   * depuis un moteur Chromium EMBARQUÉ — Electron compris — quel que soit le
+   * soin apporté par ailleurs à l'identification du navigateur). Restauré à
+   * l'identique dès qu'on quitte ce host : sans ce retour, un onglet garderait
+   * l'identité Google pour tout le reste de sa navigation. */
+  private prepareUserAgentFor(wc: WebContents, url: string): void {
+    let host = ''
+    try {
+      host = new URL(url).hostname
+    } catch {
+      return
+    }
+    const googleUa = host === 'accounts.google.com' ? getGoogleAccountsUserAgent(this.activePartition()) : null
+    wc.setUserAgent(googleUa ?? getPartitionUserAgent(this.activePartition()))
   }
 
   /** Mémoire (Ko) du processus hébergeant cette page, ou null si non mesurable. */
@@ -1003,11 +1033,23 @@ export class ViewManager {
       return { action: 'deny' }
     })
 
+    // Popup native créée par Electron juste au-dessus (`overrideBrowserWindowOptions`) —
+    // AVANT que son document ne charge, pour la même raison que
+    // `prepareUserAgentFor` : `accounts.google.com` a besoin de son
+    // User-Agent dédié dès le tout premier chargement.
+    wc.on('did-create-window', (popup, details) => {
+      this.prepareUserAgentFor(popup.webContents, details.url)
+    })
+
     // Redirections automatiques (même catégorie que les popups pour
     // l'utilisateur, « Popups et redirections ») — redirection SERVEUR
     // (302…) uniquement, voir le commentaire de `contentBlocking.ts`.
-    wc.on('will-redirect', (event, _url, _httpResponseCode, _httpStatusText, isMainFrame) => {
+    wc.on('will-redirect', (event, url, _httpResponseCode, _httpStatusText, isMainFrame) => {
       if (!isMainFrame) return
+      // Redirection SERVEUR (302…) vers `accounts.google.com` — motif courant
+      // pour une connexion Google déclenchée depuis une propriété Google
+      // sœur (YouTube, Gmail…) sans passer par `window.open`/`will-navigate`.
+      this.prepareUserAgentFor(wc, url)
       let pageOrigin = ''
       try {
         pageOrigin = new URL(wc.getURL()).origin
@@ -1031,6 +1073,7 @@ export class ViewManager {
       // Posé/retiré ICI, avant le chargement réel — le crochet doit être
       // enregistré via CDP AVANT que le document du Store ne s'exécute.
       this.syncStoreShim(pageId, wc, url)
+      this.prepareUserAgentFor(wc, url)
       if (url.startsWith('mailto:') || url.startsWith('tel:')) {
         event.preventDefault()
         void shell.openExternal(url)
@@ -1593,6 +1636,7 @@ export class ViewManager {
     await this.pendingInitialLoad.get(id)
     if (!this.views.has(id) || this.views.get(id) !== view) return
     this.syncStoreShim(id, view.webContents, url)
+    this.prepareUserAgentFor(view.webContents, url)
     void view.webContents.loadURL(url).catch(() => undefined)
     // Poussé tout de suite (pas d'attente de `did-navigate`) : le bouton
     // « retour » doit s'activer dès cet instant — inutile de le laisser

@@ -12,9 +12,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 function fakeSession() {
+  // `getUserAgent` doit refléter le dernier `setUserAgent` — comme le fait
+  // réellement Electron — sinon `getPartitionUserAgent` (qui relit l'UA de
+  // la session APRÈS le nettoyage fait par `ensurePartitionHardened`) ne
+  // pourrait pas être testée fidèlement.
+  let currentUa =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) aether-browser/0.86.0 Chrome/128.0.6613.36 Electron/32.0.0 Safari/537.36'
   return {
-    getUserAgent: vi.fn(() => 'Mozilla/5.0 Electron/30.0.0 aether-browser/0.80.2'),
-    setUserAgent: vi.fn(),
+    getUserAgent: vi.fn(() => currentUa),
+    setUserAgent: vi.fn((ua: string) => {
+      currentUa = ua
+    }),
     setPermissionCheckHandler: vi.fn(),
     setPermissionRequestHandler: vi.fn(),
     setCertificateVerifyProc: vi.fn(),
@@ -66,7 +74,12 @@ vi.mock('../src/main/windowRegistry', () => ({
   windowContextsForProfile: vi.fn(() => [])
 }))
 
-const { ensurePartitionHardened, releasePrivatePartition } = await import('../src/main/webSession')
+const {
+  ensurePartitionHardened,
+  releasePrivatePartition,
+  getGoogleAccountsUserAgent,
+  getPartitionUserAgent
+} = await import('../src/main/webSession')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -107,5 +120,42 @@ describe('releasePrivatePartition', () => {
     releasePrivatePartition(partition)
     ensurePartitionHardened(partition, 'profile-1')
     expect(fake.setUserAgent).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('getGoogleAccountsUserAgent — contournement du blocage Google des moteurs Chromium embarqués', () => {
+  // Régression : Google refuse depuis juillet 2023 toute connexion à un
+  // compte Google depuis un moteur Chromium EMBARQUÉ (Electron compris),
+  // quelle que soit la qualité du User-Agent « normal » — un correctif déjà
+  // tenté deux fois cette session (window.opener) sans jamais résoudre ce
+  // blocage précis, puisque sa vraie cause est différente. `accounts.google.com`
+  // reçoit un User-Agent Edge dédié, ancré sur la VRAIE version Chrome de la
+  // session (jamais un numéro figé à la main).
+  it('dérive un User-Agent Edge de la vraie version Chrome de la session', () => {
+    const fake = fakeSession()
+    electronMock.session.fromPartition.mockReturnValue(fake)
+    const partition = 'persist:aether-web-profile-1'
+
+    ensurePartitionHardened(partition, 'profile-1')
+
+    const ua = getGoogleAccountsUserAgent(partition)
+    expect(ua).toContain('Chrome/128.0.6613.36')
+    expect(ua).toContain('Edg/128.0.6613.36')
+  })
+
+  it('renvoie null pour une partition pas encore durcie', () => {
+    expect(getGoogleAccountsUserAgent('persist:jamais-durcie')).toBeNull()
+  })
+
+  it('getPartitionUserAgent renvoie le User-Agent normal (sans Edg) pour tout le reste de la navigation', () => {
+    const fake = fakeSession()
+    electronMock.session.fromPartition.mockReturnValue(fake)
+    const partition = 'persist:aether-web-profile-2'
+
+    ensurePartitionHardened(partition, 'profile-2')
+
+    const ua = getPartitionUserAgent(partition)
+    expect(ua).not.toContain('Edg/')
+    expect(ua).not.toContain('Electron/')
   })
 })

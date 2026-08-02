@@ -32,6 +32,28 @@ export function webPartitionForProfile(profileId: ProfileId, isPrivate: boolean)
 
 const hardened = new Set<string>()
 
+/** User-Agent dédié à `accounts.google.com`, par partition — voir le
+ * commentaire dans `ensurePartitionHardened` pour la raison d'être. Calculé
+ * une fois, en même temps que le durcissement de la partition. */
+const googleAccountsUa = new Map<string, string>()
+
+/** `null` si la partition n'est pas encore durcie (ne devrait pas arriver en
+ * usage normal : `ensureLive`, viewManager.ts, durcit toujours la partition
+ * avant de charger quoi que ce soit). */
+export function getGoogleAccountsUserAgent(partition: string): string | null {
+  return googleAccountsUa.get(partition) ?? null
+}
+
+/** User-Agent normal de la partition (celui posé par `ensurePartitionHardened`)
+ * — pour revenir dessus après un passage par `accounts.google.com`, voir
+ * `viewManager.ts`. Un `webContents.setUserAgent(...)` reste posé tant qu'il
+ * n'est pas explicitement changé : sans y revenir, un onglet garderait
+ * l'identité Google pour TOUT le reste de sa navigation après avoir quitté
+ * ce host. */
+export function getPartitionUserAgent(partition: string): string {
+  return session.fromPartition(partition).getUserAgent()
+}
+
 /** Téléchargements en cours, pour permettre l'annulation depuis le renderer. */
 export const liveDownloads = new Map<string, DownloadItem>()
 
@@ -195,6 +217,28 @@ export function ensurePartitionHardened(partition: string, profileId: ProfileId)
     .replace(/\sElectron\/[\d.]+/i, '')
     .replace(/\saether-browser\/[\d.]+/i, '')
   webSession.setUserAgent(cleanUa)
+
+  // Depuis le 24 juillet 2023, Google refuse catégoriquement toute connexion
+  // à un compte Google (« Ce navigateur ou cette application ne sont
+  // peut-être pas sécurisés ») depuis un « embedded webview » — une politique
+  // délibérée et documentée (developers.googleblog.com), pas une simple
+  // détection de chaîne User-Agent que corriger `cleanUa` ci-dessus
+  // suffirait à contourner : elle vise spécifiquement les applications qui
+  // EMBARQUENT un moteur Chromium (Electron compris) plutôt que d'ÊTRE un
+  // navigateur autonome reconnu — Brave/Edge/Vivaldi/Arc y échappent
+  // uniquement parce qu'ils SONT eux-mêmes de vrais navigateurs Chromium
+  // autonomes, pas parce qu'ils déguisent quoi que ce soit. qutebrowser (Qt
+  // WebEngine, également basé sur Chromium, confronté au même blocage pour
+  // les mêmes raisons) documente depuis des années le seul contournement qui
+  // fonctionne en pratique : présenter un User-Agent différent RIEN QUE pour
+  // `accounts.google.com`, jamais pour le reste de la navigation. Ancré sur
+  // la version Chrome RÉELLE de `cleanUa` (jamais un numéro figé à la main,
+  // qui se périmerait comme la chaîne Firefox de qutebrowser a dû l'être
+  // plusieurs fois) plutôt que Firefox : Edge partage le même moteur Blink
+  // que nous, donc aucune incohérence de comportement JS ne peut trahir la
+  // différence, contrairement à revendiquer Gecko en restant Blink en
+  // interne.
+  googleAccountsUa.set(partition, `${cleanUa} Edg/${/Chrome\/([\d.]+)/.exec(cleanUa)?.[1] ?? '128.0.0.0'}`)
 
   // `setPermissionCheckHandler` DOIT rester synchrone (Electron n'attend pas
   // de promesse ici) — jamais d'invite, toujours `decide()` tel quel.
@@ -371,6 +415,7 @@ export function ensurePartitionHardened(partition: string, profileId: ProfileId)
  * contenu et retirer l'entrée de `hardened` est le maximum possible. */
 export function releasePrivatePartition(partition: string): void {
   hardened.delete(partition)
+  googleAccountsUa.delete(partition)
   void session
     .fromPartition(partition)
     .clearStorageData()
