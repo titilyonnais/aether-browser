@@ -46,6 +46,12 @@ const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.
 /** Hôtes du vrai Chrome Web Store — seuls hôtes où le crochet ci-dessous s'injecte. */
 const STORE_HOSTS = new Set(['chromewebstore.google.com', 'chrome.google.com'])
 
+/** Point d'entrée générique de connexion Google — jamais lié à une requête
+ * précise (contrairement à la page de refus elle-même, voir
+ * `checkGoogleSignInBlocked`), donc jamais susceptible de renvoyer une
+ * erreur « 400 » une fois rouverte dans un autre navigateur. */
+const GOOGLE_SIGNIN_ENTRY_POINT = 'https://accounts.google.com/'
+
 function isStoreHost(url: string): boolean {
   try {
     return STORE_HOSTS.has(new URL(url).hostname)
@@ -702,7 +708,15 @@ export class ViewManager {
     }
     if (parsed.hostname !== 'accounts.google.com') return
     const blocked = parsed.pathname.includes('/signin/rejected') || parsed.searchParams.get('error') === 'disallowed_useragent'
-    if (blocked) this.delegate.onGoogleSignInBlocked(pageId, url)
+    // La page de refus elle-même n'est PAS une page réutilisable — elle
+    // porte des jetons liés à la requête/session qui a échoué (`dsh`, `ec`…)
+    // et Google répond « 400, requête incorrecte » si on la rouvre telle
+    // quelle ailleurs (constaté en pratique : rouvrir l'URL de refus dans un
+    // vrai navigateur système donne cette 400, pas un écran de connexion).
+    // `GOOGLE_SIGNIN_ENTRY_POINT` est le point d'entrée générique et STABLE
+    // de Google (jamais lié à une requête précise), qui invite systématiquement
+    // à se connecter sans jamais pouvoir renvoyer cette erreur.
+    if (blocked) this.delegate.onGoogleSignInBlocked(pageId, GOOGLE_SIGNIN_ENTRY_POINT)
   }
 
   /** Mémoire (Ko) du processus hébergeant cette page, ou null si non mesurable. */

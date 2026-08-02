@@ -4,6 +4,16 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.88.1] — 2026-08-02
+
+### Corrigé
+
+- **Le bouton « Ouvrir dans le navigateur par défaut » de la bannière Google (0.88.0) menait à une
+  erreur « 400 » de Google.** Cause : l'URL transmise était celle de la page de refus elle-même,
+  qui porte des jetons liés à la requête précise qui a échoué — invalides une fois rouverts
+  ailleurs. La bannière ouvre désormais le point d'entrée générique de connexion Google
+  (`accounts.google.com`), toujours valide.
+
 ## [0.88.0] — 2026-08-02
 
 ### Ajouté

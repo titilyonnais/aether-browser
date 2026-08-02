@@ -729,17 +729,18 @@ describe('ViewManager — détection du refus explicite de Google', () => {
   // plusieurs signaux au-delà du seul User-Agent. Quand le blocage survient
   // malgré tout, ÆTHER doit au moins le détecter pour proposer d'ouvrir la
   // page dans le navigateur par défaut (seul contournement fiable connu).
-  it('détecte le chemin dédié signin/rejected et notifie le délégué', () => {
+  it('détecte le chemin dédié signin/rejected et notifie le délégué avec le point d’entrée stable', () => {
+    // La page de refus elle-même n'est PAS réutilisable (jetons liés à la
+    // requête qui a échoué) : Google répond « 400 » si on la rouvre telle
+    // quelle dans un autre navigateur — le délégué reçoit donc le point
+    // d'entrée générique de connexion Google, jamais l'URL de refus brute.
     const vm = new ViewManager(fakeWin() as never, delegate)
     seedRow('a', 'https://accounts.google.com/v3/signin/identifier')
     vm.setVisible(['a'])
 
     contentsOf(vm, 'a').__commit('https://accounts.google.com/v3/signin/rejected')
 
-    expect(delegate.onGoogleSignInBlocked).toHaveBeenCalledWith(
-      'a',
-      'https://accounts.google.com/v3/signin/rejected'
-    )
+    expect(delegate.onGoogleSignInBlocked).toHaveBeenCalledWith('a', 'https://accounts.google.com/')
   })
 
   it('détecte error=disallowed_useragent sur le flux OAuth', () => {
@@ -751,10 +752,7 @@ describe('ViewManager — détection du refus explicite de Google', () => {
       'https://accounts.google.com/signin/oauth/error?error=disallowed_useragent'
     )
 
-    expect(delegate.onGoogleSignInBlocked).toHaveBeenCalledWith(
-      'a',
-      'https://accounts.google.com/signin/oauth/error?error=disallowed_useragent'
-    )
+    expect(delegate.onGoogleSignInBlocked).toHaveBeenCalledWith('a', 'https://accounts.google.com/')
   })
 
   it('ne notifie rien pour une page de connexion Google normale (pas de refus)', () => {
@@ -793,9 +791,6 @@ describe('ViewManager — détection du refus explicite de Google', () => {
     wc.__emit('did-create-window', { webContents: popupWc }, { url: 'https://accounts.google.com/o/oauth2' })
     navigateHandler?.(null, 'https://accounts.google.com/v3/signin/rejected')
 
-    expect(delegate.onGoogleSignInBlocked).toHaveBeenCalledWith(
-      'a',
-      'https://accounts.google.com/v3/signin/rejected'
-    )
+    expect(delegate.onGoogleSignInBlocked).toHaveBeenCalledWith('a', 'https://accounts.google.com/')
   })
 })
