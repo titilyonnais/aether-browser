@@ -132,13 +132,24 @@ function fakeWebContents() {
       }),
       goForward: vi.fn()
     },
-    debugger: {
-      isAttached: vi.fn(() => false),
-      attach: vi.fn(),
-      detach: vi.fn(),
-      on: vi.fn(),
-      sendCommand: vi.fn(async () => ({}))
-    }
+    debugger: (() => {
+      // `isAttached` doit refléter le dernier `attach`/`detach` — comme le
+      // fait réellement Electron — sinon `detachDebuggerIfUnused` (partagé
+      // entre le crochet Store et le correctif WebAuthn Google) ne peut pas
+      // être testé fidèlement.
+      let attached = false
+      return {
+        isAttached: vi.fn(() => attached),
+        attach: vi.fn(() => {
+          attached = true
+        }),
+        detach: vi.fn(() => {
+          attached = false
+        }),
+        on: vi.fn(),
+        sendCommand: vi.fn(async () => ({}))
+      }
+    })()
   }
 }
 
@@ -537,6 +548,32 @@ describe('ViewManager — savePage/captureScreenshot ne plantent jamais le proce
   })
 })
 
+/** Fausse `WebContents` d'une popup native (`overrideBrowserWindowOptions`,
+ * `did-create-window`) — surface minimale mais complète (debugger inclus,
+ * même patron stateful que `fakeWebContents` ci-dessus) pour couvrir le
+ * User-Agent dédié, la détection de refus, ET le correctif WebAuthn, qui
+ * s'appliquent tous aux popups de connexion Google. */
+function fakePopupWebContents(onOverride?: ReturnType<typeof vi.fn>) {
+  let attached = false
+  return {
+    id: 999,
+    setUserAgent: vi.fn(),
+    getURL: vi.fn(() => 'https://accounts.google.com/o/oauth2'),
+    executeJavaScript: vi.fn(async () => null),
+    debugger: {
+      isAttached: vi.fn(() => attached),
+      attach: vi.fn(() => {
+        attached = true
+      }),
+      detach: vi.fn(() => {
+        attached = false
+      }),
+      sendCommand: vi.fn(async () => ({}))
+    },
+    on: onOverride ?? vi.fn()
+  }
+}
+
 describe('ViewManager — setWindowOpenHandler', () => {
   // Régression : un VRAI popup (`window.open(url, nom, 'width=...')`,
   // `disposition === 'new-window'`) était jusqu'ici toujours refusé puis
@@ -715,7 +752,7 @@ describe('ViewManager — User-Agent dédié à accounts.google.com', () => {
     seedRow('a', 'https://example.com')
     vm.setVisible(['a'])
     const wc = contentsOf(vm, 'a')
-    const popupWc = { setUserAgent: vi.fn(), on: vi.fn() }
+    const popupWc = fakePopupWebContents()
 
     wc.__emit('did-create-window', { webContents: popupWc }, { url: 'https://accounts.google.com/o/oauth2' })
 
@@ -781,12 +818,11 @@ describe('ViewManager — détection du refus explicite de Google', () => {
     vm.setVisible(['a'])
     const wc = contentsOf(vm, 'a')
     let navigateHandler: ((e: unknown, url: string) => void) | undefined
-    const popupWc = {
-      setUserAgent: vi.fn(),
-      on: vi.fn((event: string, handler: (e: unknown, url: string) => void) => {
+    const popupWc = fakePopupWebContents(
+      vi.fn((event: string, handler: (e: unknown, url: string) => void) => {
         if (event === 'did-navigate') navigateHandler = handler
       })
-    }
+    )
 
     wc.__emit('did-create-window', { webContents: popupWc }, { url: 'https://accounts.google.com/o/oauth2' })
     navigateHandler?.(null, 'https://accounts.google.com/v3/signin/rejected')
@@ -802,50 +838,66 @@ describe('ViewManager — suppression du défi WebAuthn/passkey sur accounts.goo
   // fenêtre ÆTHER. `navigator.credentials.get({publicKey…}/{identity…})` doit
   // être neutralisé sur ce host précis, jamais ailleurs (ne doit pas casser
   // les passkeys d'un autre site qui les utilise légitimement).
-  it('injecte le correctif au dom-ready sur accounts.google.com', () => {
+  //
+  // Régression du 0.89.0 : une première version injectait au `dom-ready`,
+  // trop tard si la page capture sa PROPRE référence à
+  // `navigator.credentials.get` dans un script synchrone de `<head>` (avant
+  // `dom-ready`) — l'invite restait alors présente en pratique malgré le
+  // correctif. Comme `WEBSTORE_HOOK_SCRIPT`, l'injection passe désormais par
+  // CDP (`Page.addScriptToEvaluateOnNewDocument`), AVANT le tout premier
+  // script de la page, quelle que soit sa façon de capturer la référence.
+  it('enregistre le correctif via CDP dès la création de la vue si l’URL initiale y mène', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://accounts.google.com/v3/signin/identifier')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+
+    expect(wc.debugger.attach).toHaveBeenCalledWith('1.3')
+    expect(wc.debugger.sendCommand).toHaveBeenCalledWith(
+      'Page.addScriptToEvaluateOnNewDocument',
+      { source: expect.stringContaining('__aetherGoogleAuthShimmed') }
+    )
+    // Rattrapage pour le document COURANT — le CDP ci-dessus ne s'applique
+    // qu'aux PROCHAINS documents.
+    expect(wc.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining('__aetherGoogleAuthShimmed'))
+  })
+
+  it("n'enregistre rien pour un autre site (ne doit pas casser un passkey légitime ailleurs)", () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://example.com')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+
+    expect(wc.debugger.attach).not.toHaveBeenCalled()
+    expect(wc.executeJavaScript).not.toHaveBeenCalledWith(expect.stringContaining('__aetherGoogleAuthShimmed'))
+  })
+
+  it('retire le correctif (et détache le débogueur) en quittant accounts.google.com', async () => {
     const vm = new ViewManager(fakeWin() as never, delegate)
     seedRow('a', 'https://accounts.google.com/v3/signin/identifier')
     vm.setVisible(['a'])
     const wc = contentsOf(vm, 'a')
     wc.__commit('https://accounts.google.com/v3/signin/identifier')
-    wc.executeJavaScript.mockClear()
 
-    wc.__emit('dom-ready')
+    await vm.navigate('a', 'https://example.com')
 
-    expect(wc.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining('__aetherGoogleAuthShimmed'))
+    expect(wc.debugger.detach).toHaveBeenCalled()
   })
 
-  it("n'injecte rien sur un autre site (ne doit pas casser un passkey légitime ailleurs)", () => {
+  it('enregistre aussi le correctif dans une popup native de connexion Google, via CDP', () => {
     const vm = new ViewManager(fakeWin() as never, delegate)
     seedRow('a', 'https://example.com')
     vm.setVisible(['a'])
     const wc = contentsOf(vm, 'a')
-    wc.__commit('https://example.com')
-    wc.executeJavaScript.mockClear()
-
-    wc.__emit('dom-ready')
-
-    expect(wc.executeJavaScript).not.toHaveBeenCalledWith(expect.stringContaining('__aetherGoogleAuthShimmed'))
-  })
-
-  it('injecte aussi le correctif dans une popup native de connexion Google', () => {
-    const vm = new ViewManager(fakeWin() as never, delegate)
-    seedRow('a', 'https://example.com')
-    vm.setVisible(['a'])
-    const wc = contentsOf(vm, 'a')
-    let domReadyHandler: (() => void) | undefined
-    const popupWc = {
-      setUserAgent: vi.fn(),
-      getURL: vi.fn(() => 'https://accounts.google.com/o/oauth2'),
-      executeJavaScript: vi.fn(async () => null),
-      on: vi.fn((event: string, handler: () => void) => {
-        if (event === 'dom-ready') domReadyHandler = handler
-      })
-    }
+    const popupWc = fakePopupWebContents()
 
     wc.__emit('did-create-window', { webContents: popupWc }, { url: 'https://accounts.google.com/o/oauth2' })
-    domReadyHandler?.()
 
+    expect(popupWc.debugger.attach).toHaveBeenCalledWith('1.3')
+    expect(popupWc.debugger.sendCommand).toHaveBeenCalledWith(
+      'Page.addScriptToEvaluateOnNewDocument',
+      { source: expect.stringContaining('__aetherGoogleAuthShimmed') }
+    )
     expect(popupWc.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining('__aetherGoogleAuthShimmed'))
   })
 })

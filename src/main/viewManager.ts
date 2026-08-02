@@ -69,12 +69,18 @@ const GOOGLE_SIGNIN_ENTRY_POINT = 'https://accounts.google.com/'
  * navigateur sans lecteur de clé de sécurité disponible : Google retombe
  * alors sur la saisie du mot de passe, sans jamais solliciter Windows.
  *
- * Posé au `dom-ready` (pas besoin du CDP `Page.addScriptToEvaluateOnNewDocument`
- * comme `WEBSTORE_HOOK_SCRIPT` ci-dessus) : contrairement au bouton du Store,
- * qui se décide automatiquement dès le chargement, ce défi n'est déclenché
- * QUE par une interaction de l'utilisateur (saisir l'e-mail puis valider) —
- * `dom-ready` a largement le temps de s'exécuter avant que l'utilisateur
- * n'ait pu cliquer quoi que ce soit. */
+ * D'ABORD posé au `dom-ready` (0.89.0) en pariant que, ce défi n'étant
+ * déclenché QUE par une interaction de l'utilisateur (saisir l'e-mail puis
+ * valider), il y aurait largement le temps de s'exécuter avant que
+ * l'utilisateur n'ait pu cliquer quoi que ce soit — FAUX EN PRATIQUE (invite
+ * toujours là) : le pari ignorait qu'une page peut capturer sa PROPRE
+ * référence à `navigator.credentials.get` très tôt (un script synchrone dans
+ * `<head>`, avant même `DOMContentLoaded`/`dom-ready`) sans jamais la relire —
+ * notre substitution posée après coup n'était alors JAMAIS ce que le code de
+ * Google appelait réellement au moment du clic. Même corrigé, exactement
+ * comme `WEBSTORE_HOOK_SCRIPT` : CDP `Page.addScriptToEvaluateOnNewDocument`
+ * pour s'exécuter AVANT le tout premier script de la page, quelle que soit sa
+ * façon de capturer la référence. */
 const GOOGLE_AUTH_SHIM = `(() => {
   if (window.__aetherGoogleAuthShimmed) return
   window.__aetherGoogleAuthShimmed = true
@@ -447,6 +453,15 @@ export class ViewManager {
   /** Identifiant CDP du dernier script enregistré par page — pour le retirer
    * avant d'en enregistrer un nouveau (évite l'accumulation sur rechargements). */
   private storeShimScriptIds = new Map<PageId, string>()
+  /** Même patron que `storeShimHosts`/`storeShimScriptIds` ci-dessus, pour
+   * `GOOGLE_AUTH_SHIM` (voir plus bas) — mais indexé par `WebContents`, pas
+   * `PageId` : contrairement au crochet Store, celui-ci s'applique AUSSI aux
+   * popups natives de connexion Google (une vraie fenêtre Electron séparée,
+   * jamais gérée par ÆTHER comme une « page », donc sans `PageId`).
+   * `detachDebuggerIfUnused` ne détache le `wc.debugger` partagé que si NI
+   * le crochet Store NI celui-ci n'en ont plus besoin pour ce `wc`. */
+  private googleAuthShimWebContents = new WeakSet<WebContents>()
+  private googleAuthShimScriptIds = new WeakMap<WebContents, string>()
   // ─── DevTools ancrées ────────────────────────────────────────────────────
   // Vraiment EMBARQUÉES dans la fenêtre ÆTHER (`WebContents.setDevToolsWebContents`)
   // — PAS le simple `openDevTools({mode})`, qui ignore ce mode pour une
@@ -657,6 +672,7 @@ export class ViewManager {
     // bouton « retour » ne peut jamais revenir à cette page après avoir
     // recherché/navigué ailleurs depuis le nouvel onglet.
     this.syncStoreShim(row.id, view.webContents, row.url)
+    this.syncGoogleAuthShim(row.id, view.webContents, row.url)
     this.prepareUserAgentFor(view.webContents, row.url)
     const initialLoad = view.webContents.loadURL(row.url).catch(() => undefined)
     this.pendingInitialLoad.set(row.id, initialLoad)
@@ -926,6 +942,7 @@ export class ViewManager {
       // crochet en quittant le Store — `will-navigate` ci-dessous couvre déjà
       // le cas le plus courant (lien cliqué), en amont du chargement réel.
       this.syncStoreShim(pageId, wc, url)
+      this.syncGoogleAuthShim(pageId, wc, url)
     }
     wc.on('did-navigate', (_e, url) => onNavigated(url))
     wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
@@ -986,14 +1003,6 @@ export class ViewManager {
     // entre origines — comme le « zoom par défaut » des réglages de Chrome).
     wc.on('dom-ready', () => {
       wc.setZoomFactor(getSettings().defaultZoom)
-      // Voir le commentaire de `GOOGLE_AUTH_SHIM` plus haut.
-      let host = ''
-      try {
-        host = new URL(wc.getURL()).hostname
-      } catch {
-        // Laisse passer, en échec ouvert.
-      }
-      if (host === 'accounts.google.com') void wc.executeJavaScript(GOOGLE_AUTH_SHIM).catch(() => {})
     })
 
     // Notifie le renderer du niveau de zoom réel (pourcentage) — affiché
@@ -1129,24 +1138,18 @@ export class ViewManager {
     // User-Agent dédié dès le tout premier chargement.
     wc.on('did-create-window', (popup, details) => {
       this.prepareUserAgentFor(popup.webContents, details.url)
+      // AVANT que le document ne charge — CDP a besoin de ce délai pour
+      // s'enregistrer avant le tout premier script de la page (voir
+      // `GOOGLE_AUTH_SHIM`/`ensureGoogleAuthShim`).
+      const popupShimKey = `popup:${popup.webContents.id}`
+      this.syncGoogleAuthShim(popupShimKey, popup.webContents, details.url)
       // Cette popup est une VRAIE fenêtre Electron séparée (`overrideBrowserWindowOptions`
       // plus haut), jamais câblée par `wire()` — sans cet écouteur dédié, un
       // refus de Google DANS la popup (le cas le plus courant : les flux par
       // popup, cf. `disposition === 'new-window'`) ne serait jamais détecté.
       popup.webContents.on('did-navigate', (_e, navigatedUrl) => {
         this.checkGoogleSignInBlocked(pageId, navigatedUrl)
-      })
-      // Même raison d'être que dans `wire()` — voir `GOOGLE_AUTH_SHIM`.
-      popup.webContents.on('dom-ready', () => {
-        let popupHost = ''
-        try {
-          popupHost = new URL(popup.webContents.getURL()).hostname
-        } catch {
-          // Laisse passer, en échec ouvert.
-        }
-        if (popupHost === 'accounts.google.com') {
-          void popup.webContents.executeJavaScript(GOOGLE_AUTH_SHIM).catch(() => {})
-        }
+        this.syncGoogleAuthShim(popupShimKey, popup.webContents, navigatedUrl)
       })
     })
 
@@ -1182,6 +1185,7 @@ export class ViewManager {
       // Posé/retiré ICI, avant le chargement réel — le crochet doit être
       // enregistré via CDP AVANT que le document du Store ne s'exécute.
       this.syncStoreShim(pageId, wc, url)
+      this.syncGoogleAuthShim(pageId, wc, url)
       this.prepareUserAgentFor(wc, url)
       if (url.startsWith('mailto:') || url.startsWith('tel:')) {
         event.preventDefault()
@@ -1600,6 +1604,73 @@ export class ViewManager {
     void wc.executeJavaScript(WEBSTORE_HOOK_SCRIPT).catch(() => {})
   }
 
+  /** Même patron que `syncStoreShim`, pour `GOOGLE_AUTH_SHIM` — appelé aux
+   * mêmes points d'entrée (`ensureLive`, `navigate`, `will-navigate`,
+   * `onNavigated`), PLUS `did-create-window` pour les popups natives de
+   * connexion Google (jamais câblées par `wire()`). */
+  private syncGoogleAuthShim(pageId: PageId, wc: WebContents, url: string): void {
+    let host = ''
+    try {
+      host = new URL(url).hostname
+    } catch {
+      // Laisse passer, en échec ouvert.
+    }
+    if (host === 'accounts.google.com') this.ensureGoogleAuthShim(wc)
+    else this.teardownGoogleAuthShim(pageId, wc)
+  }
+
+  private ensureGoogleAuthShim(wc: WebContents): void {
+    this.googleAuthShimWebContents.add(wc)
+    try {
+      if (!wc.debugger.isAttached()) wc.debugger.attach('1.3')
+      const oldScriptId = this.googleAuthShimScriptIds.get(wc)
+      const reattach = (): void => {
+        void wc.debugger
+          .sendCommand('Page.addScriptToEvaluateOnNewDocument', { source: GOOGLE_AUTH_SHIM })
+          .then((result) => {
+            const identifier = (result as { identifier?: string } | undefined)?.identifier
+            if (identifier) this.googleAuthShimScriptIds.set(wc, identifier)
+          })
+          .catch(() => {})
+      }
+      if (oldScriptId) {
+        void wc.debugger
+          .sendCommand('Page.removeScriptToEvaluateOnNewDocument', { identifier: oldScriptId })
+          .catch(() => {})
+          .then(reattach)
+      } else {
+        reattach()
+      }
+    } catch {
+      // CDP indisponible — le rattrapage executeJavaScript ci-dessous reste le
+      // seul mécanisme pour ce chargement (imparfait : peut arriver après que
+      // Google ait déjà capturé sa propre référence à
+      // `navigator.credentials.get`, mais mieux que rien).
+    }
+    void wc.executeJavaScript(GOOGLE_AUTH_SHIM).catch(() => {})
+  }
+
+  private teardownGoogleAuthShim(pageId: PageId, wc: WebContents): void {
+    if (!this.googleAuthShimWebContents.has(wc)) return
+    this.googleAuthShimWebContents.delete(wc)
+    this.googleAuthShimScriptIds.delete(wc)
+    this.detachDebuggerIfUnused(pageId, wc)
+  }
+
+  /** `wc.debugger` est PARTAGÉ entre le crochet Store (indexé par `PageId`) et
+   * celui-ci (indexé par `WebContents`) — ne le détache que si NI L'UN NI
+   * L'AUTRE n'en a plus besoin pour ce `wc`, sinon le premier à quitter son
+   * host coupe le CDP sous les pieds du second. */
+  private detachDebuggerIfUnused(pageId: PageId, wc: WebContents): void {
+    if (this.storeShimHosts.has(pageId)) return
+    if (this.googleAuthShimWebContents.has(wc)) return
+    try {
+      if (wc.debugger.isAttached()) wc.debugger.detach()
+    } catch {
+      // Déjà détaché (ex. page fermée entretemps) — sans conséquence.
+    }
+  }
+
   /** Ouvre/bascule les DevTools de cette page selon le réglage actuel
    * (Réglages › Système). `'detach'` reste une vraie fenêtre séparée, gérée
    * entièrement par Electron. Les 3 modes ancrés créent NOUS-MÊMES la
@@ -1703,11 +1774,7 @@ export class ViewManager {
     if (!this.storeShimHosts.has(pageId)) return
     this.storeShimHosts.delete(pageId)
     this.storeShimScriptIds.delete(pageId)
-    try {
-      if (wc.debugger.isAttached()) wc.debugger.detach()
-    } catch {
-      // Déjà détaché (ex. page fermée entretemps) — sans conséquence.
-    }
+    this.detachDebuggerIfUnused(pageId, wc)
   }
 
   async navigate(id: PageId, url: string): Promise<void> {
@@ -1745,6 +1812,7 @@ export class ViewManager {
     await this.pendingInitialLoad.get(id)
     if (!this.views.has(id) || this.views.get(id) !== view) return
     this.syncStoreShim(id, view.webContents, url)
+    this.syncGoogleAuthShim(id, view.webContents, url)
     this.prepareUserAgentFor(view.webContents, url)
     void view.webContents.loadURL(url).catch(() => undefined)
     // Poussé tout de suite (pas d'attente de `did-navigate`) : le bouton

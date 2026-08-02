@@ -4,6 +4,19 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.90.0] — 2026-08-02
+
+### Corrigé
+
+- **L'invite Windows Hello sur la page de connexion Google persistait malgré la 0.89.0.** Cause :
+  le correctif s'injectait au `dom-ready`, en pariant que ce défi n'étant déclenché que par une
+  interaction (saisir l'e-mail puis valider), l'injection aurait largement le temps de s'exécuter
+  avant — pari faux en pratique, la page pouvant capturer sa propre référence à
+  `navigator.credentials.get` dans un script exécuté avant même `dom-ready`. Injection refaite via
+  CDP (`Page.addScriptToEvaluateOnNewDocument`), la même technique déjà utilisée pour le crochet du
+  Chrome Web Store — s'exécute avant le tout premier script de la page, quelle que soit sa façon de
+  capturer la référence.
+
 ## [0.89.0] — 2026-08-02
 
 ### Corrigé
