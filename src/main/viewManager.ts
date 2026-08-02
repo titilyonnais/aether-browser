@@ -1196,6 +1196,35 @@ export class ViewManager {
       }
       if (pageOrigin && siteBlocksPopups(this.activeProfileId, pageOrigin)) {
         event.preventDefault()
+        return
+      }
+      // Signalé par l'utilisateur : un clic « Se connecter » depuis YouTube
+      // passe par ICI (redirection SERVEUR), jamais par `will-navigate`
+      // (lien HTML classique) — ce chemin ne posait donc jamais le shim
+      // avant que la page Google ne s'exécute, exactement le bug déjà
+      // corrigé côté `will-navigate` (0.90.1), pour ce quatrième point
+      // d'entrée resté ouvert. Sémantique DIFFÉRENTE ici : `will-redirect` se
+      // déclenche PENDANT une navigation déjà en vol (requête déjà envoyée,
+      // réponse 3xx déjà reçue) — `preventDefault()` n'annule que le SUIVI de
+      // cette redirection précise, pas la navigation d'origine (doc
+      // Electron) ; `wc.stop()` la termine proprement (résolu en
+      // `ERR_ABORTED`, déjà ignoré comme bénin par `did-fail-load`
+      // ci-dessus). Reprise nous-mêmes vers `url` (la cible de la
+      // redirection, jamais `wc.getURL()` qui pointe encore sur la page de
+      // départ) une fois le shim confirmé posé par CDP — `wc.loadURL`
+      // n'émettant jamais `will-redirect` pour ses propres chargements,
+      // aucune boucle possible même sur une chaîne de redirections
+      // multi-hop.
+      let navHost = ''
+      try {
+        navHost = new URL(url).hostname
+      } catch {
+        return
+      }
+      if (navHost === 'accounts.google.com') {
+        event.preventDefault()
+        wc.stop()
+        void this.syncGoogleAuthShim(pageId, wc, url).then(() => wc.loadURL(url)).catch(() => undefined)
       }
     })
 

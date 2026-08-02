@@ -6,6 +6,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PageRow } from '../src/main/db/repositories'
+import { siteBlocksPopups } from '../src/main/contentBlocking'
 
 /** Fabrique un faux `WebContents` — surface large mais purement passive pour
  * les tests LRU/éviction, qui n'invoquent jamais les callbacks enregistrées
@@ -922,6 +923,74 @@ describe('ViewManager — suppression du défi WebAuthn/passkey sur accounts.goo
     await flushPromises()
 
     expect(wc.loadURL).toHaveBeenCalledWith('https://accounts.google.com/v3/signin/identifier')
+  })
+
+  it('reprend elle-même une redirection SERVEUR vers accounts.google.com après confirmation du correctif', async () => {
+    // Signalé par l'utilisateur : un clic « Se connecter » depuis YouTube
+    // passe par une redirection 302 (will-redirect), pas par un lien HTML
+    // classique (will-navigate) — ce chemin précis ne posait jamais le
+    // correctif avant que la page Google ne s'exécute. Sémantique
+    // `will-redirect` différente de `will-navigate` : la navigation
+    // d'origine est déjà « en vol », `wc.stop()` doit la terminer avant la
+    // reprise manuelle.
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://youtube.com')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit('https://youtube.com')
+    wc.loadURL.mockClear()
+
+    let prevented = false
+    wc.__emit(
+      'will-redirect',
+      { preventDefault: () => (prevented = true) },
+      'https://accounts.google.com/v3/signin/identifier',
+      302,
+      'Found',
+      true
+    )
+
+    expect(prevented).toBe(true)
+    expect(wc.stop).toHaveBeenCalled()
+    expect(wc.loadURL).not.toHaveBeenCalled()
+
+    await flushPromises()
+
+    expect(wc.loadURL).toHaveBeenCalledWith('https://accounts.google.com/v3/signin/identifier')
+  })
+
+  it('ne touche pas à une redirection vers accounts.google.com déjà bloquée par « Popups et redirections »', async () => {
+    // Non-régression : le `return` ajouté après le blocage popups (pour
+    // enchaîner sur la branche Google) ne doit pas changer ce comportement
+    // déjà existant — un site pour lequel l'utilisateur a bloqué les
+    // redirections doit continuer à bloquer aussi une redirection vers
+    // accounts.google.com.
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://youtube.com')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit('https://youtube.com')
+    // Laisse le chargement initial (différé depuis la 0.90.1, voir le test
+    // ci-dessus) s'exécuter AVANT de réinitialiser le mock — sinon il se
+    // déclenche plus tard et fausse l'assertion finale.
+    await flushPromises()
+    wc.loadURL.mockClear()
+    vi.mocked(siteBlocksPopups).mockReturnValueOnce(true)
+
+    let prevented = false
+    wc.__emit(
+      'will-redirect',
+      { preventDefault: () => (prevented = true) },
+      'https://accounts.google.com/v3/signin/identifier',
+      302,
+      'Found',
+      true
+    )
+    await flushPromises()
+
+    expect(prevented).toBe(true)
+    expect(wc.stop).not.toHaveBeenCalled()
+    expect(wc.loadURL).not.toHaveBeenCalled()
   })
 
   it("n'enregistre rien pour un autre site (ne doit pas casser un passkey légitime ailleurs)", () => {

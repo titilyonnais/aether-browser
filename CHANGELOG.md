@@ -4,6 +4,18 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.91.0] — 2026-08-02
+
+### Corrigé
+
+- **L'invite Windows Hello persistait malgré la 0.90.1, précisément lors d'un clic sur « Se
+  connecter » depuis YouTube.** Cause trouvée par relecture ciblée : ce clic redirige vers
+  `accounts.google.com` par une redirection **serveur** (302), pas par un lien HTML classique — un
+  chemin distinct (`will-redirect`) qui ne posait jamais le correctif avant que la page Google ne
+  s'exécute, exactement le même bug déjà corrigé pour les liens cliqués (`will-navigate`, 0.90.1)
+  mais resté ouvert pour ce quatrième point d'entrée. Corrigé avec la même logique, adaptée à la
+  sémantique propre de cet évènement.
+
 ## [0.90.1] — 2026-08-02
 
 ### Corrigé
