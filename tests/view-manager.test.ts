@@ -794,3 +794,58 @@ describe('ViewManager — détection du refus explicite de Google', () => {
     expect(delegate.onGoogleSignInBlocked).toHaveBeenCalledWith('a', 'https://accounts.google.com/')
   })
 })
+
+describe('ViewManager — suppression du défi WebAuthn/passkey sur accounts.google.com', () => {
+  // Signalé par l'utilisateur : une invite Windows native (« Choisir une clé
+  // d'accès ») s'ouvrait systématiquement juste après avoir saisi son adresse
+  // e-mail sur la page de connexion Google, bloquant le clavier de toute la
+  // fenêtre ÆTHER. `navigator.credentials.get({publicKey…}/{identity…})` doit
+  // être neutralisé sur ce host précis, jamais ailleurs (ne doit pas casser
+  // les passkeys d'un autre site qui les utilise légitimement).
+  it('injecte le correctif au dom-ready sur accounts.google.com', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://accounts.google.com/v3/signin/identifier')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit('https://accounts.google.com/v3/signin/identifier')
+    wc.executeJavaScript.mockClear()
+
+    wc.__emit('dom-ready')
+
+    expect(wc.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining('__aetherGoogleAuthShimmed'))
+  })
+
+  it("n'injecte rien sur un autre site (ne doit pas casser un passkey légitime ailleurs)", () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://example.com')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit('https://example.com')
+    wc.executeJavaScript.mockClear()
+
+    wc.__emit('dom-ready')
+
+    expect(wc.executeJavaScript).not.toHaveBeenCalledWith(expect.stringContaining('__aetherGoogleAuthShimmed'))
+  })
+
+  it('injecte aussi le correctif dans une popup native de connexion Google', () => {
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://example.com')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    let domReadyHandler: (() => void) | undefined
+    const popupWc = {
+      setUserAgent: vi.fn(),
+      getURL: vi.fn(() => 'https://accounts.google.com/o/oauth2'),
+      executeJavaScript: vi.fn(async () => null),
+      on: vi.fn((event: string, handler: () => void) => {
+        if (event === 'dom-ready') domReadyHandler = handler
+      })
+    }
+
+    wc.__emit('did-create-window', { webContents: popupWc }, { url: 'https://accounts.google.com/o/oauth2' })
+    domReadyHandler?.()
+
+    expect(popupWc.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining('__aetherGoogleAuthShimmed'))
+  })
+})

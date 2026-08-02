@@ -52,6 +52,45 @@ const STORE_HOSTS = new Set(['chromewebstore.google.com', 'chrome.google.com'])
  * erreur « 400 » une fois rouverte dans un autre navigateur. */
 const GOOGLE_SIGNIN_ENTRY_POINT = 'https://accounts.google.com/'
 
+/** Signalé par l'utilisateur : juste après avoir saisi son adresse e-mail sur
+ * la page de connexion Google, une invite Windows native (« Choisir une clé
+ * d'accès ») s'ouvre systématiquement — Google tente un défi WebAuthn/passkey
+ * en plus (ou à la place) du mot de passe, vraisemblablement une vérification
+ * renforcée déclenchée par la détection déjà documentée ailleurs dans ce
+ * fichier (moteur Chromium embarqué jugé suspect). Cette invite bloque le
+ * clavier/focus de toute la fenêtre ÆTHER tant qu'elle est ouverte, sans
+ * option simple pour y renoncer proprement depuis la page.
+ *
+ * `navigator.credentials.get({publicKey…})` (WebAuthn) et `{identity…})`
+ * (FedCM) sont les deux seules formes qui déclenchent une invite SYSTÈME
+ * (Windows Hello, sélecteur de compte) — jamais `{password…}` (Credential
+ * Management API, simple autocomplétion), qui doit continuer à fonctionner
+ * normalement. On les fait donc échouer immédiatement, comme le ferait un
+ * navigateur sans lecteur de clé de sécurité disponible : Google retombe
+ * alors sur la saisie du mot de passe, sans jamais solliciter Windows.
+ *
+ * Posé au `dom-ready` (pas besoin du CDP `Page.addScriptToEvaluateOnNewDocument`
+ * comme `WEBSTORE_HOOK_SCRIPT` ci-dessus) : contrairement au bouton du Store,
+ * qui se décide automatiquement dès le chargement, ce défi n'est déclenché
+ * QUE par une interaction de l'utilisateur (saisir l'e-mail puis valider) —
+ * `dom-ready` a largement le temps de s'exécuter avant que l'utilisateur
+ * n'ait pu cliquer quoi que ce soit. */
+const GOOGLE_AUTH_SHIM = `(() => {
+  if (window.__aetherGoogleAuthShimmed) return
+  window.__aetherGoogleAuthShimmed = true
+  if (!navigator.credentials || !navigator.credentials.get) return
+  const original = navigator.credentials.get.bind(navigator.credentials)
+  const patched = (options) => {
+    if (options && (options.publicKey || options.identity)) {
+      return Promise.reject(new DOMException('Non disponible dans ce navigateur.', 'NotAllowedError'))
+    }
+    return original(options)
+  }
+  try {
+    Object.defineProperty(navigator.credentials, 'get', { value: patched, configurable: true, writable: true })
+  } catch {}
+})();`
+
 function isStoreHost(url: string): boolean {
   try {
     return STORE_HOSTS.has(new URL(url).hostname)
@@ -947,6 +986,14 @@ export class ViewManager {
     // entre origines — comme le « zoom par défaut » des réglages de Chrome).
     wc.on('dom-ready', () => {
       wc.setZoomFactor(getSettings().defaultZoom)
+      // Voir le commentaire de `GOOGLE_AUTH_SHIM` plus haut.
+      let host = ''
+      try {
+        host = new URL(wc.getURL()).hostname
+      } catch {
+        // Laisse passer, en échec ouvert.
+      }
+      if (host === 'accounts.google.com') void wc.executeJavaScript(GOOGLE_AUTH_SHIM).catch(() => {})
     })
 
     // Notifie le renderer du niveau de zoom réel (pourcentage) — affiché
@@ -1088,6 +1135,18 @@ export class ViewManager {
       // popup, cf. `disposition === 'new-window'`) ne serait jamais détecté.
       popup.webContents.on('did-navigate', (_e, navigatedUrl) => {
         this.checkGoogleSignInBlocked(pageId, navigatedUrl)
+      })
+      // Même raison d'être que dans `wire()` — voir `GOOGLE_AUTH_SHIM`.
+      popup.webContents.on('dom-ready', () => {
+        let popupHost = ''
+        try {
+          popupHost = new URL(popup.webContents.getURL()).hostname
+        } catch {
+          // Laisse passer, en échec ouvert.
+        }
+        if (popupHost === 'accounts.google.com') {
+          void popup.webContents.executeJavaScript(GOOGLE_AUTH_SHIM).catch(() => {})
+        }
       })
     })
 

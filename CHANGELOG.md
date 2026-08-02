@@ -4,6 +4,17 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.89.0] — 2026-08-02
+
+### Corrigé
+
+- **Une invite Windows native (« Choisir une clé d'accès ») s'ouvrait systématiquement juste après
+  avoir saisi son adresse e-mail sur la page de connexion Google**, bloquant le clavier de toute la
+  fenêtre ÆTHER — Google tente un défi WebAuthn/passkey en plus du mot de passe, vraisemblablement
+  une vérification renforcée liée à la détection déjà documentée du moteur embarqué. Neutralisé
+  spécifiquement sur `accounts.google.com` (jamais ailleurs, pour ne pas casser un passkey légitime
+  sur un autre site) : Google retombe désormais sur la saisie du mot de passe normale.
+
 ## [0.88.1] — 2026-08-02
 
 ### Corrigé
