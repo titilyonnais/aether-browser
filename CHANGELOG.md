@@ -4,6 +4,20 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.90.1] — 2026-08-02
+
+### Corrigé
+
+- **L'invite Windows Hello persistait malgré la 0.90.0.** Cause confirmée par relecture : la
+  commande CDP qui enregistre le correctif est asynchrone (un aller-retour), mais rien n'empêchait
+  le VRAI chargement de la page de démarrer avant que cet enregistrement ne soit confirmé — une
+  fenêtre de course qui pouvait expliquer que l'invite reste malgré l'injection CDP. Le chargement
+  de `accounts.google.com` (page principale, popup de connexion, et navigations suivantes à
+  l'intérieur de cette popup) attend désormais explicitement cette confirmation avant de partir.
+  Limite structurelle restante, propre à l'API d'Electron : le tout premier chargement d'une popup
+  de connexion est déclenché par Electron lui-même dès qu'elle s'ouvre, avant que ce correctif ne
+  puisse intervenir — non couvrable par ce mécanisme.
+
 ## [0.90.0] — 2026-08-02
 
 ### Corrigé

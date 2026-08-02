@@ -672,9 +672,14 @@ export class ViewManager {
     // bouton « retour » ne peut jamais revenir à cette page après avoir
     // recherché/navigué ailleurs depuis le nouvel onglet.
     this.syncStoreShim(row.id, view.webContents, row.url)
-    this.syncGoogleAuthShim(row.id, view.webContents, row.url)
+    // `loadURL` ci-dessous est retardé jusqu'à cette promesse (jamais
+    // attendue avant 0.90.1) — voir le commentaire de `syncGoogleAuthShim`
+    // pour la fenêtre de course que ça fermait.
+    const authShimReady = this.syncGoogleAuthShim(row.id, view.webContents, row.url)
     this.prepareUserAgentFor(view.webContents, row.url)
-    const initialLoad = view.webContents.loadURL(row.url).catch(() => undefined)
+    const initialLoad = authShimReady
+      .then(() => view.webContents.loadURL(row.url))
+      .catch(() => undefined)
     this.pendingInitialLoad.set(row.id, initialLoad)
     void initialLoad.then(() => {
       if (this.pendingInitialLoad.get(row.id) === initialLoad) this.pendingInitialLoad.delete(row.id)
@@ -1151,6 +1156,27 @@ export class ViewManager {
         this.checkGoogleSignInBlocked(pageId, navigatedUrl)
         this.syncGoogleAuthShim(popupShimKey, popup.webContents, navigatedUrl)
       })
+      // Même raison d'être que le `will-navigate` de `wire()` ci-dessous : le
+      // tout PREMIER chargement de cette popup (`details.url`) reste hors de
+      // notre contrôle (Electron le déclenche lui-même dès que
+      // `setWindowOpenHandler` répond `'allow'`, indépendamment de ce
+      // gestionnaire) — mais une navigation SUIVANTE À L'INTÉRIEUR de cette
+      // popup (l'étape mot de passe après l'étape e-mail, par exemple) passe
+      // bien par `will-navigate`, et peut donc être retardée jusqu'à la
+      // confirmation CDP comme pour la page principale.
+      popup.webContents.on('will-navigate', (event, navigatedUrl) => {
+        let popupNavHost = ''
+        try {
+          popupNavHost = new URL(navigatedUrl).hostname
+        } catch {
+          return
+        }
+        if (popupNavHost !== 'accounts.google.com') return
+        event.preventDefault()
+        void this.syncGoogleAuthShim(popupShimKey, popup.webContents, navigatedUrl)
+          .then(() => popup.webContents.loadURL(navigatedUrl))
+          .catch(() => undefined)
+      })
     })
 
     // Redirections automatiques (même catégorie que les popups pour
@@ -1185,8 +1211,27 @@ export class ViewManager {
       // Posé/retiré ICI, avant le chargement réel — le crochet doit être
       // enregistré via CDP AVANT que le document du Store ne s'exécute.
       this.syncStoreShim(pageId, wc, url)
-      this.syncGoogleAuthShim(pageId, wc, url)
+      const authShimReady = this.syncGoogleAuthShim(pageId, wc, url)
       this.prepareUserAgentFor(wc, url)
+      let navHost = ''
+      try {
+        navHost = new URL(url).hostname
+      } catch {
+        // Laisse passer, en échec ouvert.
+      }
+      if (navHost === 'accounts.google.com') {
+        // Un lien cliqué (le cas le plus courant pour rejoindre
+        // accounts.google.com, cf. le commentaire au-dessus de cet
+        // écouteur) laisserait sinon Chromium démarrer le chargement TOUT DE
+        // SUITE, sans attendre la confirmation CDP — voir la fenêtre de
+        // course documentée sur `syncGoogleAuthShim`. On reprend nous-mêmes
+        // la navigation une fois cette promesse résolue ; `wc.loadURL` (nos
+        // propres chargements) n'émettant jamais `will-navigate`, aucune
+        // boucle possible.
+        event.preventDefault()
+        void authShimReady.then(() => wc.loadURL(url)).catch(() => undefined)
+        return
+      }
       if (url.startsWith('mailto:') || url.startsWith('tel:')) {
         event.preventDefault()
         void shell.openExternal(url)
@@ -1607,47 +1652,51 @@ export class ViewManager {
   /** Même patron que `syncStoreShim`, pour `GOOGLE_AUTH_SHIM` — appelé aux
    * mêmes points d'entrée (`ensureLive`, `navigate`, `will-navigate`,
    * `onNavigated`), PLUS `did-create-window` pour les popups natives de
-   * connexion Google (jamais câblées par `wire()`). */
-  private syncGoogleAuthShim(pageId: PageId, wc: WebContents, url: string): void {
+   * connexion Google (jamais câblées par `wire()`).
+   *
+   * RENVOIE une promesse (contrairement à `syncStoreShim`) : `ensureLive`/
+   * `will-navigate` déclenchent le VRAI chargement (`loadURL`) juste après
+   * cet appel, SANS l'attendre à l'origine — la commande CDP
+   * `Page.addScriptToEvaluateOnNewDocument`, elle, est asynchrone (un aller-
+   * retour IPC). Rien ne garantissait donc que l'enregistrement soit terminé
+   * avant que `loadURL` ne commence à charger le document, une vraie fenêtre
+   * de course qui pouvait expliquer que l'invite Windows Hello persiste
+   * malgré l'usage du CDP (0.90.0) : les appelants attendent désormais
+   * explicitement cette promesse avant de charger `accounts.google.com`. */
+  private syncGoogleAuthShim(pageId: PageId, wc: WebContents, url: string): Promise<void> {
     let host = ''
     try {
       host = new URL(url).hostname
     } catch {
       // Laisse passer, en échec ouvert.
     }
-    if (host === 'accounts.google.com') this.ensureGoogleAuthShim(wc)
-    else this.teardownGoogleAuthShim(pageId, wc)
+    if (host === 'accounts.google.com') return this.ensureGoogleAuthShim(wc)
+    this.teardownGoogleAuthShim(pageId, wc)
+    return Promise.resolve()
   }
 
-  private ensureGoogleAuthShim(wc: WebContents): void {
+  private async ensureGoogleAuthShim(wc: WebContents): Promise<void> {
     this.googleAuthShimWebContents.add(wc)
     try {
       if (!wc.debugger.isAttached()) wc.debugger.attach('1.3')
       const oldScriptId = this.googleAuthShimScriptIds.get(wc)
-      const reattach = (): void => {
-        void wc.debugger
-          .sendCommand('Page.addScriptToEvaluateOnNewDocument', { source: GOOGLE_AUTH_SHIM })
-          .then((result) => {
-            const identifier = (result as { identifier?: string } | undefined)?.identifier
-            if (identifier) this.googleAuthShimScriptIds.set(wc, identifier)
-          })
-          .catch(() => {})
-      }
       if (oldScriptId) {
-        void wc.debugger
-          .sendCommand('Page.removeScriptToEvaluateOnNewDocument', { identifier: oldScriptId })
-          .catch(() => {})
-          .then(reattach)
-      } else {
-        reattach()
+        await wc.debugger.sendCommand('Page.removeScriptToEvaluateOnNewDocument', { identifier: oldScriptId }).catch(() => {})
       }
+      const result = await wc.debugger
+        .sendCommand('Page.addScriptToEvaluateOnNewDocument', { source: GOOGLE_AUTH_SHIM })
+        .catch(() => undefined)
+      const identifier = (result as { identifier?: string } | undefined)?.identifier
+      if (identifier) this.googleAuthShimScriptIds.set(wc, identifier)
     } catch {
       // CDP indisponible — le rattrapage executeJavaScript ci-dessous reste le
       // seul mécanisme pour ce chargement (imparfait : peut arriver après que
       // Google ait déjà capturé sa propre référence à
       // `navigator.credentials.get`, mais mieux que rien).
     }
-    void wc.executeJavaScript(GOOGLE_AUTH_SHIM).catch(() => {})
+    // Rattrapage pour le document COURANT (le CDP ci-dessus ne s'applique
+    // qu'aux PROCHAINS documents) — attendu lui aussi, pour la même raison.
+    await wc.executeJavaScript(GOOGLE_AUTH_SHIM).catch(() => {})
   }
 
   private teardownGoogleAuthShim(pageId: PageId, wc: WebContents): void {
@@ -1812,9 +1861,14 @@ export class ViewManager {
     await this.pendingInitialLoad.get(id)
     if (!this.views.has(id) || this.views.get(id) !== view) return
     this.syncStoreShim(id, view.webContents, url)
-    this.syncGoogleAuthShim(id, view.webContents, url)
     this.prepareUserAgentFor(view.webContents, url)
-    void view.webContents.loadURL(url).catch(() => undefined)
+    // `loadURL` retardé jusqu'à cette promesse (jamais attendue avant
+    // 0.90.1), SANS bloquer la suite de cette fonction (`patchRuntime`
+    // ci-dessous reste poussé tout de suite) — voir le commentaire de
+    // `syncGoogleAuthShim` pour la fenêtre de course que ça fermait.
+    void this.syncGoogleAuthShim(id, view.webContents, url)
+      .then(() => view.webContents.loadURL(url))
+      .catch(() => undefined)
     // Poussé tout de suite (pas d'attente de `did-navigate`) : le bouton
     // « retour » doit s'activer dès cet instant — inutile de le laisser
     // grisé le temps que Chromium confirme.

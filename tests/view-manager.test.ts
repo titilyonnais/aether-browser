@@ -548,6 +548,14 @@ describe('ViewManager — savePage/captureScreenshot ne plantent jamais le proce
   })
 })
 
+/** Laisse toutes les micro-tâches (chaînes de promesses) en attente se
+ * résoudre — nécessaire depuis que `ensureGoogleAuthShim` est asynchrone
+ * (0.90.1), les tests n'ayant pas de prise directe sur la promesse que
+ * `ensureLive`/`will-navigate` lancent sans l'attendre eux-mêmes. */
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 /** Fausse `WebContents` d'une popup native (`overrideBrowserWindowOptions`,
  * `did-create-window`) — surface minimale mais complète (debugger inclus,
  * même patron stateful que `fakeWebContents` ci-dessus) pour couvrir le
@@ -846,7 +854,7 @@ describe('ViewManager — suppression du défi WebAuthn/passkey sur accounts.goo
   // correctif. Comme `WEBSTORE_HOOK_SCRIPT`, l'injection passe désormais par
   // CDP (`Page.addScriptToEvaluateOnNewDocument`), AVANT le tout premier
   // script de la page, quelle que soit sa façon de capturer la référence.
-  it('enregistre le correctif via CDP dès la création de la vue si l’URL initiale y mène', () => {
+  it('enregistre le correctif via CDP dès la création de la vue si l’URL initiale y mène', async () => {
     const vm = new ViewManager(fakeWin() as never, delegate)
     seedRow('a', 'https://accounts.google.com/v3/signin/identifier')
     vm.setVisible(['a'])
@@ -857,9 +865,63 @@ describe('ViewManager — suppression du défi WebAuthn/passkey sur accounts.goo
       'Page.addScriptToEvaluateOnNewDocument',
       { source: expect.stringContaining('__aetherGoogleAuthShimmed') }
     )
+    // `ensureGoogleAuthShim` est désormais async (0.90.1) — attend que
+    // l'enregistrement CDP soit confirmé avant le rattrapage
+    // `executeJavaScript`, lui-même attendu avant `loadURL` (voir
+    // `syncGoogleAuthShim`) : laisse les micro-tâches en attente se résoudre.
+    await flushPromises()
+
     // Rattrapage pour le document COURANT — le CDP ci-dessus ne s'applique
     // qu'aux PROCHAINS documents.
     expect(wc.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining('__aetherGoogleAuthShimmed'))
+  })
+
+  it('retarde le VRAI chargement jusqu’à ce que le correctif soit confirmé enregistré (0.90.1)', async () => {
+    // Le bug concret de la 0.90.0 : la commande CDP est asynchrone (un
+    // aller-retour IPC), mais rien n'empêchait `loadURL` de démarrer AVANT
+    // qu'elle ne soit confirmée — l'invite Windows Hello pouvait donc
+    // persister même avec l'injection CDP en place. `loadURL` doit
+    // maintenant rester en attente tant que l'enregistrement n'est pas
+    // confirmé, et ne partir qu'une fois celui-ci résolu.
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://accounts.google.com/v3/signin/identifier')
+
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+
+    // Rien n'a encore été chargé : la promesse CDP n'a pas eu la chance de
+    // se résoudre (mocks asynchrones, aucun flush encore fait).
+    expect(wc.loadURL).not.toHaveBeenCalled()
+
+    await flushPromises()
+
+    expect(wc.loadURL).toHaveBeenCalledWith('https://accounts.google.com/v3/signin/identifier')
+  })
+
+  it('reprend elle-même un lien cliqué vers accounts.google.com après confirmation du correctif', async () => {
+    // Le chemin le plus probable en pratique pour REJOINDRE la page de
+    // connexion Google (lien « Se connecter » cliqué depuis YouTube, par
+    // exemple) : `will-navigate`, pas `ensureLive`. Chromium annoncerait sinon
+    // son intention puis chargerait TOUT DE SUITE, sans attendre la
+    // confirmation CDP — la page reprend donc la main elle-même une fois
+    // celle-ci résolue (`wc.loadURL`, qui n'émet jamais lui-même
+    // `will-navigate` — pas de boucle possible).
+    const vm = new ViewManager(fakeWin() as never, delegate)
+    seedRow('a', 'https://youtube.com')
+    vm.setVisible(['a'])
+    const wc = contentsOf(vm, 'a')
+    wc.__commit('https://youtube.com')
+    wc.loadURL.mockClear()
+
+    let prevented = false
+    wc.__emit('will-navigate', { preventDefault: () => (prevented = true) }, 'https://accounts.google.com/v3/signin/identifier')
+
+    expect(prevented).toBe(true)
+    expect(wc.loadURL).not.toHaveBeenCalled()
+
+    await flushPromises()
+
+    expect(wc.loadURL).toHaveBeenCalledWith('https://accounts.google.com/v3/signin/identifier')
   })
 
   it("n'enregistre rien pour un autre site (ne doit pas casser un passkey légitime ailleurs)", () => {
@@ -884,7 +946,7 @@ describe('ViewManager — suppression du défi WebAuthn/passkey sur accounts.goo
     expect(wc.debugger.detach).toHaveBeenCalled()
   })
 
-  it('enregistre aussi le correctif dans une popup native de connexion Google, via CDP', () => {
+  it('enregistre aussi le correctif dans une popup native de connexion Google, via CDP', async () => {
     const vm = new ViewManager(fakeWin() as never, delegate)
     seedRow('a', 'https://example.com')
     vm.setVisible(['a'])
@@ -892,6 +954,7 @@ describe('ViewManager — suppression du défi WebAuthn/passkey sur accounts.goo
     const popupWc = fakePopupWebContents()
 
     wc.__emit('did-create-window', { webContents: popupWc }, { url: 'https://accounts.google.com/o/oauth2' })
+    await flushPromises()
 
     expect(popupWc.debugger.attach).toHaveBeenCalledWith('1.3')
     expect(popupWc.debugger.sendCommand).toHaveBeenCalledWith(
