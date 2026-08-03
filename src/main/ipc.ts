@@ -25,6 +25,7 @@ import type {
   FavoriteFolder,
   FavoritesOverflowEntry,
   FocusState,
+  GoogleStatus,
   InitialState,
   LocalRect,
   ShortcutCommand,
@@ -51,6 +52,13 @@ import { computeAffinities, queuePageEmbedding } from './ai/embeddings'
 import { classifyIntent } from './ai/intent'
 import type { AiRouter } from './ai/router'
 import { avatarImageDataUrl, chooseAndSaveAvatarImage, deleteAvatarImage } from './avatars'
+import {
+  connectGoogleAccount,
+  disconnectGoogleAccount,
+  getCurrentGoogleStatus,
+  getValidAccessToken
+} from './google/googleAuth'
+import { fetchGmailPreview, fetchYoutubeSubscriptions } from './google/googleApi'
 import { getDefaultBrowserState, promptSetDefaultBrowser } from './defaultBrowser'
 import { getCertificateDetail, releaseCertificateObserver } from './certificates'
 import { getNewTabNews, getNewTabWeather, getSearchSuggestions, searchNewTabCities } from './newtab'
@@ -1833,6 +1841,31 @@ export function registerIpc(router: AiRouter): void {
   })
 
   ipcMain.handle(CH.newTabBackgroundImageDataUrl, (_e, filename: string) => avatarImageDataUrl(String(filename ?? '')))
+
+  // ─── Compte Google (OAuth natif) ────────────────────────────────────────────
+  // Jeton d'accès/rafraîchissement jamais transmis au renderer — seul le
+  // statut dérivé (connecté + email) sort du main process. Les appels API
+  // (YouTube/Gmail) s'exécutent entièrement ici.
+
+  ipcMain.handle(CH.googleStatus, () => getCurrentGoogleStatus())
+
+  ipcMain.handle(CH.googleConnect, async () => {
+    const status = await connectGoogleAccount()
+    broadcastGoogleStatus(status)
+    return status
+  })
+
+  ipcMain.handle(CH.googleDisconnect, () => {
+    disconnectGoogleAccount()
+    broadcastGoogleStatus({ connected: false, email: null })
+  })
+
+  ipcMain.handle(CH.googleYoutubeSubscriptions, async () => fetchYoutubeSubscriptions(await getValidAccessToken()))
+  ipcMain.handle(CH.googleGmailPreview, async () => fetchGmailPreview(await getValidAccessToken()))
+
+  function broadcastGoogleStatus(status: GoogleStatus): void {
+    for (const ctx of allWindowContexts()) sendTo(ctx.win, CH.googleStatusChanged, status)
+  }
 
   // ─── IA ────────────────────────────────────────────────────────────────────
 

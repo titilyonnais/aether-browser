@@ -215,6 +215,14 @@ const api: AetherApi = {
     onDone: (cb) => on(CH.aiDone, cb),
     onStatusChanged: (cb) => on(CH.aiStatusChanged, cb)
   },
+  google: {
+    status: () => ipcRenderer.invoke(CH.googleStatus),
+    connect: () => ipcRenderer.invoke(CH.googleConnect),
+    disconnect: () => ipcRenderer.invoke(CH.googleDisconnect),
+    youtubeSubscriptions: () => ipcRenderer.invoke(CH.googleYoutubeSubscriptions),
+    gmailPreview: () => ipcRenderer.invoke(CH.googleGmailPreview),
+    onStatusChanged: (cb) => on(CH.googleStatusChanged, cb)
+  },
   notes: {
     create: (n) => ipcRenderer.invoke(CH.noteCreate, n),
     update: (id: string, content: string) => ipcRenderer.invoke(CH.noteUpdate, id, content),

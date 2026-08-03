@@ -23,7 +23,10 @@ function defaultMaxLivePages(): number {
   return 10
 }
 
-const DEFAULTS: Omit<AppSettings, 'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKey' | 'hasSmtpConfig'> = {
+const DEFAULTS: Omit<
+  AppSettings,
+  'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKey' | 'hasSmtpConfig' | 'hasGoogleAccount'
+> = {
   aiProvider: 'auto',
   ollamaBaseUrl: 'http://127.0.0.1:11434',
   ollamaModel: '',
@@ -170,6 +173,82 @@ export function hasSmtpConfig(): boolean {
   return kvRepo.get(SMTP_KEY) !== null
 }
 
+// ─── Compte Google (OAuth natif) ─────────────────────────────────────────────
+// Jeton d'accès/rafraîchissement chiffrés comme le reste, jamais exposés par
+// IPC (seul `hasGoogleAccount`/`GoogleStatus` — dérivés — sortent du main
+// process). `GoogleClientConfig` (client_id/secret de l'appli OAuth Desktop
+// enregistrée sur Google Cloud Console) appartient au DÉVELOPPEUR, comme la
+// config SMTP : graine ponctuelle depuis l'environnement, jamais d'UI Réglages.
+
+export interface GoogleTokens {
+  accessToken: string
+  refreshToken: string
+  expiresAt: number
+  email: string
+}
+
+const GOOGLE_TOKENS_KEY = 'secret.google'
+
+export function storeGoogleTokens(tokens: GoogleTokens): void {
+  kvRepo.set(GOOGLE_TOKENS_KEY, encryptValue(JSON.stringify(tokens)))
+}
+
+export function readGoogleTokens(): GoogleTokens | null {
+  const stored = kvRepo.get(GOOGLE_TOKENS_KEY)
+  if (!stored) return null
+  const decrypted = decryptValue(stored)
+  if (!decrypted) return null
+  try {
+    return JSON.parse(decrypted) as GoogleTokens
+  } catch {
+    return null
+  }
+}
+
+export function clearGoogleTokens(): void {
+  kvRepo.remove(GOOGLE_TOKENS_KEY)
+}
+
+export function hasGoogleAccount(): boolean {
+  return kvRepo.get(GOOGLE_TOKENS_KEY) !== null
+}
+
+export interface GoogleClientConfig {
+  clientId: string
+  clientSecret: string
+}
+
+const GOOGLE_CLIENT_KEY = 'secret.google-client'
+
+export function storeGoogleClientConfig(config: GoogleClientConfig): void {
+  kvRepo.set(GOOGLE_CLIENT_KEY, encryptValue(JSON.stringify(config)))
+}
+
+export function readGoogleClientConfig(): GoogleClientConfig | null {
+  const stored = kvRepo.get(GOOGLE_CLIENT_KEY)
+  if (!stored) return null
+  const decrypted = decryptValue(stored)
+  if (!decrypted) return null
+  try {
+    return JSON.parse(decrypted) as GoogleClientConfig
+  } catch {
+    return null
+  }
+}
+
+/** Graine ponctuelle : si `AETHER_GOOGLE_CLIENT_ID`/`_SECRET` sont posées dans
+ * l'environnement ET qu'aucun client n'est encore stocké, les chiffre une
+ * fois dans la DB locale (voir `seedSmtpConfigFromEnv` ci-dessus, même
+ * patron). Sert une seule fois après avoir créé le client OAuth "Desktop
+ * app" sur Google Cloud Console et posé les variables dans `.env.local`. */
+export function seedGoogleClientFromEnv(): void {
+  if (readGoogleClientConfig()) return
+  const clientId = process.env['AETHER_GOOGLE_CLIENT_ID']
+  const clientSecret = process.env['AETHER_GOOGLE_CLIENT_SECRET']
+  if (!clientId || !clientSecret) return
+  storeGoogleClientConfig({ clientId, clientSecret })
+}
+
 /** Graine ponctuelle : si `AETHER_SMTP_HOST`/`_PORT`/`_USER`/`_PASS` sont
  * posées dans l'environnement ET qu'aucune config n'est encore stockée, les
  * chiffre une fois dans la DB locale. Sert UNE SEULE FOIS après un `npm run
@@ -276,7 +355,8 @@ export function getSettings(): AppSettings {
     hasAnthropicKey: hasSecret('anthropic'),
     hasOpenaiKey: hasSecret('openai'),
     hasXaiKey: hasSecret('xai'),
-    hasSmtpConfig: hasSmtpConfig()
+    hasSmtpConfig: hasSmtpConfig(),
+    hasGoogleAccount: hasGoogleAccount()
   }
 }
 

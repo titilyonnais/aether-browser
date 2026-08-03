@@ -23,6 +23,8 @@ import type {
   FavoriteFolder,
   FavoritesOverflowEntry,
   FocusState,
+  GmailPreviewMessage,
+  GoogleStatus,
   InitialState,
   IntentResult,
   LocalRect,
@@ -52,7 +54,8 @@ import type {
   SpaceId,
   UpdateStatus,
   Visit,
-  Workspace
+  Workspace,
+  YoutubeSubscription
 } from './types'
 
 /** État des drapeaux : map id → activé. */
@@ -274,6 +277,15 @@ export const CH = {
   aiChunk: 'ai:chunk',
   aiDone: 'ai:done',
   aiStatusChanged: 'ai:status-changed',
+
+  // Compte Google (OAuth natif) — voir googleSignInBlocked plus bas pour le
+  // mécanisme, distinct, du blocage de connexion web classique.
+  googleStatus: 'google:status',
+  googleConnect: 'google:connect',
+  googleDisconnect: 'google:disconnect',
+  googleYoutubeSubscriptions: 'google:youtube-subscriptions',
+  googleGmailPreview: 'google:gmail-preview',
+  googleStatusChanged: 'google:status-changed',
 
   // Notes
   noteCreate: 'note:create',
@@ -705,6 +717,16 @@ export interface AetherApi {
     onChunk(cb: (c: ChatChunk) => void): Unsubscribe
     onDone(cb: (d: ChatDone) => void): Unsubscribe
     onStatusChanged(cb: (s: AiStatus) => void): Unsubscribe
+  }
+  google: {
+    status(): Promise<GoogleStatus>
+    /** Ouvre le navigateur système pour le consentement OAuth ; résout une
+     * fois le flux terminé (ou rejette si annulé/expiré). */
+    connect(): Promise<GoogleStatus>
+    disconnect(): Promise<void>
+    youtubeSubscriptions(): Promise<YoutubeSubscription[]>
+    gmailPreview(): Promise<GmailPreviewMessage[]>
+    onStatusChanged(cb: (s: GoogleStatus) => void): Unsubscribe
   }
   notes: {
     create(n: {

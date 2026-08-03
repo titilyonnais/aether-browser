@@ -42,10 +42,12 @@ async function readLines(
 }
 
 /** Levé par `ensureOk` pour une erreur d'authentification (401/403) — jamais
- * transitoire, retenter avec la MÊME clé ne peut qu'échouer à l'identique. */
-class AuthError extends Error {}
+ * transitoire, retenter avec la MÊME clé ne peut qu'échouer à l'identique.
+ * Exportée : réutilisée par `main/google/googleApi.ts` pour les mêmes appels
+ * API REST authentifiés (YouTube/Gmail), même contrat non-retryable. */
+export class AuthError extends Error {}
 
-async function ensureOk(res: Response, provider: string): Promise<void> {
+export async function ensureOk(res: Response, provider: string): Promise<void> {
   if (res.ok) return
   let detail = ''
   try {
@@ -70,7 +72,11 @@ async function ensureOk(res: Response, provider: string): Promise<void> {
  * fois le premier delta réellement émis au renderer, un nouvel essai
  * dupliquerait/corromprait la réponse déjà partiellement affichée (voir
  * `AiRouter.chat`, qui applique la même règle entre providers différents). */
-async function withRetry<T>(signal: AbortSignal | undefined, fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+export async function withRetry<T>(
+  signal: AbortSignal | undefined,
+  fn: () => Promise<T>,
+  maxAttempts = 3
+): Promise<T> {
   let lastErr: unknown
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (signal?.aborted) throw new Error('Annulé')

@@ -70,6 +70,12 @@ const CertificateOverlay = lazy(() =>
 const SiteDataOverlay = lazy(() =>
   import('@/components/focus/SiteDataOverlay').then((m) => ({ default: m.SiteDataOverlay }))
 )
+const YoutubeSubscriptionsOverlay = lazy(() =>
+  import('@/components/youtube/YoutubeSubscriptionsOverlay').then((m) => ({ default: m.YoutubeSubscriptionsOverlay }))
+)
+const GmailPreviewOverlay = lazy(() =>
+  import('@/components/gmail/GmailPreviewOverlay').then((m) => ({ default: m.GmailPreviewOverlay }))
+)
 const Onboarding = lazy(() => import('@/components/onboarding/Onboarding').then((m) => ({ default: m.Onboarding })))
 const CoachMarks = lazy(() => import('@/components/guide/CoachMarks').then((m) => ({ default: m.CoachMarks })))
 
@@ -255,6 +261,8 @@ export default function App() {
           <ReportProblemOverlay />
           <CertificateOverlay />
           <SiteDataOverlay />
+          <YoutubeSubscriptionsOverlay />
+          <GmailPreviewOverlay />
           <Onboarding />
           <CoachMarks />
         </Suspense>

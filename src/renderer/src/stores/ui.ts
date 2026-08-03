@@ -23,6 +23,8 @@ export type OverlayKind =
   | 'report-problem'
   | 'certificate'
   | 'site-data'
+  | 'youtube-subscriptions'
+  | 'gmail-preview'
   | null
 
 interface Toast {

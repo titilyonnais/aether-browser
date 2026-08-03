@@ -613,6 +613,8 @@ function AiSection() {
         </div>
       </Block>
 
+      <GoogleAccountBlock hasAccount={settings.hasGoogleAccount} />
+
       <p className="flex items-start gap-2 text-[10.5px] leading-relaxed text-ink-faint">
         <Shield size={11} strokeWidth={1.7} className="mt-0.5 shrink-0" />
         {t('settings.ai.keysSecurityNote')}
@@ -691,6 +693,94 @@ function ApiKeyBlock(props: {
         <Row label={t('settings.ai.modelLabel')}>
           <TextInput defaultValue={props.model} onCommit={props.onModel} mono />
         </Row>
+      </div>
+    </Block>
+  )
+}
+
+/** Connexion Google — OAuth natif (RFC 8252), pas une session web cookie :
+ * alimente uniquement les abonnements YouTube et l'aperçu Gmail (overlays
+ * dédiés), jamais "youtube.com/gmail.com connecté" dans ÆTHER. */
+function GoogleAccountBlock(props: { hasAccount: boolean }) {
+  const t = useT()
+  const googleStatus = useSettingsStore((s) => s.googleStatus)
+  const setGoogleStatus = useSettingsStore((s) => s.setGoogleStatus)
+  const [connecting, setConnecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const connected = props.hasAccount && (googleStatus?.connected ?? false)
+
+  const connect = async (): Promise<void> => {
+    setConnecting(true)
+    setError(null)
+    try {
+      const status = await window.aether.google.connect()
+      setGoogleStatus(status)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  const disconnect = async (): Promise<void> => {
+    await window.aether.google.disconnect()
+    setGoogleStatus({ connected: false, email: null })
+  }
+
+  return (
+    <Block
+      title={
+        <span className="flex items-center gap-2">
+          {t('settings.google.title')}
+          {connected && (
+            <span className="flex items-center gap-1 rounded-full border border-emerald-300/20 bg-emerald-300/[0.06] px-1.5 py-px text-[9px] text-emerald-200/80">
+              <Check size={8} strokeWidth={2.5} /> {t('settings.google.connectedBadge', { email: googleStatus?.email ?? '' })}
+            </span>
+          )}
+        </span>
+      }
+      hint={t('settings.google.hint')}
+    >
+      <div className="space-y-2.5">
+        <Row label={t('settings.google.accountLabel')}>
+          {connected ? (
+            <button
+              type="button"
+              onClick={() => void disconnect()}
+              className="shrink-0 rounded-lg border border-white/[0.08] px-3 py-1.5 text-[11px] text-ink-faint transition-colors hover:border-red-300/30 hover:text-red-200"
+            >
+              {t('settings.google.disconnect')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void connect()}
+              disabled={connecting}
+              className="shrink-0 rounded-lg border border-glacier/30 bg-glacier/[0.08] px-3 py-1.5 text-[11px] text-glacier transition-colors hover:bg-glacier/[0.14] disabled:opacity-50"
+            >
+              {connecting ? t('settings.google.connecting') : t('settings.google.connect')}
+            </button>
+          )}
+        </Row>
+        {error && <p className="text-[11px] text-red-200">{error}</p>}
+        {connected && (
+          <div className="flex flex-wrap gap-2 pt-0.5">
+            <button
+              type="button"
+              onClick={() => useUiStore.getState().openOverlay('youtube-subscriptions')}
+              className="rounded-lg border border-white/[0.08] px-2.5 py-1.5 text-[11px] text-ink-dim transition-colors hover:border-white/[0.16] hover:text-ink"
+            >
+              {t('settings.google.viewYoutubeSubscriptions')}
+            </button>
+            <button
+              type="button"
+              onClick={() => useUiStore.getState().openOverlay('gmail-preview')}
+              className="rounded-lg border border-white/[0.08] px-2.5 py-1.5 text-[11px] text-ink-dim transition-colors hover:border-white/[0.16] hover:text-ink"
+            >
+              {t('settings.google.viewGmailPreview')}
+            </button>
+          </div>
+        )}
       </div>
     </Block>
   )

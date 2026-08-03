@@ -4,6 +4,25 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.92.0] — 2026-08-03
+
+### Ajouté
+
+- **Connexion à un compte Google — OAuth natif (RFC 8252), pas une session web.** Après l'échec
+  définitif de la connexion Google *dans une page web* (contournement User-Agent/WebAuthn/timing,
+  épuisé et confirmé insuffisant par Google et Microsoft eux-mêmes, versions 0.82.0 à 0.91.0), ÆTHER
+  propose désormais une voie différente et légitime : un bouton « Se connecter avec Google » dans
+  Réglages › Intelligence ouvre le vrai navigateur système pour l'écran de consentement officiel
+  Google, récupère un jeton via un petit serveur local (jamais de webview interne — c'est
+  précisément ce qui permet d'éviter le blocage anti-navigateur-intégré), puis appelle les API
+  Google en votre nom. **Important : ceci ne connecte PAS youtube.com/gmail.com dans le
+  navigateur** — pour ça, le bouton « Ouvrir dans le navigateur par défaut » reste la seule voie.
+  Une fois connecté : consultation des abonnements YouTube + activité récente des chaînes suivies
+  (l'API publique n'expose pas l'historique de visionnage réel, seulement ça), et un aperçu en
+  lecture seule de la boîte Gmail. Jetons chiffrés au repos (comme le reste des secrets),
+  jamais transmis au renderer, PKCE + vérification `state` systématiques, usage strictement
+  personnel (aucune donnée ne quitte votre machine vers un tiers autre que Google).
+
 ## [0.91.0] — 2026-08-02
 
 ### Corrigé

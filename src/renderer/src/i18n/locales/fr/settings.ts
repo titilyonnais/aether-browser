@@ -78,6 +78,18 @@ export const settings: Record<string, string> = {
   'settings.ai.cloudBudgetUsage': '{{count}} / {{limit}} appels utilisés aujourd’hui',
   'settings.ai.cloudBudgetUnlimited': '{{count}} appel(s) aujourd’hui — aucune limite fixée',
 
+  // Compte Google (OAuth natif — pas une session web cookie)
+  'settings.google.title': 'Compte Google',
+  'settings.google.hint':
+    "Connexion officielle (OAuth) pour afficher vos abonnements YouTube et un aperçu de votre boîte Gmail dans ÆTHER. Ceci ne connecte PAS youtube.com/gmail.com dans le navigateur — pour ça, utilisez le bouton \"Ouvrir dans le navigateur par défaut\".",
+  'settings.google.accountLabel': 'Compte',
+  'settings.google.connect': 'Se connecter avec Google',
+  'settings.google.connecting': 'Connexion en cours…',
+  'settings.google.disconnect': 'Se déconnecter',
+  'settings.google.connectedBadge': 'connecté en tant que {{email}}',
+  'settings.google.viewYoutubeSubscriptions': 'Voir mes abonnements YouTube',
+  'settings.google.viewGmailPreview': 'Aperçu Gmail',
+
   // Section Profils
   'settings.profiles.title': 'Profils',
   'settings.profiles.hint':

@@ -101,6 +101,8 @@ export async function initBridge(): Promise<void> {
 
   window.aether.ai.onStatusChanged((status) => useSettingsStore.getState().setAiStatus(status))
 
+  window.aether.google.onStatusChanged((status) => useSettingsStore.getState().setGoogleStatus(status))
+
   window.aether.downloads.onUpdated(() => void refreshDownloads())
 
   window.aether.shortcuts.onCommand((cmd) => runCommand(cmd))
@@ -236,6 +238,7 @@ export async function initBridge(): Promise<void> {
   useFavoriteFoldersStore.getState().hydrate(initial.favoriteFolders)
   muse.hydrateNotes(initial.notes)
   settings.hydrate(initial.settings, initial.aiStatus, initial.versions)
+  void window.aether.google.status().then((status) => settings.setGoogleStatus(status))
   // Visibilité des panneaux au lancement — réglages plutôt que le `true`/`true`
   // fixe d'origine du store (celui-ci reste la valeur par défaut de session,
   // Ctrl+B/Ctrl+J continuent de basculer normalement ensuite).

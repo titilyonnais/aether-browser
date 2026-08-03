@@ -69,6 +69,23 @@ export const overlays: Record<string, string> = {
   'overlays.favorites.noFolder': 'Sans dossier',
   'overlays.favorites.moveToFolder': 'Déplacer vers un dossier',
 
+  // Abonnements YouTube (compte Google — OAuth natif)
+  'overlays.youtubeSubscriptions.title': 'Abonnements YouTube',
+  'overlays.youtubeSubscriptions.searchPlaceholder': 'Rechercher une chaîne…',
+  'overlays.youtubeSubscriptions.notHistoryNote':
+    "Activité récente des chaînes suivies — l'API YouTube publique n'expose pas l'historique de visionnage réel.",
+  'overlays.youtubeSubscriptions.emptyState': 'Aucun abonnement trouvé sur ce compte.',
+  'overlays.youtubeSubscriptions.noResults': 'Aucune chaîne ne correspond.',
+  'overlays.youtubeSubscriptions.recentActivity': 'Récemment : {{title}}',
+  'overlays.youtubeSubscriptions.noRecentActivity': 'Aucune activité récente connue.',
+
+  // Aperçu Gmail (compte Google — OAuth natif, lecture seule)
+  'overlays.gmailPreview.title': 'Boîte Gmail',
+  'overlays.gmailPreview.searchPlaceholder': 'Rechercher un message…',
+  'overlays.gmailPreview.emptyState': 'Boîte de réception vide.',
+  'overlays.gmailPreview.noResults': 'Aucun message ne correspond.',
+  'overlays.gmailPreview.noSubject': '(sans objet)',
+
   // Historique
   'overlays.history.title': 'Historique',
   'overlays.history.clearAllTitle': 'Tout effacer',

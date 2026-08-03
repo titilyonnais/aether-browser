@@ -168,6 +168,38 @@ export interface ChatMessage {
   content: string
 }
 
+// ─── Compte Google (OAuth natif, RFC 8252) ──────────────────────────────────
+// Jeton d'accès/rafraîchissement jamais exposé au renderer — seul ce statut
+// dérivé (email + connecté/non) transite par IPC. Ne permet PAS une session
+// web cookie sur youtube.com/gmail.com : uniquement des appels API REST
+// (YouTube Data API v3, Gmail API) déclenchés depuis le main process.
+
+export interface GoogleStatus {
+  connected: boolean
+  email: string | null
+}
+
+export interface YoutubeSubscription {
+  channelId: string
+  title: string
+  thumbnailUrl: string
+  description: string
+  subscribedAt: string
+  /** Titre de la dernière activité connue de la chaîne (upload, etc.) — pas
+   * un historique de visionnage de l'utilisateur, l'API publique ne l'expose pas. */
+  recentActivityTitle: string | null
+  recentActivityAt: string | null
+}
+
+export interface GmailPreviewMessage {
+  id: string
+  from: string
+  subject: string
+  snippet: string
+  receivedAt: number
+  unread: boolean
+}
+
 export interface MuseContext {
   spaceName: string
   page?: { title: string; url: string; excerpt: string }
@@ -355,6 +387,9 @@ export interface AppSettings {
    * Réglages) — permet à l'overlay « Signaler un problème » de proposer un
    * repli `mailto:` si l'envoi automatique n'est pas disponible. */
   hasSmtpConfig: boolean
+  /** Compte Google connecté (OAuth natif) — jamais le jeton lui-même, voir `GoogleStatus`
+   * pour l'email courant (état live, pas dans `AppSettings`). */
+  hasGoogleAccount: boolean
   /** Id d'un moteur intégré (SearchEngineId) ou d'un CustomSearchEngine. */
   searchEngine: string
   // — Apparence —
