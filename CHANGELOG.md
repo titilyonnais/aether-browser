@@ -4,6 +4,19 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.93.0] — 2026-08-03
+
+### Ajouté
+
+- **Section Réglages pour le client OAuth Google, avec les instructions pour l'obtenir.** La 0.92.0
+  exigeait de poser `AETHER_GOOGLE_CLIENT_ID`/`_SECRET` dans un fichier `.env.local` à la main. Un
+  nouveau bloc « Client OAuth Google » (Réglages › Intelligence, juste au-dessus du bloc de
+  connexion) permet de les saisir directement dans l'interface, avec les cinq étapes pour les
+  obtenir sur Google Cloud Console (activer les API, créer un client type « Desktop app ») et un
+  bouton qui ouvre la console directement. Le bouton « Se connecter avec Google » reste désactivé
+  tant que ce client n'est pas configuré, avec un message explicite. Chiffré au repos comme le
+  reste des secrets.
+
 ## [0.92.0] — 2026-08-03
 
 ### Ajouté

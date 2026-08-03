@@ -613,7 +613,12 @@ function AiSection() {
         </div>
       </Block>
 
-      <GoogleAccountBlock hasAccount={settings.hasGoogleAccount} />
+      <GoogleClientBlock
+        hasClient={settings.hasGoogleClient}
+        onSave={(clientId, clientSecret) => void patch({ googleClientId: clientId, googleClientSecret: clientSecret })}
+        onErase={() => void patch({ googleClientId: null, googleClientSecret: null })}
+      />
+      <GoogleAccountBlock hasAccount={settings.hasGoogleAccount} hasClient={settings.hasGoogleClient} />
 
       <p className="flex items-start gap-2 text-[10.5px] leading-relaxed text-ink-faint">
         <Shield size={11} strokeWidth={1.7} className="mt-0.5 shrink-0" />
@@ -698,10 +703,113 @@ function ApiKeyBlock(props: {
   )
 }
 
+/** Client OAuth Google (Google Cloud Console, type « Desktop app ») — préalable
+ * à la connexion elle-même (`GoogleAccountBlock`). Client ID/Secret propres à
+ * l'utilisateur (pas au développeur, contrairement à la config SMTP) : une UI
+ * dédiée a du sens ici, contrairement aux clés API IA où une seule valeur
+ * suffit — deux champs doivent être enregistrés ensemble. */
+function GoogleClientBlock(props: {
+  hasClient: boolean
+  onSave: (clientId: string, clientSecret: string) => void
+  onErase: () => void
+}) {
+  const t = useT()
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+  const canSave = clientId.trim() !== '' && clientSecret.trim() !== ''
+
+  const save = (): void => {
+    if (!canSave) return
+    props.onSave(clientId.trim(), clientSecret.trim())
+    setClientId('')
+    setClientSecret('')
+  }
+
+  return (
+    <Block
+      title={
+        <span className="flex items-center gap-2">
+          {t('settings.google.clientTitle')}
+          {props.hasClient && (
+            <span className="flex items-center gap-1 rounded-full border border-emerald-300/20 bg-emerald-300/[0.06] px-1.5 py-px text-[9px] text-emerald-200/80">
+              <Check size={8} strokeWidth={2.5} /> {t('settings.ai.configuredBadge')}
+            </span>
+          )}
+        </span>
+      }
+    >
+      <ol className="mb-3 list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-ink-faint">
+        <li>{t('settings.google.clientStep1')}</li>
+        <li>{t('settings.google.clientStep2')}</li>
+        <li>{t('settings.google.clientStep3')}</li>
+        <li>{t('settings.google.clientStep4')}</li>
+        <li>{t('settings.google.clientStep5')}</li>
+      </ol>
+      <button
+        type="button"
+        onClick={() => window.aether.app.openExternal('https://console.cloud.google.com/')}
+        className="mb-3 flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-2.5 py-1.5 text-[11px] text-ink-dim transition-colors hover:border-white/[0.16] hover:text-ink"
+      >
+        <ExternalLink size={11} strokeWidth={1.8} />
+        {t('settings.google.openConsole')}
+      </button>
+      <div className="space-y-2.5">
+        <Row label={t('settings.google.clientIdLabel')}>
+          <input
+            type="text"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && save()}
+            placeholder={props.hasClient ? t('settings.google.clientIdPlaceholderSaved') : '….apps.googleusercontent.com'}
+            className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 font-mono text-[11px] text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-glacier/40"
+          />
+        </Row>
+        <Row label={t('settings.google.clientSecretLabel')}>
+          <span className="flex min-w-0 flex-1 gap-1.5">
+            <span className="relative min-w-0 flex-1">
+              <KeyRound
+                size={11}
+                strokeWidth={1.7}
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint"
+              />
+              <input
+                type="password"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && save()}
+                placeholder={props.hasClient ? t('settings.google.clientSecretPlaceholderSaved') : 'GOCSPX-…'}
+                className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pl-8 pr-3 font-mono text-[11px] text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-glacier/40"
+              />
+            </span>
+            {canSave && (
+              <button
+                type="button"
+                onClick={save}
+                className="shrink-0 rounded-lg border border-glacier/30 bg-glacier/[0.08] px-3 text-[11px] text-glacier transition-colors hover:bg-glacier/[0.14]"
+              >
+                {t('settings.common.save')}
+              </button>
+            )}
+            {props.hasClient && !canSave && (
+              <button
+                type="button"
+                onClick={props.onErase}
+                className="shrink-0 rounded-lg border border-white/[0.08] px-3 text-[11px] text-ink-faint transition-colors hover:border-red-300/30 hover:text-red-200"
+              >
+                {t('settings.common.erase')}
+              </button>
+            )}
+          </span>
+        </Row>
+      </div>
+    </Block>
+  )
+}
+
 /** Connexion Google — OAuth natif (RFC 8252), pas une session web cookie :
  * alimente uniquement les abonnements YouTube et l'aperçu Gmail (overlays
  * dédiés), jamais "youtube.com/gmail.com connecté" dans ÆTHER. */
-function GoogleAccountBlock(props: { hasAccount: boolean }) {
+function GoogleAccountBlock(props: { hasAccount: boolean; hasClient: boolean }) {
   const t = useT()
   const googleStatus = useSettingsStore((s) => s.googleStatus)
   const setGoogleStatus = useSettingsStore((s) => s.setGoogleStatus)
@@ -755,13 +863,16 @@ function GoogleAccountBlock(props: { hasAccount: boolean }) {
             <button
               type="button"
               onClick={() => void connect()}
-              disabled={connecting}
+              disabled={connecting || !props.hasClient}
               className="shrink-0 rounded-lg border border-glacier/30 bg-glacier/[0.08] px-3 py-1.5 text-[11px] text-glacier transition-colors hover:bg-glacier/[0.14] disabled:opacity-50"
             >
               {connecting ? t('settings.google.connecting') : t('settings.google.connect')}
             </button>
           )}
         </Row>
+        {!connected && !props.hasClient && (
+          <p className="text-[11px] text-ink-faint">{t('settings.google.needsClientHint')}</p>
+        )}
         {error && <p className="text-[11px] text-red-200">{error}</p>}
         {connected && (
           <div className="flex flex-wrap gap-2 pt-0.5">

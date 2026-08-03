@@ -390,6 +390,10 @@ export interface AppSettings {
   /** Compte Google connecté (OAuth natif) — jamais le jeton lui-même, voir `GoogleStatus`
    * pour l'email courant (état live, pas dans `AppSettings`). */
   hasGoogleAccount: boolean
+  /** Client OAuth Google (Client ID/Secret depuis Google Cloud Console)
+   * configuré — préalable à `hasGoogleAccount` : sans lui, la connexion
+   * (`google.connect()`) ne peut pas démarrer. */
+  hasGoogleClient: boolean
   /** Id d'un moteur intégré (SearchEngineId) ou d'un CustomSearchEngine. */
   searchEngine: string
   // — Apparence —
@@ -513,6 +517,11 @@ export interface SettingsPatch {
   anthropicKey?: string | null
   openaiKey?: string | null
   xaiKey?: string | null
+  /** Client OAuth Google (Google Cloud Console, type « Desktop app ») —
+   * null = effacer. Distinct des jetons de connexion (`GoogleTokens`), qui
+   * arrivent par le flux OAuth lui-même, jamais par ce patch. */
+  googleClientId?: string | null
+  googleClientSecret?: string | null
   aiCloudDailyLimit?: number
   searchEngine?: string
   accent?: AccentId

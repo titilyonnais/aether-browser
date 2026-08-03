@@ -25,7 +25,7 @@ function defaultMaxLivePages(): number {
 
 const DEFAULTS: Omit<
   AppSettings,
-  'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKey' | 'hasSmtpConfig' | 'hasGoogleAccount'
+  'hasAnthropicKey' | 'hasOpenaiKey' | 'hasXaiKey' | 'hasSmtpConfig' | 'hasGoogleAccount' | 'hasGoogleClient'
 > = {
   aiProvider: 'auto',
   ollamaBaseUrl: 'http://127.0.0.1:11434',
@@ -236,6 +236,14 @@ export function readGoogleClientConfig(): GoogleClientConfig | null {
   }
 }
 
+export function hasGoogleClientConfig(): boolean {
+  return kvRepo.get(GOOGLE_CLIENT_KEY) !== null
+}
+
+export function clearGoogleClientConfig(): void {
+  kvRepo.remove(GOOGLE_CLIENT_KEY)
+}
+
 /** Graine ponctuelle : si `AETHER_GOOGLE_CLIENT_ID`/`_SECRET` sont posées dans
  * l'environnement ET qu'aucun client n'est encore stocké, les chiffre une
  * fois dans la DB locale (voir `seedSmtpConfigFromEnv` ci-dessus, même
@@ -356,7 +364,8 @@ export function getSettings(): AppSettings {
     hasOpenaiKey: hasSecret('openai'),
     hasXaiKey: hasSecret('xai'),
     hasSmtpConfig: hasSmtpConfig(),
-    hasGoogleAccount: hasGoogleAccount()
+    hasGoogleAccount: hasGoogleAccount(),
+    hasGoogleClient: hasGoogleClientConfig()
   }
 }
 
@@ -490,6 +499,16 @@ export function applySettingsPatch(patch: SettingsPatch): AppSettings {
   if (patch.anthropicKey !== undefined) storeSecret('anthropic', patch.anthropicKey)
   if (patch.openaiKey !== undefined) storeSecret('openai', patch.openaiKey)
   if (patch.xaiKey !== undefined) storeSecret('xai', patch.xaiKey)
+  if (patch.googleClientId !== undefined || patch.googleClientSecret !== undefined) {
+    if (patch.googleClientId === null || patch.googleClientSecret === null) {
+      clearGoogleClientConfig()
+    } else {
+      const current = readGoogleClientConfig()
+      const clientId = (patch.googleClientId ?? current?.clientId ?? '').trim()
+      const clientSecret = (patch.googleClientSecret ?? current?.clientSecret ?? '').trim()
+      if (clientId && clientSecret) storeGoogleClientConfig({ clientId, clientSecret })
+    }
+  }
   return getSettings()
 }
 

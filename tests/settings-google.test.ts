@@ -38,7 +38,10 @@ const {
   hasGoogleAccount,
   storeGoogleClientConfig,
   readGoogleClientConfig,
-  seedGoogleClientFromEnv
+  hasGoogleClientConfig,
+  clearGoogleClientConfig,
+  seedGoogleClientFromEnv,
+  applySettingsPatch
 } = await import('../src/main/settings')
 
 const ORIGINAL_ENV = { ...process.env }
@@ -103,5 +106,40 @@ describe('config client OAuth Google', () => {
     process.env.AETHER_GOOGLE_CLIENT_SECRET = 'env-secret'
     seedGoogleClientFromEnv()
     expect(readGoogleClientConfig()).toEqual({ clientId: 'existing', clientSecret: 'existing-secret' })
+  })
+
+  it('hasGoogleClientConfig/clearGoogleClientConfig', () => {
+    expect(hasGoogleClientConfig()).toBe(false)
+    storeGoogleClientConfig({ clientId: 'id-1', clientSecret: 'secret-1' })
+    expect(hasGoogleClientConfig()).toBe(true)
+    clearGoogleClientConfig()
+    expect(hasGoogleClientConfig()).toBe(false)
+    expect(readGoogleClientConfig()).toBeNull()
+  })
+})
+
+describe('applySettingsPatch — client OAuth Google (UI Réglages)', () => {
+  it('enregistre le client quand les deux champs sont fournis ensemble', () => {
+    const next = applySettingsPatch({ googleClientId: 'ui-id', googleClientSecret: 'ui-secret' })
+    expect(next.hasGoogleClient).toBe(true)
+    expect(readGoogleClientConfig()).toEqual({ clientId: 'ui-id', clientSecret: 'ui-secret' })
+  })
+
+  it('efface le client si l’un des deux champs est explicitement null', () => {
+    storeGoogleClientConfig({ clientId: 'id', clientSecret: 'secret' })
+    const next = applySettingsPatch({ googleClientId: null, googleClientSecret: null })
+    expect(next.hasGoogleClient).toBe(false)
+    expect(readGoogleClientConfig()).toBeNull()
+  })
+
+  it('fusionne avec la valeur existante si un seul champ est envoyé', () => {
+    storeGoogleClientConfig({ clientId: 'old-id', clientSecret: 'old-secret' })
+    applySettingsPatch({ googleClientId: 'new-id' })
+    expect(readGoogleClientConfig()).toEqual({ clientId: 'new-id', clientSecret: 'old-secret' })
+  })
+
+  it('ignore un patch avec un champ vide/blanc (jamais de config à moitié saisie)', () => {
+    applySettingsPatch({ googleClientId: '   ', googleClientSecret: 'secret' })
+    expect(readGoogleClientConfig()).toBeNull()
   })
 })

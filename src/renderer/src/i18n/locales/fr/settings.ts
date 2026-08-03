@@ -78,10 +78,27 @@ export const settings: Record<string, string> = {
   'settings.ai.cloudBudgetUsage': '{{count}} / {{limit}} appels utilisés aujourd’hui',
   'settings.ai.cloudBudgetUnlimited': '{{count}} appel(s) aujourd’hui — aucune limite fixée',
 
+  // Client OAuth Google (Google Cloud Console) — préalable à la connexion
+  'settings.google.clientTitle': 'Client OAuth Google',
+  'settings.google.clientStep1': 'Ouvrir console.cloud.google.com et créer un projet (ou en réutiliser un).',
+  'settings.google.clientStep2':
+    "Dans « APIs & Services » › « Library », activer YouTube Data API v3 et Gmail API.",
+  'settings.google.clientStep3':
+    "Dans « OAuth consent screen », choisir le type Externe, mode Test, et s'ajouter soi-même dans « Test users ». Ajouter les scopes youtube.readonly et gmail.readonly.",
+  'settings.google.clientStep4':
+    "Dans « Credentials » › « Create Credentials » › « OAuth client ID », choisir le type Application de bureau (Desktop app). Google génère alors un Client ID et un Client Secret.",
+  'settings.google.clientStep5': 'Copier ces deux valeurs ci-dessous.',
+  'settings.google.openConsole': 'Ouvrir Google Cloud Console',
+  'settings.google.clientIdLabel': 'Client ID',
+  'settings.google.clientSecretLabel': 'Client Secret',
+  'settings.google.clientIdPlaceholderSaved': '•••••••••••• (enregistré)',
+  'settings.google.clientSecretPlaceholderSaved': '•••••••••••• (enregistré)',
+
   // Compte Google (OAuth natif — pas une session web cookie)
   'settings.google.title': 'Compte Google',
   'settings.google.hint':
     "Connexion officielle (OAuth) pour afficher vos abonnements YouTube et un aperçu de votre boîte Gmail dans ÆTHER. Ceci ne connecte PAS youtube.com/gmail.com dans le navigateur — pour ça, utilisez le bouton \"Ouvrir dans le navigateur par défaut\".",
+  'settings.google.needsClientHint': 'Configurez le client OAuth Google ci-dessus avant de pouvoir vous connecter.',
   'settings.google.accountLabel': 'Compte',
   'settings.google.connect': 'Se connecter avec Google',
   'settings.google.connecting': 'Connexion en cours…',
