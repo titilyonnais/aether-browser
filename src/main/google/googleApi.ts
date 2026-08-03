@@ -1,10 +1,12 @@
 /**
  * Appels API REST Google (YouTube Data API v3, Gmail API) authentifiés par
- * jeton Bearer — jamais de session cookie. Réutilise ensureOk/withRetry/
- * AuthError de ai/providers.ts (même contrat 401/403 non-retryable).
+ * jeton Bearer — jamais de session cookie. Réutilise withRetry/AuthError de
+ * ai/providers.ts (même contrat 401/403 non-retryable), mais PAS `ensureOk` :
+ * son message générique ("clé API refusée") masquait la vraie raison que
+ * Google renvoie (API non activée, scope manquant…) — voir `ensureGoogleOk`.
  */
 import type { GmailPreviewMessage, YoutubeSubscription } from '@shared/types'
-import { ensureOk, withRetry } from '../ai/providers'
+import { AuthError, withRetry } from '../ai/providers'
 
 const YOUTUBE_BASE = 'https://www.googleapis.com/youtube/v3'
 const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1'
@@ -18,9 +20,28 @@ function authHeaders(accessToken: string): HeadersInit {
   return { Authorization: `Bearer ${accessToken}` }
 }
 
+/** Contrairement à `ensureOk` (ai/providers.ts), inclut le détail renvoyé par
+ * Google dans le message — un 403 Google peut signifier « API non activée »,
+ * « scope insuffisant » ou « quota dépassé », pas seulement une clé refusée,
+ * et l'utilisateur (ou le débogage) a besoin de savoir lequel. */
+async function ensureGoogleOk(res: Response): Promise<void> {
+  if (res.ok) return
+  let detail = ''
+  try {
+    const body = (await res.json()) as { error?: { message?: string } | string }
+    detail = typeof body.error === 'string' ? body.error : (body.error?.message ?? JSON.stringify(body))
+  } catch {
+    detail = res.statusText
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new AuthError(`Google a refusé l'accès (${res.status}) — ${detail.slice(0, 300)}`)
+  }
+  throw new Error(`Google : erreur ${res.status} — ${detail.slice(0, 300)}`)
+}
+
 async function getJson<T>(url: string, accessToken: string): Promise<T> {
   const res = await withRetry(undefined, () => fetch(url, { headers: authHeaders(accessToken) }))
-  await ensureOk(res, 'Google')
+  await ensureGoogleOk(res)
   return (await res.json()) as T
 }
 

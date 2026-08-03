@@ -4,6 +4,17 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.93.2] — 2026-08-03
+
+### Corrigé
+
+- **L'erreur d'un appel YouTube/Gmail affichait « clé API refusée », un message trompeur qui
+  masquait la vraie raison.** Ces appels réutilisaient `ensureOk`, pensé pour les clés API IA
+  (Anthropic/OpenAI/xAI), où un 401/403 ne peut avoir qu'un seul sens. Pour Google, un 403 peut
+  vouloir dire plusieurs choses très différentes (API non activée dans Google Cloud Console, scope
+  manquant côté consentement, quota dépassé…) — le détail renvoyé par Google est désormais inclus
+  dans le message d'erreur affiché, pour pouvoir identifier la vraie cause sans deviner.
+
 ## [0.93.1] — 2026-08-03
 
 ### Corrigé
