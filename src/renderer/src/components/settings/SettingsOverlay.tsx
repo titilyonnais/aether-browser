@@ -618,7 +618,7 @@ function AiSection() {
         onSave={(clientId, clientSecret) => void patch({ googleClientId: clientId, googleClientSecret: clientSecret })}
         onErase={() => void patch({ googleClientId: null, googleClientSecret: null })}
       />
-      <GoogleAccountBlock hasAccount={settings.hasGoogleAccount} hasClient={settings.hasGoogleClient} />
+      <GoogleAccountBlock hasClient={settings.hasGoogleClient} />
 
       <p className="flex items-start gap-2 text-[10.5px] leading-relaxed text-ink-faint">
         <Shield size={11} strokeWidth={1.7} className="mt-0.5 shrink-0" />
@@ -809,13 +809,18 @@ function GoogleClientBlock(props: {
 /** Connexion Google — OAuth natif (RFC 8252), pas une session web cookie :
  * alimente uniquement les abonnements YouTube et l'aperçu Gmail (overlays
  * dédiés), jamais "youtube.com/gmail.com connecté" dans ÆTHER. */
-function GoogleAccountBlock(props: { hasAccount: boolean; hasClient: boolean }) {
+function GoogleAccountBlock(props: { hasClient: boolean }) {
   const t = useT()
   const googleStatus = useSettingsStore((s) => s.googleStatus)
   const setGoogleStatus = useSettingsStore((s) => s.setGoogleStatus)
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const connected = props.hasAccount && (googleStatus?.connected ?? false)
+  // `googleStatus` est l'état LIVE (mis à jour immédiatement par connect()/
+  // disconnect()/broadcast), contrairement à `settings.hasGoogleAccount` (un
+  // instantané persisté qui ne se rafraîchit que via un patch de réglages) —
+  // s'appuyer sur ce dernier ici faisait rester le bouton sur "Se connecter"
+  // juste après une connexion réussie, tant que l'appli n'était pas relancée.
+  const connected = googleStatus?.connected ?? false
 
   const connect = async (): Promise<void> => {
     setConnecting(true)

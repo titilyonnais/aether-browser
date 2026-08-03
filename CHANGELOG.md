@@ -4,6 +4,18 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.93.1] — 2026-08-03
+
+### Corrigé
+
+- **Le bouton « Se connecter avec Google » restait affiché après une connexion réussie**, sans
+  jamais montrer le badge « connecté » ni les boutons vers les abonnements YouTube/l'aperçu Gmail —
+  jusqu'au prochain redémarrage complet d'ÆTHER. Cause : le badge dépendait de deux sources d'état
+  combinées par un `&&`, dont l'une (`AppSettings.hasGoogleAccount`) est un instantané persisté qui
+  ne se rafraîchit que via un patch de réglages classique — jamais mis à jour par le flux de
+  connexion lui-même. L'autre source (`googleStatus`, mise à jour en direct par `connect()`) suffit
+  à elle seule ; le badge s'appuie désormais uniquement sur elle.
+
 ## [0.93.0] — 2026-08-03
 
 ### Ajouté
