@@ -76,6 +76,9 @@ const YoutubeSubscriptionsOverlay = lazy(() =>
 const GmailPreviewOverlay = lazy(() =>
   import('@/components/gmail/GmailPreviewOverlay').then((m) => ({ default: m.GmailPreviewOverlay }))
 )
+const PasswordsOverlay = lazy(() =>
+  import('@/components/passwords/PasswordsOverlay').then((m) => ({ default: m.PasswordsOverlay }))
+)
 const Onboarding = lazy(() => import('@/components/onboarding/Onboarding').then((m) => ({ default: m.Onboarding })))
 const CoachMarks = lazy(() => import('@/components/guide/CoachMarks').then((m) => ({ default: m.CoachMarks })))
 
@@ -263,6 +266,7 @@ export default function App() {
           <SiteDataOverlay />
           <YoutubeSubscriptionsOverlay />
           <GmailPreviewOverlay />
+          <PasswordsOverlay />
           <Onboarding />
           <CoachMarks />
         </Suspense>

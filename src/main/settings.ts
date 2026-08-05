@@ -4,9 +4,9 @@
  * et ne quittent jamais le processus principal — le renderer ne reçoit que
  * des drapeaux `has*Key`.
  */
-import { safeStorage } from 'electron'
 import { totalmem } from 'node:os'
 import type { ApiProviderKind, AppSettings, FocusState, NewTabWidgets, SettingsPatch, WindowState } from '@shared/types'
+import { decryptValue, encryptValue } from './crypto'
 import { kvRepo } from './db/repositories'
 
 /** Valeur INITIALE (l'utilisateur peut toujours ajuster le curseur ensuite,
@@ -93,30 +93,9 @@ const SECRET_KEYS: Record<ApiProviderKind, string> = {
 }
 
 // ─── Secrets ─────────────────────────────────────────────────────────────────
-
-/** Chiffrement générique (DPAPI via `safeStorage`, repli brut si indisponible)
- * — utilisé aussi bien pour les clés IA que pour la config SMTP ci-dessous. */
-function encryptValue(value: string): string {
-  if (safeStorage.isEncryptionAvailable()) {
-    return 'enc:' + safeStorage.encryptString(value).toString('base64')
-  }
-  // Repli très rare (DPAPI indisponible) — stockage brut signalé par préfixe.
-  return 'raw:' + Buffer.from(value, 'utf8').toString('base64')
-}
-
-function decryptValue(stored: string): string | null {
-  try {
-    if (stored.startsWith('enc:')) {
-      return safeStorage.decryptString(Buffer.from(stored.slice(4), 'base64'))
-    }
-    if (stored.startsWith('raw:')) {
-      return Buffer.from(stored.slice(4), 'base64').toString('utf8')
-    }
-  } catch {
-    // Clé illisible (profil changé…) → considérée absente.
-  }
-  return null
-}
+// Chiffrement (`encryptValue`/`decryptValue`) : voir `./crypto.ts` — module
+// dédié pour que `db/repositories.ts` (champ `passwords.password_enc`)
+// puisse l'utiliser sans dépendance circulaire avec ce fichier.
 
 function storeSecret(provider: ApiProviderKind, value: string | null): void {
   const key = SECRET_KEYS[provider]

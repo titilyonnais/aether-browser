@@ -245,7 +245,10 @@ const delegate = {
   onInstallExtensionRequested: vi.fn(),
   onCreateQrCode: vi.fn(),
   onOpenInNewWindow: vi.fn(),
-  onGoogleSignInBlocked: vi.fn()
+  onGoogleSignInBlocked: vi.fn(),
+  onPasswordFieldFocused: vi.fn(),
+  onPasswordFieldBlurred: vi.fn(),
+  onPasswordSubmitCandidate: vi.fn()
 }
 
 beforeEach(() => {
@@ -999,11 +1002,24 @@ describe('ViewManager — suppression du défi WebAuthn/passkey sur accounts.goo
     vm.setVisible(['a'])
     const wc = contentsOf(vm, 'a')
 
-    expect(wc.debugger.attach).not.toHaveBeenCalled()
+    // Le débogueur PEUT désormais être attaché même pour un site quelconque
+    // (bridge mots de passe, actif sur toute page http/https, voir plus bas)
+    // — ce qui compte : le shim GOOGLE lui-même (script marqueur
+    // `__aetherGoogleAuthShimmed`) ne doit jamais s'exécuter ailleurs que sur
+    // accounts.google.com.
     expect(wc.executeJavaScript).not.toHaveBeenCalledWith(expect.stringContaining('__aetherGoogleAuthShimmed'))
+    expect(wc.debugger.sendCommand).not.toHaveBeenCalledWith(
+      'Page.addScriptToEvaluateOnNewDocument',
+      expect.objectContaining({ source: expect.stringContaining('__aetherGoogleAuthShimmed') })
+    )
   })
 
-  it('retire le correctif (et détache le débogueur) en quittant accounts.google.com', async () => {
+  it('ne détache plus le débogueur en quittant accounts.google.com — le bridge mots de passe reste actif sur la page suivante', async () => {
+    // Avant l'introduction du bridge mots de passe (généralisé à TOUTE page
+    // http/https), quitter Google détachait le débogueur PARTAGÉ puisque
+    // plus personne n'en avait besoin. Désormais https://example.com garde
+    // le bridge mots de passe actif — le détacher casserait sa détection sur
+    // cette toute nouvelle page.
     const vm = new ViewManager(fakeWin() as never, delegate)
     seedRow('a', 'https://accounts.google.com/v3/signin/identifier')
     vm.setVisible(['a'])
@@ -1012,7 +1028,7 @@ describe('ViewManager — suppression du défi WebAuthn/passkey sur accounts.goo
 
     await vm.navigate('a', 'https://example.com')
 
-    expect(wc.debugger.detach).toHaveBeenCalled()
+    expect(wc.debugger.detach).not.toHaveBeenCalled()
   })
 
   it('enregistre aussi le correctif dans une popup native de connexion Google, via CDP', async () => {

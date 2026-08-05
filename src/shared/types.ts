@@ -578,6 +578,30 @@ export interface Visit {
   visitedAt: number
 }
 
+// ─── Gestionnaire de mots de passe ──────────────────────────────────────────
+// Le mot de passe en clair ne transite JAMAIS par `PasswordListItem`/
+// `PasswordSuggestion` — seul `reveal(id)` (déclenché par un clic explicite,
+// jamais au chargement d'une liste) le renvoie, voir `passwords.reveal` côté
+// IPC/preload.
+
+/** Identifiant/mot de passe enregistré pour un site — `origin` exact
+ * (protocole+hôte+port), jamais une correspondance floue par sous-domaine
+ * (voir `passwordsRepo.suggestFor`). */
+export interface PasswordListItem {
+  id: string
+  origin: string
+  identifier: string
+  createdAt: number
+  updatedAt: number
+}
+
+/** Suggestion d'autofill affichée sous un champ — jamais le mot de passe. */
+export interface PasswordSuggestion {
+  id: string
+  identifierMasked: string
+  faviconUrl: string | null
+}
+
 /** Une requête tapée dans la barre de recherche/la barre d'intention —
  * DISSOCIÉ de `Visit` (tout site visité, y compris via un lien cliqué) : le
  * menu « récents » du champ de recherche ne doit montrer que ce qui a été
@@ -892,6 +916,19 @@ export type PopoverContent =
   | { kind: 'webstore-confirm'; extensionId: string; name: string; iconUrl: string | null }
   | { kind: 'extensions-menu' }
   | { kind: 'update-ready'; version: string }
+  // Déclenchés directement depuis le main process (évènement CDP du bridge
+  // mots de passe), jamais via `PopoverShowRequest`/`window.aether.popover.show`
+  // — même patron que `webstore-confirm`, absent lui aussi de `PopoverShowRequest`.
+  // Le mot de passe candidat lui-même reste en mémoire côté main (jamais
+  // envoyé au renderer) — voir `pendingPasswordSaves` dans ipc.ts.
+  | { kind: 'password-save-prompt'; origin: string; identifier: string; mode: 'create' | 'update' }
+  | {
+      kind: 'password-suggestions'
+      pageId: PageId
+      fieldId: string
+      pairFieldId: string | null
+      entries: PasswordSuggestion[]
+    }
   | null
 
 /** Demande d'ouverture envoyée par la fenêtre principale. */
@@ -1120,6 +1157,7 @@ export type ShortcutCommand =
   | 'report-problem'
   | 'fullscreen'
   | 'history'
+  | 'passwords'
   | 'favorites-manage'
   | 'devtools'
   | 'print'

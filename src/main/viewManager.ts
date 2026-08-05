@@ -22,12 +22,20 @@ import type {
   PageContext,
   PageId,
   ProfileId,
+  ScreenRect,
   ShortcutCommand,
   SpaceId
 } from '@shared/types'
 import { getSettings } from './settings'
 import { downloadsRepo, pagesRepo, sitePermissionsRepo, type PageRow } from './db/repositories'
 import { noteMainFrameNavigation, noteWebContentsClosed, siteBlocksPopups } from './contentBlocking'
+import {
+  isHttpOrHttpsUrl,
+  parseBridgeEvent,
+  PASSWORD_BRIDGE_BINDING,
+  PASSWORD_CAPTURE_SCRIPT,
+  type PasswordBridgeEvent
+} from './passwordFormBridge'
 import { hidePopoverWindow, showContextMenuPopover } from './popoverWindow'
 import { capturePreview, deletePreview } from './previews'
 import {
@@ -342,6 +350,21 @@ export interface ViewManagerDelegate {
    * délégué propose à l'utilisateur d'ouvrir `url` dans son navigateur par
    * défaut, seul contournement fiable connu pour ce blocage. */
   onGoogleSignInBlocked(pageId: PageId, url: string): void
+  /** Un champ identifiant/mot de passe d'une page a reçu le focus — coordonnées
+   * déjà converties en écran (voir `ViewManager.toScreenRect`), prêtes pour
+   * ancrer une suggestion d'autofill. */
+  onPasswordFieldFocused(
+    pageId: PageId,
+    kind: 'identifier' | 'password',
+    screenRect: ScreenRect,
+    fieldId: string,
+    pairFieldId: string | null
+  ): void
+  /** Le champ qui avait le focus l'a perdu — ferme une éventuelle suggestion ouverte. */
+  onPasswordFieldBlurred(pageId: PageId): void
+  /** Un formulaire de connexion/inscription a été soumis (HTML classique ou
+   * heuristique SPA) — le délégué décide enregistrement/mise à jour/ignoré. */
+  onPasswordSubmitCandidate(pageId: PageId, origin: string, identifierValue: string | null, passwordValue: string): void
 }
 
 /** Taille de lot partagée entre la collecte et l'application (voir
@@ -494,6 +517,19 @@ export class ViewManager {
   /** Dernières bornes PLEINES (avant partage avec les DevTools) reçues pour
    * cette page — pour restaurer la page à sa taille normale à la fermeture. */
   private fullBounds = new Map<PageId, Bounds>()
+  // ─── Bridge mots de passe ────────────────────────────────────────────────
+  // Même patron CDP que le crochet Google Auth (`googleAuthShimWebContents`),
+  // mais généralisé à TOUTES les pages http/https plutôt qu'un host précis —
+  // voir `ensurePasswordBridge`/`syncPasswordBridge`. `Weak*` comme pour le
+  // crochet Google Auth : jamais de fuite mémoire si un `WebContents` est
+  // détruit sans passer par `teardownPasswordBridge` (ex. fermeture brutale).
+  private passwordBridgeWebContents = new WeakSet<WebContents>()
+  private passwordBridgeScriptIds = new WeakMap<WebContents, string>()
+  /** Le listener `wc.debugger.on('message', …)` n'est posé qu'une fois par
+   * `WebContents` (contrairement au script CDP, réenregistré à chaque
+   * navigation) — sans cette garde, chaque navigation ajouterait un listener
+   * de plus, chacun traitant le même évènement en double. */
+  private passwordBridgeListenerAttached = new WeakSet<WebContents>()
   /** Origines des sous-frames vues sur cette page depuis sa dernière
    * navigation de premier niveau (« Données des sites sur l'appareil »,
    * photo 5 : grok.com + m.stripe.com/m.stripe.network intégrés) — scopé à
@@ -689,6 +725,7 @@ export class ViewManager {
     // bouton « retour » ne peut jamais revenir à cette page après avoir
     // recherché/navigué ailleurs depuis le nouvel onglet.
     this.syncStoreShim(row.id, view.webContents, row.url)
+    this.syncPasswordBridge(row.id, view.webContents, row.url)
     // `loadURL` ci-dessous est retardé jusqu'à cette promesse (jamais
     // attendue avant 0.90.1) — voir le commentaire de `syncGoogleAuthShim`
     // pour la fenêtre de course que ça fermait.
@@ -965,6 +1002,7 @@ export class ViewManager {
       // le cas le plus courant (lien cliqué), en amont du chargement réel.
       this.syncStoreShim(pageId, wc, url)
       this.syncGoogleAuthShim(pageId, wc, url)
+      this.syncPasswordBridge(pageId, wc, url)
     }
     wc.on('did-navigate', (_e, url) => onNavigated(url))
     wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
@@ -1256,6 +1294,7 @@ export class ViewManager {
       // enregistré via CDP AVANT que le document du Store ne s'exécute.
       this.syncStoreShim(pageId, wc, url)
       const authShimReady = this.syncGoogleAuthShim(pageId, wc, url)
+      this.syncPasswordBridge(pageId, wc, url)
       this.prepareUserAgentFor(wc, url)
       let navHost = ''
       try {
@@ -1778,17 +1817,142 @@ export class ViewManager {
   private teardownGoogleAuthShim(pageId: PageId, wc: WebContents): void {
     if (!this.googleAuthShimWebContents.has(wc)) return
     this.googleAuthShimWebContents.delete(wc)
+    const scriptId = this.googleAuthShimScriptIds.get(wc)
     this.googleAuthShimScriptIds.delete(wc)
+    // Retire EXPLICITEMENT le script CDP — ne plus compter uniquement sur
+    // `detachDebuggerIfUnused` pour ce nettoyage : depuis l'introduction du
+    // bridge mots de passe (actif sur quasi toutes les pages http/https), le
+    // débogueur partagé ne se détache plus qu'exceptionnellement, ce qui
+    // aurait sinon laissé ce script s'exécuter sur TOUTES les navigations
+    // suivantes de ce `WebContents`, même hors de accounts.google.com.
+    if (scriptId) {
+      try {
+        void wc.debugger.sendCommand('Page.removeScriptToEvaluateOnNewDocument', { identifier: scriptId }).catch(() => {})
+      } catch {
+        // Débogueur déjà détaché entretemps — sans conséquence.
+      }
+    }
     this.detachDebuggerIfUnused(pageId, wc)
   }
 
-  /** `wc.debugger` est PARTAGÉ entre le crochet Store (indexé par `PageId`) et
-   * celui-ci (indexé par `WebContents`) — ne le détache que si NI L'UN NI
-   * L'AUTRE n'en a plus besoin pour ce `wc`, sinon le premier à quitter son
-   * host coupe le CDP sous les pieds du second. */
+  /** Même patron que `syncStoreShim`/`syncGoogleAuthShim`, mais généralisé à
+   * TOUTES les pages http/https (pas un host précis) — appelé aux mêmes
+   * points d'entrée (`ensureLive`, `navigate`, `will-navigate`, `onNavigated`).
+   * Fire-and-forget comme `syncStoreShim` : contrairement au crochet Google,
+   * rien ici ne dépend d'un timing critique avant le tout premier script de
+   * la page (un formulaire de connexion n'est jamais rempli avant que
+   * l'utilisateur n'ait eu le temps de voir la page), donc pas besoin
+   * d'attendre la promesse avant `loadURL`. */
+  private syncPasswordBridge(pageId: PageId, wc: WebContents, url: string): void {
+    if (isHttpOrHttpsUrl(url)) void this.ensurePasswordBridge(pageId, wc)
+    else this.teardownPasswordBridge(pageId, wc)
+  }
+
+  private async ensurePasswordBridge(pageId: PageId, wc: WebContents): Promise<void> {
+    this.passwordBridgeWebContents.add(wc)
+    try {
+      if (!wc.debugger.isAttached()) wc.debugger.attach('1.3')
+      // Le listener n'est posé qu'une fois par WebContents (voir le
+      // commentaire du champ `passwordBridgeListenerAttached`) — le script
+      // CDP, lui, est bien réenregistré à chaque navigation plus bas.
+      if (!this.passwordBridgeListenerAttached.has(wc)) {
+        this.passwordBridgeListenerAttached.add(wc)
+        await wc.debugger.sendCommand('Runtime.enable').catch(() => {})
+        await wc.debugger.sendCommand('Runtime.addBinding', { name: PASSWORD_BRIDGE_BINDING }).catch(() => {})
+        wc.debugger.on('message', (_e, method, params) => {
+          if (method !== 'Runtime.bindingCalled') return
+          // `wc.debugger` est PARTAGÉ avec le crochet Store/Auth — un
+          // évènement d'un binding différent ne doit JAMAIS être traité ici.
+          const p = params as { name: string; payload: string }
+          if (p.name !== PASSWORD_BRIDGE_BINDING) return
+          const event = parseBridgeEvent(p.payload)
+          if (event) this.handlePasswordBridgeEvent(pageId, wc, event)
+        })
+      }
+      const oldScriptId = this.passwordBridgeScriptIds.get(wc)
+      if (oldScriptId) {
+        await wc.debugger.sendCommand('Page.removeScriptToEvaluateOnNewDocument', { identifier: oldScriptId }).catch(() => {})
+      }
+      const result = await wc.debugger
+        .sendCommand('Page.addScriptToEvaluateOnNewDocument', { source: PASSWORD_CAPTURE_SCRIPT })
+        .catch(() => undefined)
+      const identifier = (result as { identifier?: string } | undefined)?.identifier
+      if (identifier) this.passwordBridgeScriptIds.set(wc, identifier)
+    } catch {
+      // CDP indisponible (DevTools ancrées déjà ouvertes sur cette page…) —
+      // le rattrapage executeJavaScript ci-dessous reste le seul mécanisme
+      // pour ce chargement.
+    }
+    await wc.executeJavaScript(PASSWORD_CAPTURE_SCRIPT).catch(() => {})
+  }
+
+  private teardownPasswordBridge(pageId: PageId, wc: WebContents): void {
+    if (!this.passwordBridgeWebContents.has(wc)) return
+    this.passwordBridgeWebContents.delete(wc)
+    const scriptId = this.passwordBridgeScriptIds.get(wc)
+    this.passwordBridgeScriptIds.delete(wc)
+    // Voir le commentaire équivalent dans `teardownGoogleAuthShim` — retrait
+    // explicite plutôt que de compter sur un détachement complet.
+    if (scriptId) {
+      try {
+        void wc.debugger.sendCommand('Page.removeScriptToEvaluateOnNewDocument', { identifier: scriptId }).catch(() => {})
+      } catch {
+        // Débogueur déjà détaché entretemps — sans conséquence.
+      }
+    }
+    this.detachDebuggerIfUnused(pageId, wc)
+  }
+
+  /** Convertit un rectangle en pixels CSS LOCAUX à la page (mesuré dans la
+   * page via `getBoundingClientRect()`) en coordonnées ÉCRAN absolues,
+   * prêtes pour `openPopover` — additionne les bornes de la `WebContentsView`
+   * de cette page dans la fenêtre ÆTHER (`this.bounds`, déjà tenues à jour
+   * par `setBounds()`) et les bornes de la fenêtre elle-même, en tenant
+   * compte du facteur de zoom de la PAGE (pas celui d'ÆTHER). */
+  private toScreenRect(pageId: PageId, wc: WebContents, local: ScreenRect): ScreenRect | null {
+    const vb = this.bounds.get(pageId)
+    if (!vb) return null
+    const zoom = wc.getZoomFactor()
+    const wb = this.win.getContentBounds()
+    return {
+      x: Math.round(wb.x + vb.x + local.x * zoom),
+      y: Math.round(wb.y + vb.y + local.y * zoom),
+      width: Math.round(local.width * zoom),
+      height: Math.round(local.height * zoom)
+    }
+  }
+
+  private handlePasswordBridgeEvent(pageId: PageId, wc: WebContents, event: PasswordBridgeEvent): void {
+    if (event.type === 'field-focus') {
+      const screenRect = this.toScreenRect(pageId, wc, event.rect)
+      if (screenRect) this.delegate.onPasswordFieldFocused(pageId, event.kind, screenRect, event.fieldId, event.pairFieldId)
+      return
+    }
+    if (event.type === 'field-blur') {
+      this.delegate.onPasswordFieldBlurred(pageId)
+      return
+    }
+    // 'submit-candidate' — origine calculée ICI depuis l'URL réelle du
+    // WebContents (jamais une valeur qui viendrait de la page elle-même,
+    // qui pourrait mentir sur son origine).
+    let origin = ''
+    try {
+      origin = new URL(wc.getURL()).origin
+    } catch {
+      return
+    }
+    this.delegate.onPasswordSubmitCandidate(pageId, origin, event.identifierValue, event.passwordValue)
+  }
+
+  /** `wc.debugger` est PARTAGÉ entre le crochet Store (indexé par `PageId`),
+   * le crochet Auth Google et le bridge mots de passe (tous deux indexés par
+   * `WebContents`) — ne le détache que si AUCUN des trois n'en a plus besoin
+   * pour ce `wc`, sinon le premier à quitter son host/page coupe le CDP sous
+   * les pieds des autres. */
   private detachDebuggerIfUnused(pageId: PageId, wc: WebContents): void {
     if (this.storeShimHosts.has(pageId)) return
     if (this.googleAuthShimWebContents.has(wc)) return
+    if (this.passwordBridgeWebContents.has(wc)) return
     try {
       if (wc.debugger.isAttached()) wc.debugger.detach()
     } catch {
@@ -1913,7 +2077,18 @@ export class ViewManager {
   private teardownStoreShim(pageId: PageId, wc: WebContents): void {
     if (!this.storeShimHosts.has(pageId)) return
     this.storeShimHosts.delete(pageId)
+    const scriptId = this.storeShimScriptIds.get(pageId)
     this.storeShimScriptIds.delete(pageId)
+    // Voir le commentaire équivalent dans `teardownGoogleAuthShim` — même
+    // raison de retirer le script CDP explicitement plutôt que de compter
+    // sur un détachement complet du débogueur partagé.
+    if (scriptId) {
+      try {
+        void wc.debugger.sendCommand('Page.removeScriptToEvaluateOnNewDocument', { identifier: scriptId }).catch(() => {})
+      } catch {
+        // Débogueur déjà détaché entretemps — sans conséquence.
+      }
+    }
     this.detachDebuggerIfUnused(pageId, wc)
   }
 
@@ -1952,6 +2127,7 @@ export class ViewManager {
     await this.pendingInitialLoad.get(id)
     if (!this.views.has(id) || this.views.get(id) !== view) return
     this.syncStoreShim(id, view.webContents, url)
+    this.syncPasswordBridge(id, view.webContents, url)
     this.prepareUserAgentFor(view.webContents, url)
     // `loadURL` retardé jusqu'à cette promesse (jamais attendue avant
     // 0.90.1), SANS bloquer la suite de cette fonction (`patchRuntime`

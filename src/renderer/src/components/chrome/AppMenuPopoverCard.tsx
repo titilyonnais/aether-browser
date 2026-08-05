@@ -61,6 +61,7 @@ const ROOT: Row[] = [
   { separator: true },
   { label: 'Favoris et listes', action: 'favorites-manage' },
   { label: 'Historique', action: 'history' },
+  { label: 'Mots de passe', action: 'passwords' },
   { label: 'Téléchargements', action: 'downloads' },
   { label: 'Extensions', action: 'extensions' },
   { separator: true },

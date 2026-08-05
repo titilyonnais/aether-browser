@@ -25,6 +25,7 @@ export type OverlayKind =
   | 'site-data'
   | 'youtube-subscriptions'
   | 'gmail-preview'
+  | 'passwords'
   | null
 
 interface Toast {

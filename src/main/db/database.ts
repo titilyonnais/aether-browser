@@ -411,4 +411,27 @@ CREATE INDEX IF NOT EXISTS idx_search_queries_profile ON search_queries(profile_
     database.exec('ALTER TABLE site_permissions ADD COLUMN last_used_at INTEGER')
     database.pragma('user_version = 11')
   }
+  if (version < 12) {
+    // Gestionnaire de mots de passe — `password_enc` est le SEUL champ
+    // chiffré (voir `encryptValue`/`decryptValue`, main/crypto.ts) ;
+    // `origin`/`identifier` restent en clair (nécessaires pour la
+    // recherche/correspondance par site, voir
+    // `passwordsRepo.findByOriginAndIdentifier`/`suggestFor`). Index sur
+    // `(profile_id, origin)` : c'est la requête la plus fréquente (suggestion
+    // d'autofill à chaque focus de champ).
+    database.exec(`
+CREATE TABLE IF NOT EXISTS passwords (
+  id           TEXT PRIMARY KEY,
+  profile_id   TEXT NOT NULL,
+  origin       TEXT NOT NULL,
+  identifier   TEXT NOT NULL DEFAULT '',
+  password_enc TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_passwords_profile ON passwords(profile_id);
+CREATE INDEX IF NOT EXISTS idx_passwords_origin ON passwords(profile_id, origin);
+`)
+    database.pragma('user_version = 12')
+  }
 }

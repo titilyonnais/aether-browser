@@ -12,6 +12,8 @@ import type {
   ExtensionInfo,
   NoteItem,
   PageId,
+  PasswordListItem,
+  PasswordSuggestion,
   Profile,
   ProfileId,
   RecentSearch,
@@ -21,6 +23,7 @@ import type {
   SpaceId,
   Visit
 } from '@shared/types'
+import { decryptValue, encryptValue } from '../crypto'
 import { getDb } from './database'
 
 // ─── Profils ─────────────────────────────────────────────────────────────────
@@ -142,6 +145,11 @@ export const profilesRepo = {
     // dû disparaître avec le profil comme le reste de son historique.
     db.prepare('DELETE FROM site_permissions WHERE profile_id = ?').run(id)
     db.prepare('DELETE FROM search_queries WHERE profile_id = ?').run(id)
+    // Mots de passe enregistrés pour ce profil — même raisonnement que
+    // `search_queries` juste au-dessus (données sensibles qui doivent
+    // disparaître avec le profil), ajouté dès la création de la table plutôt
+    // que de reproduire l'oubli initial documenté ci-dessus.
+    db.prepare('DELETE FROM passwords WHERE profile_id = ?').run(id)
     db.prepare('DELETE FROM profiles WHERE id = ?').run(id)
   },
 
@@ -766,6 +774,139 @@ export const visitsRepo = {
   /** Efface une seule visite (`profileId` scope la suppression au profil actif). */
   remove(profileId: ProfileId, id: string): void {
     getDb().prepare('DELETE FROM visits WHERE profile_id = ? AND id = ?').run(profileId, id)
+  }
+}
+
+// ─── Mots de passe ───────────────────────────────────────────────────────────
+// `password_enc` est le SEUL champ chiffré (voir `../crypto.ts`) — le
+// déchiffrement reste ENTIÈREMENT encapsulé dans ce module, jamais exposé en
+// dehors : `list()`/`suggestFor()` ne renvoient jamais le mot de passe,
+// `get()` (autofill, sélection explicite d'une suggestion) et `reveal()`
+// (overlay de gestion, clic explicite sur l'icône œil) sont les DEUX SEULES
+// méthodes qui déchiffrent, chacune déclenchée par une action utilisateur
+// explicite — jamais au simple chargement d'une liste.
+
+interface PasswordRow {
+  id: string
+  profile_id: string
+  origin: string
+  identifier: string
+  password_enc: string
+  created_at: number
+  updated_at: number
+}
+
+const toPasswordListItem = (r: PasswordRow): PasswordListItem => ({
+  id: r.id,
+  origin: r.origin,
+  identifier: r.identifier,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at
+})
+
+/** Masque un identifiant pour l'affichage dans une suggestion d'autofill
+ * (jamais le mot de passe, mais l'identifiant complet n'a pas non plus à
+ * apparaître avant que l'utilisateur ne choisisse cette suggestion) — garde
+ * les deux premiers caractères + le domaine d'un e-mail, ou juste les deux
+ * premiers caractères sinon. */
+function maskIdentifier(identifier: string): string {
+  if (!identifier) return ''
+  const at = identifier.indexOf('@')
+  if (at > 1) return identifier.slice(0, 2) + '•••' + identifier.slice(at)
+  if (identifier.length <= 2) return identifier
+  return identifier.slice(0, 2) + '•••'
+}
+
+export const passwordsRepo = {
+  create(profileId: ProfileId, origin: string, identifier: string, plainPassword: string): PasswordListItem {
+    const db = getDb()
+    const now = Date.now()
+    const row: PasswordRow = {
+      id: randomUUID(),
+      profile_id: profileId,
+      origin,
+      identifier,
+      password_enc: encryptValue(plainPassword),
+      created_at: now,
+      updated_at: now
+    }
+    db.prepare(
+      `INSERT INTO passwords (id, profile_id, origin, identifier, password_enc, created_at, updated_at)
+       VALUES (@id, @profile_id, @origin, @identifier, @password_enc, @created_at, @updated_at)`
+    ).run(row)
+    return toPasswordListItem(row)
+  },
+
+  update(profileId: ProfileId, id: string, plainPassword: string): void {
+    getDb()
+      .prepare('UPDATE passwords SET password_enc = ?, updated_at = ? WHERE profile_id = ? AND id = ?')
+      .run(encryptValue(plainPassword), Date.now(), profileId, id)
+  },
+
+  /** Compare une soumission candidate (formulaire rempli/soumis) à l'entrée
+   * déjà enregistrée pour cette origine+identifiant — encapsule le
+   * déchiffrement nécessaire à la comparaison, jamais exposé à l'appelant.
+   * `'new'` → aucune entrée, proposer un enregistrement ; `'unchanged'` →
+   * mot de passe identique, ne rien proposer ; `'changed'` → proposer une
+   * MISE À JOUR (pas un doublon). */
+  matchExisting(
+    profileId: ProfileId,
+    origin: string,
+    identifier: string | null,
+    plainPassword: string
+  ): { status: 'new' } | { status: 'unchanged'; id: string } | { status: 'changed'; id: string } {
+    if (identifier === null) return { status: 'new' }
+    const row = getDb()
+      .prepare('SELECT id, password_enc FROM passwords WHERE profile_id = ? AND origin = ? AND identifier = ?')
+      .get(profileId, origin, identifier) as { id: string; password_enc: string } | undefined
+    if (!row) return { status: 'new' }
+    const stored = decryptValue(row.password_enc)
+    return stored === plainPassword ? { status: 'unchanged', id: row.id } : { status: 'changed', id: row.id }
+  },
+
+  /** Correspondance sur l'ORIGINE EXACTE uniquement — jamais de repli flou
+   * par sous-domaine (voir le commentaire de `PasswordListItem`, shared/types.ts). */
+  suggestFor(profileId: ProfileId, origin: string): PasswordSuggestion[] {
+    const rows = getDb()
+      .prepare('SELECT * FROM passwords WHERE profile_id = ? AND origin = ? ORDER BY updated_at DESC')
+      .all(profileId, origin) as PasswordRow[]
+    return rows.map((r) => ({ id: r.id, identifierMasked: maskIdentifier(r.identifier), faviconUrl: null }))
+  },
+
+  list(profileId: ProfileId): PasswordListItem[] {
+    const rows = getDb()
+      .prepare('SELECT * FROM passwords WHERE profile_id = ? ORDER BY origin ASC, identifier ASC')
+      .all(profileId) as PasswordRow[]
+    return rows.map(toPasswordListItem)
+  },
+
+  /** Déchiffre pour un remplissage (suggestion d'autofill sélectionnée
+   * explicitement) — identifiant + mot de passe, les deux nécessaires pour
+   * remplir les deux champs de la page. */
+  get(profileId: ProfileId, id: string): { identifier: string; password: string } | null {
+    const row = getDb()
+      .prepare('SELECT identifier, password_enc FROM passwords WHERE profile_id = ? AND id = ?')
+      .get(profileId, id) as { identifier: string; password_enc: string } | undefined
+    if (!row) return null
+    const password = decryptValue(row.password_enc)
+    return password === null ? null : { identifier: row.identifier, password }
+  },
+
+  /** Déchiffre pour affichage (icône œil de l'overlay de gestion) — jamais
+   * appelée ailleurs qu'au clic explicite de l'utilisateur. */
+  reveal(profileId: ProfileId, id: string): string | null {
+    const row = getDb()
+      .prepare('SELECT password_enc FROM passwords WHERE profile_id = ? AND id = ?')
+      .get(profileId, id) as { password_enc: string } | undefined
+    return row ? decryptValue(row.password_enc) : null
+  },
+
+  remove(profileId: ProfileId, id: string): void {
+    getDb().prepare('DELETE FROM passwords WHERE profile_id = ? AND id = ?').run(profileId, id)
+  },
+
+  clear(profileId: ProfileId): void {
+    getDb().prepare('DELETE FROM passwords WHERE profile_id = ?').run(profileId)
   }
 }
 

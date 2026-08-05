@@ -10,6 +10,8 @@ import type { AppSettings, PopoverBackdrop, PopoverContent } from '@shared/types
 import { AppMenuPopoverCard } from '@/components/chrome/AppMenuPopoverCard'
 import { ContextMenuPopoverCard } from '@/components/chrome/ContextMenuPopoverCard'
 import { ExtensionsMenuPopoverCard } from '@/components/chrome/ExtensionsMenuPopoverCard'
+import { PasswordSavePromptCard } from '@/components/chrome/PasswordSavePromptCard'
+import { PasswordSuggestionsPopoverCard } from '@/components/chrome/PasswordSuggestionsPopoverCard'
 import { UpdateReadyPopoverCard } from '@/components/chrome/UpdateReadyPopoverCard'
 import { WebstoreConfirmCard } from '@/components/chrome/WebstoreConfirmCard'
 import { FavoritesFolderPopoverCard } from '@/components/favorites/FavoritesFolderPopoverCard'
@@ -200,6 +202,17 @@ export default function PopoverRoot() {
       )}
       {content.kind === 'extensions-menu' && <ExtensionsMenuPopoverCard />}
       {content.kind === 'update-ready' && <UpdateReadyPopoverCard version={content.version} />}
+      {content.kind === 'password-save-prompt' && (
+        <PasswordSavePromptCard origin={content.origin} identifier={content.identifier} mode={content.mode} />
+      )}
+      {content.kind === 'password-suggestions' && (
+        <PasswordSuggestionsPopoverCard
+          pageId={content.pageId}
+          fieldId={content.fieldId}
+          pairFieldId={content.pairFieldId}
+          entries={content.entries}
+        />
+      )}
       <PopoverSurfaceBlur containerRef={rootRef} backdrop={backdrop} />
     </div>
   )

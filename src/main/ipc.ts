@@ -69,6 +69,7 @@ import {
   favoritesRepo,
   notesRepo,
   pagesRepo,
+  passwordsRepo,
   profilesRepo,
   searchEnginesRepo,
   searchQueriesRepo,
@@ -94,6 +95,7 @@ import { clearFavoritesClipboard, getFavoritesClipboard, setFavoritesClipboard }
 import { readFlags, relaunchApp, writeFlags } from './flags'
 import { createChildWindow } from './mainWindow'
 import { sendBugReport } from './mailer'
+import { buildFillScript } from './passwordFormBridge'
 import {
   broadcastToPopover,
   hidePopoverWindow,
@@ -676,6 +678,36 @@ const extensionsMenuAnchors = new Map<number, { rightX: number; topY: number }>(
  * ouverte), PAR FENÊTRE — une seule à la fois PAR fenêtre, comme
  * `contextMenuActions` dans popoverWindow.ts. */
 const pendingWebstoreInstalls = new Map<number, { pageId: PageId; extensionId: string }>()
+
+/** Candidat d'enregistrement/mise à jour de mot de passe en attente de
+ * réponse (popup « password-save-prompt » ouverte), PAR FENÊTRE — même
+ * patron que `pendingWebstoreInstalls`. Le mot de passe en clair ne vit
+ * QUE dans cette map, jamais envoyé au renderer (seuls `origin`/`identifier`/
+ * `mode` le sont, pour l'affichage du popup). */
+const pendingPasswordSaves = new Map<
+  number,
+  { origin: string; identifier: string; password: string; mode: 'create' | 'update'; existingId: string | null }
+>()
+
+/** Anti-spam du popup « enregistrer ? » — au-delà de ce nombre d'ouvertures
+ * pour une même origine sur la fenêtre glissante ci-dessous, un site (bogué
+ * ou malveillant) ne peut plus déclencher le popup. Complète le throttle côté
+ * script page (`MAX_SUBMITS_PER_LOAD`, passwordFormBridge.ts). */
+const savePromptThrottle = new Map<string, number[]>()
+const MAX_SAVE_PROMPTS_PER_ORIGIN = 2
+const SAVE_PROMPT_WINDOW_MS = 60_000
+
+function shouldThrottleSavePrompt(origin: string): boolean {
+  const now = Date.now()
+  const timestamps = (savePromptThrottle.get(origin) ?? []).filter((t) => now - t < SAVE_PROMPT_WINDOW_MS)
+  if (timestamps.length >= MAX_SAVE_PROMPTS_PER_ORIGIN) {
+    savePromptThrottle.set(origin, timestamps)
+    return true
+  }
+  timestamps.push(now)
+  savePromptThrottle.set(origin, timestamps)
+  return false
+}
 
 export function registerIpc(router: AiRouter): void {
 
@@ -1921,6 +1953,72 @@ export function registerIpc(router: AiRouter): void {
   )
   ipcMain.handle(CH.historyRemove, (e, id: string) => visitsRepo.remove(activeProfileOf(resolveWindowContext(e).views), String(id)))
 
+  // ─── Mots de passe ─────────────────────────────────────────────────────────
+  // `reveal`/`get` (déclenché depuis onPasswordFieldFocused ci-dessous) sont
+  // les SEULS points où un mot de passe est déchiffré — jamais au chargement
+  // d'une liste (`list`/`suggestFor`, jamais le mot de passe).
+
+  ipcMain.handle(CH.passwordsList, (e) => passwordsRepo.list(activeProfileOf(resolveWindowContext(e).views)))
+
+  ipcMain.handle(CH.passwordsCreate, (e, origin: string, identifier: string, password: string) =>
+    passwordsRepo.create(
+      activeProfileOf(resolveWindowContext(e).views),
+      String(origin),
+      String(identifier).slice(0, 300),
+      String(password)
+    )
+  )
+
+  ipcMain.handle(CH.passwordsUpdate, (e, id: string, password: string) =>
+    passwordsRepo.update(activeProfileOf(resolveWindowContext(e).views), String(id), String(password))
+  )
+
+  // Déchiffre pour affichage — appelé uniquement depuis un clic explicite sur
+  // l'icône œil de l'overlay de gestion (jamais au chargement de la liste).
+  ipcMain.handle(CH.passwordsReveal, (e, id: string) =>
+    passwordsRepo.reveal(activeProfileOf(resolveWindowContext(e).views), String(id))
+  )
+
+  ipcMain.handle(CH.passwordsRemove, (e, id: string) =>
+    passwordsRepo.remove(activeProfileOf(resolveWindowContext(e).views), String(id))
+  )
+
+  ipcMain.handle(CH.passwordsClear, (e) => passwordsRepo.clear(activeProfileOf(resolveWindowContext(e).views)))
+
+  // Suggestion d'autofill sélectionnée (popover ancré au champ, voir
+  // onPasswordFieldFocused plus bas dans createViewDelegate) — remplit les
+  // DEUX champs via `runScript` (seul canal main→page possible, pas de
+  // preload pour une page web ordinaire). Le mot de passe déchiffré ne sort
+  // jamais de ce handler.
+  ipcMain.on(
+    CH.passwordSuggestionSelected,
+    (e, req: { pageId: PageId; fieldId: string; pairFieldId: string | null; id: string }) => {
+      const { win, views } = resolveWindowContext(e)
+      hidePopoverWindow(win)
+      const entry = passwordsRepo.get(activeProfileOf(views), String(req.id))
+      if (!entry) return
+      if (req.pairFieldId) views.runScript(req.pageId, buildFillScript(req.pairFieldId, entry.identifier))
+      views.runScript(req.pageId, buildFillScript(req.fieldId, entry.password))
+    }
+  )
+
+  // Réponse au popup « enregistrer ? »/« mettre à jour ? » (voir
+  // onPasswordSubmitCandidate plus bas) — le mot de passe candidat ne quitte
+  // jamais `pendingPasswordSaves`, jamais renvoyé au renderer.
+  ipcMain.on(CH.passwordSavePromptRespond, (e, accepted: boolean) => {
+    const { win, views } = resolveWindowContext(e)
+    const pending = pendingPasswordSaves.get(win.id) ?? null
+    pendingPasswordSaves.delete(win.id)
+    hidePopoverWindow(win)
+    if (!pending || !accepted) return
+    const profileId = activeProfileOf(views)
+    if (pending.mode === 'update' && pending.existingId) {
+      passwordsRepo.update(profileId, pending.existingId, pending.password)
+    } else {
+      passwordsRepo.create(profileId, pending.origin, pending.identifier, pending.password)
+    }
+  })
+
   // ─── Réglages ──────────────────────────────────────────────────────────────
 
   ipcMain.handle(CH.settingsGet, () => getSettings())
@@ -2375,6 +2473,63 @@ export function createViewDelegate(
     },
     onGoogleSignInBlocked(pageId, url) {
       send(CH.googleSignInBlocked, { pageId, url })
+    },
+    onPasswordFieldFocused(pageId, _kind, screenRect, fieldId, pairFieldId) {
+      const row = pagesRepo.get(pageId)
+      if (!row) return
+      let origin = ''
+      try {
+        origin = new URL(row.url).origin
+      } catch {
+        return
+      }
+      const entries = passwordsRepo.suggestFor(activeProfileOf(getViews()), origin)
+      if (entries.length === 0) return
+      // Ancré juste SOUS le champ (comme une vraie suggestion d'autofill),
+      // coin haut-gauche épinglé à ce point — `openPopover` redimensionne
+      // ensuite vers la taille réelle mesurée par le renderer du popup.
+      const point = { x: screenRect.x, y: screenRect.y + screenRect.height }
+      openPopover(
+        win,
+        { ...point, width: Math.max(220, screenRect.width), height: 40 },
+        { kind: 'password-suggestions', pageId, fieldId, pairFieldId, entries },
+        topLeftAnchor(point)
+      )
+    },
+    onPasswordFieldBlurred() {
+      hidePopoverWindow(win)
+    },
+    onPasswordSubmitCandidate(_pageId, origin, identifierValue, passwordValue) {
+      if (!passwordValue) return
+      // Navigation privée : aucune trace, comme l'historique (onVisit ci-dessous).
+      const views = getViews()
+      if (activeProfileRecordOf(views)?.isPrivate) return
+      if (shouldThrottleSavePrompt(origin)) return
+      const profileId = activeProfileOf(views)
+      const match = passwordsRepo.matchExisting(profileId, origin, identifierValue, passwordValue)
+      if (match.status === 'unchanged') return
+      const mode = match.status === 'changed' ? 'update' : 'create'
+      const existingId = match.status === 'changed' ? match.id : null
+      pendingPasswordSaves.set(win.id, {
+        origin,
+        identifier: identifierValue ?? '',
+        password: passwordValue,
+        mode,
+        existingId
+      })
+      const width = 340
+      const height = 120
+      const wb = win.getContentBounds()
+      // Ancré en haut de la fenêtre, comme la confirmation d'installation
+      // d'extension (`onInstallExtensionRequested`) — même patron, même
+      // registre de « bulle de confirmation façon Chrome sous la barre d'adresse ».
+      const point = { x: wb.x + Math.round((wb.width - width) / 2), y: wb.y + 72 }
+      openPopover(
+        win,
+        { ...point, width, height },
+        { kind: 'password-save-prompt', origin, identifier: identifierValue ?? '', mode },
+        topLeftAnchor(point)
+      )
     },
     onVisit(pageId, url, title) {
       const views = getViews()

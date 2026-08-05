@@ -86,6 +86,19 @@ export const overlays: Record<string, string> = {
   'overlays.gmailPreview.noResults': 'Aucun message ne correspond.',
   'overlays.gmailPreview.noSubject': '(sans objet)',
 
+  // Mots de passe
+  'overlays.passwords.title': 'Mots de passe',
+  'overlays.passwords.searchPlaceholder': 'Rechercher un site ou un identifiant…',
+  'overlays.passwords.clearAllTitle': 'Tout supprimer',
+  'overlays.passwords.clearAllConfirm': 'Supprimer tous les mots de passe enregistrés ? Cette action est irréversible.',
+  'overlays.passwords.clearAllCancel': 'Annuler',
+  'overlays.passwords.clearAllConfirmButton': 'Tout supprimer',
+  'overlays.passwords.removeOneTitle': 'Supprimer cet identifiant',
+  'overlays.passwords.revealTitle': 'Afficher le mot de passe',
+  'overlays.passwords.hideTitle': 'Masquer le mot de passe',
+  'overlays.passwords.emptyState': 'Aucun mot de passe enregistré pour ce profil.',
+  'overlays.passwords.noResults': 'Aucun identifiant ne correspond.',
+
   // Historique
   'overlays.history.title': 'Historique',
   'overlays.history.clearAllTitle': 'Tout effacer',

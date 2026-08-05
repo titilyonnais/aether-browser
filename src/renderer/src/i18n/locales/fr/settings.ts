@@ -255,8 +255,11 @@ export const settings: Record<string, string> = {
   'settings.privacy.httpsOnly': 'Toujours utiliser HTTPS',
   'settings.privacy.httpsOnlyHint': "Hisse les navigations http:// vers https:// quand c'est possible",
   'settings.privacy.passwordsTitle': 'Mots de passe',
-  'settings.privacy.passwordsText':
-    "ÆTHER n'intègre pas de gestionnaire de mots de passe : pour votre sécurité, utilisez celui de votre système (Windows Hello / trousseau) ou un gestionnaire dédié. Les connexions restent cloisonnées par profil.",
+  'settings.privacy.passwordsHint':
+    'ÆTHER détecte les connexions et propose d’enregistrer vos identifiants, chiffrés sur cet appareil (DPAPI Windows) — jamais synchronisés, jamais collectés.',
+  'settings.privacy.passwordsCount_one': '{{count}} mot de passe enregistré',
+  'settings.privacy.passwordsCount_other': '{{count}} mots de passe enregistrés',
+  'settings.privacy.passwordsManage': 'Gérer les mots de passe',
   'settings.privacy.clearDataTitle': 'Effacer les données',
   'settings.privacy.clearDataButton': 'Effacer les données de navigation →',
 

@@ -4,6 +4,27 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.96.0] — 2026-08-05
+
+### Ajouté
+
+- **Gestionnaire de mots de passe intégré.** ÆTHER détecte désormais une connexion/inscription
+  soumise sur un site — formulaire HTML classique ou site 100 % JS (SPA, via une heuristique
+  Entrée/clic + fenêtre de réaction courte) — et propose un popup « Enregistrer ce mot de passe ? »
+  (ou « Mettre à jour » si l'identifiant existe déjà avec un mot de passe différent ; rien n'est
+  proposé s'il est identique). Une fois enregistré, un identifiant s'affiche en suggestion cliquable
+  sous les champs email/mot de passe d'un site déjà connu — jamais de remplissage automatique
+  silencieux, jamais de suggestion croisée entre sous-domaines différents (correspondance sur
+  l'origine exacte uniquement). Nouvelle section dans Réglages › Confidentialité & sécurité (nombre
+  d'identifiants + bouton « Gérer »), et un overlay dédié (recherche, révélation au clic explicite,
+  suppression) accessible depuis le menu principal.
+
+  Chiffré au repos (DPAPI, `safeStorage`) comme le reste des secrets d'ÆTHER — le mot de passe en
+  clair ne quitte jamais le processus principal, n'est jamais loggué, et n'est déchiffré que sur une
+  action explicite (révélation dans l'overlay, sélection d'une suggestion). Détection limitée à la
+  frame principale (jamais dans un iframe, cross-origine ou non) et à un nombre borné de popups par
+  origine, pour ne jamais pouvoir être détournée par un site pour spammer l'utilisateur.
+
 ## [0.95.0] — 2026-08-05
 
 ### Corrigé

@@ -36,6 +36,7 @@ import type {
   PageContext,
   PageId,
   PageMeta,
+  PasswordListItem,
   PermissionPromptContent,
   PopoverBackdrop,
   PopoverContent,
@@ -297,6 +298,16 @@ export const CH = {
   historyList: 'history:list',
   historyClear: 'history:clear',
   historyRemove: 'history:remove',
+
+  // Mots de passe
+  passwordsList: 'passwords:list',
+  passwordsCreate: 'passwords:create',
+  passwordsUpdate: 'passwords:update',
+  passwordsReveal: 'passwords:reveal',
+  passwordsRemove: 'passwords:remove',
+  passwordsClear: 'passwords:clear',
+  passwordSuggestionSelected: 'passwords:suggestion-selected',
+  passwordSavePromptRespond: 'passwords:save-prompt-respond',
 
   // Réglages
   settingsGet: 'settings:get',
@@ -749,6 +760,20 @@ export interface AetherApi {
     /** null = tout effacer, sinon horodatage de début (ms). */
     clear(sinceTs: number | null): Promise<void>
     remove(id: string): Promise<void>
+  }
+  passwords: {
+    /** Jamais le mot de passe — voir `PasswordListItem`. */
+    list(): Promise<PasswordListItem[]>
+    create(origin: string, identifier: string, password: string): Promise<PasswordListItem>
+    update(id: string, password: string): Promise<void>
+    /** Déchiffre pour affichage — appeler UNIQUEMENT depuis un clic explicite. */
+    reveal(id: string): Promise<string | null>
+    remove(id: string): Promise<void>
+    clear(): Promise<void>
+    /** Suggestion d'autofill sélectionnée dans le popover ancré au champ. */
+    suggestionSelected(req: { pageId: PageId; fieldId: string; pairFieldId: string | null; id: string }): void
+    /** Réponse au popup « enregistrer ? »/« mettre à jour ? ». */
+    savePromptRespond(accepted: boolean): void
   }
   settings: {
     get(): Promise<AppSettings>

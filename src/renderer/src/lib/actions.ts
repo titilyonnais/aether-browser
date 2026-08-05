@@ -920,6 +920,10 @@ export function runCommand(cmd: ShortcutCommand): void {
       if (ui.overlay === 'history') ui.closeOverlay()
       else ui.openOverlay('history')
       break
+    case 'passwords':
+      if (ui.overlay === 'passwords') ui.closeOverlay()
+      else ui.openOverlay('passwords')
+      break
     case 'favorites-manage':
       if (ui.overlay === 'favorites') ui.closeOverlay()
       else ui.openOverlay('favorites')

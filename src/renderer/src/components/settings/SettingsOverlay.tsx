@@ -1693,11 +1693,7 @@ function PrivacySection() {
         </div>
       </Block>
 
-      <Block title={t('settings.privacy.passwordsTitle')}>
-        <p className="text-[12px] leading-relaxed text-ink-dim">
-          {t('settings.privacy.passwordsText')}
-        </p>
-      </Block>
+      <PasswordsBlock />
 
       <Block title={t('settings.privacy.clearDataTitle')}>
         <button
@@ -1720,6 +1716,39 @@ function PrivacySection() {
  * `state === 'ask'` est exclu : depuis `touchUsed`, ces lignes ne signalent
  * qu'un usage passé (« Récemment utilisés » dans la bulle), pas une
  * surcharge explicite — elles n'ont rien à faire dans cette vue. */
+
+/** Résumé + lien vers l'overlay complet (`PasswordsOverlay.tsx`) — pas de
+ * liste éditable ici, contrairement à `SitePermissionsBlock` ci-dessous :
+ * l'overlay dédié couvre déjà recherche/suppression/révélation, pas besoin
+ * de dupliquer cette logique dans Réglages. */
+function PasswordsBlock() {
+  const t = useT()
+  const [count, setCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    void window.aether.passwords.list().then((items) => setCount(items.length))
+  }, [])
+
+  return (
+    <Block title={t('settings.privacy.passwordsTitle')} hint={t('settings.privacy.passwordsHint')}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[12px] text-ink-dim">
+          {count === null
+            ? t('settings.common.loading')
+            : t(count === 1 ? 'settings.privacy.passwordsCount_one' : 'settings.privacy.passwordsCount_other', { count })}
+        </p>
+        <button
+          type="button"
+          onClick={() => useUiStore.getState().openOverlay('passwords')}
+          className="shrink-0 rounded-full border border-white/[0.1] bg-white/[0.03] px-4 py-2 text-[12px] text-ink-dim transition-colors hover:border-glacier/40 hover:text-ink"
+        >
+          {t('settings.privacy.passwordsManage')}
+        </button>
+      </div>
+    </Block>
+  )
+}
+
 function SitePermissionsBlock() {
   const t = useT()
   const [overrides, setOverrides] = useState<SitePermissionOverride[] | null>(null)

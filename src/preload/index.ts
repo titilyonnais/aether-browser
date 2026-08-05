@@ -237,6 +237,17 @@ const api: AetherApi = {
     clear: (sinceTs: number | null) => ipcRenderer.invoke(CH.historyClear, sinceTs),
     remove: (id: string) => ipcRenderer.invoke(CH.historyRemove, id)
   },
+  passwords: {
+    list: () => ipcRenderer.invoke(CH.passwordsList),
+    create: (origin: string, identifier: string, password: string) =>
+      ipcRenderer.invoke(CH.passwordsCreate, origin, identifier, password),
+    update: (id: string, password: string) => ipcRenderer.invoke(CH.passwordsUpdate, id, password),
+    reveal: (id: string) => ipcRenderer.invoke(CH.passwordsReveal, id),
+    remove: (id: string) => ipcRenderer.invoke(CH.passwordsRemove, id),
+    clear: () => ipcRenderer.invoke(CH.passwordsClear),
+    suggestionSelected: (req) => ipcRenderer.send(CH.passwordSuggestionSelected, req),
+    savePromptRespond: (accepted: boolean) => ipcRenderer.send(CH.passwordSavePromptRespond, accepted)
+  },
   settings: {
     get: () => ipcRenderer.invoke(CH.settingsGet),
     set: (patch: SettingsPatch) => ipcRenderer.invoke(CH.settingsSet, patch),
