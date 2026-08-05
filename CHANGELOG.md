@@ -4,6 +4,38 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.94.0] — 2026-08-03
+
+### Corrigé
+
+- **La barre d'adresse s'ouvrait vide** quand on cliquait sur la pilule d'intention centrale, quelle
+  que soit la page (pas seulement les pages internes `aether://`/`chrome://`, où c'était le plus
+  gênant) — l'URL de la page active ne lui était jamais transmise, contrairement à un bouton
+  équivalent ailleurs dans l'appli qui le faisait déjà correctement.
+- **Les DevTools (F12/Inspecter) s'ouvrent maintenant dans une vraie fenêtre Windows séparée**, comme
+  dans Chrome — cadre natif, croix de fermeture, et le menu propre des DevTools (« ⋮ › Dock side »)
+  redevient fonctionnel pour choisir la position (droite/bas/gauche/détaché). Avant, les DevTools
+  étaient ancrées à la main dans la fenêtre ÆTHER elle-même : ce montage empêchait le menu natif de
+  fonctionner (il a besoin d'une vraie fenêtre à lui pour se redimensionner) et ne laissait aucun
+  bouton visible pour fermer le panneau. Le réglage Réglages › Système dédié à la position disparaît
+  en conséquence — il ne sert plus à rien, ce choix se fait désormais directement dans les DevTools.
+- **Bulle « Traduire » : plusieurs défauts visuels.** Le texte « Toujours traduire les pages
+  rédigées en… » prenait la couleur d'accent choisie dans Réglages (rose pour l'accent du même nom)
+  au lieu d'une couleur de texte neutre comme le reste de la bulle ; la case à cocher est remplacée
+  par l'interrupteur (Toggle) déjà utilisé partout ailleurs dans ÆTHER.
+- **Logos noircis après traduction sur certains sites (ex. cia.gov)** : le texte à l'intérieur d'un
+  `<svg>` (souvent un sceau/logo avec du texte décoratif gravé dedans) était traité comme du texte de
+  page ordinaire et retraduit — modifier ces nœuds altérait visuellement le rendu du logo. Ce texte
+  est désormais exclu de la traduction (il n'y a de toute façon jamais de sens à le traduire).
+
+### À propos (pas un bug, comportement volontaire)
+
+- **Revenir à la langue d'origine recharge la page**, contrairement à traduire qui ne recharge
+  jamais : une version antérieure restaurait le DOM sans recharger, mais un site qui se re-rend
+  par-dessus (SPA React/Vue) rendait alors « Afficher l'original » inopérant — le rechargement complet
+  est le compromis retenu pour que ce bouton marche de façon fiable partout, au prix d'être un peu
+  plus lent/visible que la traduction elle-même.
+
 ## [0.93.2] — 2026-08-03
 
 ### Corrigé

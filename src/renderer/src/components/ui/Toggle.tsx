@@ -10,22 +10,26 @@ export function Toggle({
   label,
   hint,
   checked,
-  onChange
+  onChange,
+  disabled = false
 }: {
   label?: string
   hint?: string
   checked: boolean
   onChange: (v: boolean) => void
+  disabled?: boolean
 }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
         'flex items-center gap-3 rounded-lg text-left transition-colors hover:bg-white/[0.02]',
-        label || hint ? 'w-full px-1 py-2' : 'shrink-0'
+        label || hint ? 'w-full px-1 py-2' : 'shrink-0',
+        disabled && 'cursor-default opacity-50 hover:bg-transparent'
       )}
     >
       {(label || hint) && (

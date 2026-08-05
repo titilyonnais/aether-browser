@@ -10,6 +10,7 @@ import { Check, ChevronLeft, MoreVertical, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { LANGUAGE_NAMES } from '@shared/languageNames'
 import type { PageId } from '@shared/types'
+import { Toggle } from '@/components/ui/Toggle'
 import { translate, type Locale } from '@/i18n'
 import { cn, domainOf } from '@/lib/utils'
 
@@ -189,21 +190,12 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
           </button>
         </div>
 
-        <label
-          className={cn(
-            'mb-1 flex items-center gap-2 text-[11.5px] text-glacier',
-            sourceCode ? 'cursor-pointer' : 'cursor-default opacity-50'
-          )}
-        >
-          <input
-            type="checkbox"
-            checked={alwaysTranslate}
-            onChange={toggleAlwaysTranslate}
-            disabled={!sourceCode}
-            className="h-3.5 w-3.5 shrink-0 accent-glacier"
-          />
-          {t('focusCanvas.translate.alwaysTranslate', { language: sourceLabel })}
-        </label>
+        <Toggle
+          label={t('focusCanvas.translate.alwaysTranslate', { language: sourceLabel })}
+          checked={alwaysTranslate}
+          onChange={() => toggleAlwaysTranslate()}
+          disabled={!sourceCode}
+        />
 
         <p className="mt-2.5 text-center text-[10px] text-ink-faint/50">Google Translate</p>
       </div>

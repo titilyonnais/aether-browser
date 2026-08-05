@@ -2229,18 +2229,6 @@ function SystemSection() {
         </div>
       </Block>
 
-      <Block title={t('settings.system.devtoolsTitle')} hint={t('settings.system.devtoolsHint')}>
-        <Select
-          value={settings.devtoolsDockMode}
-          onChange={(v) => void patch({ devtoolsDockMode: v as AppSettings['devtoolsDockMode'] })}
-          options={[
-            { value: 'right', label: t('settings.system.devtoolsRight') },
-            { value: 'left', label: t('settings.system.devtoolsLeft') },
-            { value: 'bottom', label: t('settings.system.devtoolsBottom') },
-            { value: 'detach', label: t('settings.system.devtoolsDetach') }
-          ]}
-        />
-      </Block>
     </div>
   )
 }

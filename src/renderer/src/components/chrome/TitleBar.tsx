@@ -27,7 +27,7 @@ import { remainingSeconds, useDownloadSpeed } from '@/hooks/useDownloadSpeed'
 import { useOverflowFade } from '@/hooks/useOverflowFade'
 import { useT } from '@/i18n/useT'
 import { getActivePageId } from '@/lib/actions'
-import { pageLabel, pageSubtitle } from '@/lib/pageLabel'
+import { isNewTabUrl, pageLabel, pageSubtitle } from '@/lib/pageLabel'
 import { cn, domainOf, formatBytes, formatDuration } from '@/lib/utils'
 import { useDownloadsStore } from '@/stores/downloads'
 import { usePagesStore } from '@/stores/pages'
@@ -93,7 +93,12 @@ export function TitleBar() {
       <button
         type="button"
         data-testid="intention-pill"
-        onClick={() => ui.openOverlay('intention')}
+        onClick={() =>
+          ui.openOverlay(
+            'intention',
+            activePage && !isNewTabUrl(activePage.url) ? { prefill: activePage.url } : undefined
+          )
+        }
         className={cn(
           'no-drag flex h-8 min-w-0 items-center gap-2.5 rounded-full',
           // 560px réservés au groupe droit (mesuré ~403px + bouton menu ajouté
