@@ -4,6 +4,21 @@ Toutes les évolutions notables du projet. Le versionnage suit [SemVer](https://
 `MAJEUR.MINEUR.CORRECTIF`. Tant qu'ÆTHER est en `0.x`, chaque lot de fonctionnalités
 incrémente le **mineur**, chaque correctif isolé le **correctif**.
 
+## [0.95.0] — 2026-08-05
+
+### Corrigé
+
+- **DevTools : retour à l'ancrage dans la fenêtre ÆTHER par défaut** (la 0.94.0 les avait fait
+  s'ouvrir dans une fenêtre Windows séparée à chaque fois — recherche faite entre-temps sur l'API
+  Electron : le menu natif « ⋮ › Dock side » ne peut de toute façon jamais piloter un panneau géré
+  par l'application, aucun évènement ne permet de le détecter). F12 rouvre désormais ancré, comme
+  Chrome. Choisir le côté (droite/bas/gauche) ou détacher dans une fenêtre séparée se fait via un
+  clic droit sur la page → sous-menu « Outils de développement », qui inclut aussi « Fermer » — et
+  Ctrl+Maj+D (le vrai raccourci Chrome) cycle la position sans repasser par un menu.
+- **Bulle Traduire : le sous-menu « Choisir une autre langue » chevauchait le bouton ⋮** qui l'ouvre
+  — sa position verticale était figée à une valeur trop haute ; elle se mesure désormais sur la
+  hauteur réelle de l'en-tête.
+
 ## [0.94.0] — 2026-08-03
 
 ### Corrigé

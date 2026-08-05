@@ -255,6 +255,39 @@ function stepZoom(current: number, direction: 'in' | 'out'): number {
   return [...ZOOM_STEPS].reverse().find((s) => s < current - 0.001) ?? ZOOM_STEPS[0]
 }
 
+/** Position d'ancrage des DevTools EMBARQUÉES dans la fenêtre ÆTHER — voir le
+ * bloc « DevTools ancrées » de `ViewManager`. `'detach'` (fenêtre séparée)
+ * n'est pas un côté d'ancrage, traité à part. */
+type DevToolsDockSide = 'left' | 'right' | 'bottom'
+
+/** Part des bornes pleines de la page réservée aux DevTools ancrées. */
+const DEVTOOLS_SHARE = 0.38
+
+/** Partage les bornes PLEINES d'une page entre elle-même et ses DevTools
+ * ancrées — retourne `[bornes de la page (rétrécies), bornes des DevTools]`. */
+function splitBoundsForDock(b: Bounds, side: DevToolsDockSide): [Bounds, Bounds] {
+  if (side === 'right') {
+    const toolsWidth = Math.round(b.width * DEVTOOLS_SHARE)
+    return [
+      { ...b, width: b.width - toolsWidth },
+      { ...b, x: b.x + b.width - toolsWidth, width: toolsWidth }
+    ]
+  }
+  if (side === 'left') {
+    const toolsWidth = Math.round(b.width * DEVTOOLS_SHARE)
+    return [
+      { ...b, x: b.x + toolsWidth, width: b.width - toolsWidth },
+      { ...b, width: toolsWidth }
+    ]
+  }
+  // 'bottom'
+  const toolsHeight = Math.round(b.height * DEVTOOLS_SHARE)
+  return [
+    { ...b, height: b.height - toolsHeight },
+    { ...b, y: b.y + b.height - toolsHeight, height: toolsHeight }
+  ]
+}
+
 /** Instantané d'une page fermée, pour permettre de la rouvrir (par profil). */
 export interface ClosedPageSnapshot {
   spaceId: SpaceId
@@ -439,6 +472,28 @@ export class ViewManager {
    * le crochet Store NI celui-ci n'en ont plus besoin pour ce `wc`. */
   private googleAuthShimWebContents = new WeakSet<WebContents>()
   private googleAuthShimScriptIds = new WeakMap<WebContents, string>()
+  // ─── DevTools ancrées ────────────────────────────────────────────────────
+  // Vraiment EMBARQUÉES dans la fenêtre ÆTHER (`WebContents.setDevToolsWebContents`)
+  // — comme Chrome, qui ouvre F12 ancré dans la MÊME fenêtre par défaut.
+  // Choisir/changer le côté se fait via le menu contextuel (clic droit sur la
+  // page → sous-menu "Outils de développement") et Ctrl+Maj+D (raccourci réel
+  // de Chrome pour cycler la position) — PAS via le menu natif "⋮" du panneau
+  // DevTools lui-même : Electron n'expose AUCUN événement permettant à l'appli
+  // de détecter un clic sur ce menu natif quand `setDevToolsWebContents` est
+  // utilisé (vérifié dans la doc Electron), donc rien ne peut jamais le
+  // relier à notre positionnement — seul un vrai `BrowserWindow` propre au
+  // contenu inspecté bénéficierait de ce menu natif fonctionnel, ce que nos
+  // pages (`WebContentsView` enfants d'une fenêtre unique) ne sont pas.
+  private devToolsViews = new Map<PageId, WebContentsView>()
+  private devToolsAttached = new Set<PageId>()
+  private devToolsDockSide = new Map<PageId, DevToolsDockSide>()
+  private devToolsBounds = new Map<PageId, Bounds>()
+  /** Dernier côté choisi (ou `'detach'`) — mémorisé pour la session, comme le
+   * "defaults to last used dock state" d'Electron/Chrome. */
+  private lastDevToolsDockSide: DevToolsDockSide | 'detach' = 'right'
+  /** Dernières bornes PLEINES (avant partage avec les DevTools) reçues pour
+   * cette page — pour restaurer la page à sa taille normale à la fermeture. */
+  private fullBounds = new Map<PageId, Bounds>()
   /** Origines des sous-frames vues sur cette page depuis sa dernière
    * navigation de premier niveau (« Données des sites sur l'appareil »,
    * photo 5 : grok.com + m.stripe.com/m.stripe.network intégrés) — scopé à
@@ -990,6 +1045,12 @@ export class ViewManager {
       this.delegate.onFindResult(pageId, result.matches, result.activeMatchOrdinal)
     })
 
+    // Fermeture des DevTools ancrées déclenchée DEPUIS le panneau lui-même
+    // (Ctrl+Maj+I, Échap…) plutôt que par notre menu — sans ce filet, la vue
+    // DevTools resterait attachée (et la page rétrécie) alors que les
+    // DevTools elles-mêmes ont déjà disparu. Sans effet si rien n'était ancré.
+    wc.on('devtools-closed', () => this.closeDockedDevTools(pageId))
+
     wc.on('did-fail-load', (_e, code, description, _url, isMainFrame) => {
       if (!isMainFrame || code === -3) return // -3 = navigation annulée, bénin
       this.patchRuntime(pageId, {
@@ -1286,10 +1347,15 @@ export class ViewManager {
         reportZoom()
         return
       }
+      if (ctrl && input.shift && key === 'd') {
+        event.preventDefault()
+        this.cycleDevToolsDock(pageId, wc)
+        return
+      }
       if (input.key === 'F12') {
         event.preventDefault()
         this.teardownStoreShim(pageId, wc)
-        this.toggleDevTools(wc)
+        this.toggleDevTools(pageId, wc)
       }
     })
 
@@ -1372,9 +1438,32 @@ export class ViewManager {
       rows.push(
         { kind: 'separator' },
         { kind: 'item', id: 'copy-page-url', label: "Copier l'adresse de la page" },
-        { kind: 'item', id: 'view-source', label: 'Afficher le code source de la page' },
-        { kind: 'item', id: 'inspect', label: isImage ? "Inspecter l'élément" : 'Inspecter' }
+        { kind: 'item', id: 'view-source', label: 'Afficher le code source de la page' }
       )
+      // DevTools déjà ouvertes pour cette page (ancrées OU détachées) : sous-
+      // menu pour changer de côté/fermer, plutôt qu'un simple "Inspecter" —
+      // le seul endroit où choisir la position, faute de menu natif "⋮"
+      // fonctionnel sur un panneau qu'on gère nous-mêmes (voir le commentaire
+      // du bloc `devToolsViews` plus haut).
+      const dockSide = this.devToolsDockSide.get(pageId)
+      const detached = !dockSide && wc.isDevToolsOpened()
+      if (dockSide || detached) {
+        rows.push({
+          kind: 'submenu',
+          id: 'devtools',
+          label: 'Outils de développement',
+          rows: [
+            { kind: 'item', id: 'devtools-dock-right', label: 'Ancrer à droite', checked: dockSide === 'right' },
+            { kind: 'item', id: 'devtools-dock-bottom', label: 'Ancrer en bas', checked: dockSide === 'bottom' },
+            { kind: 'item', id: 'devtools-dock-left', label: 'Ancrer à gauche', checked: dockSide === 'left' },
+            { kind: 'item', id: 'devtools-detach', label: 'Fenêtre séparée', checked: detached },
+            { kind: 'separator' },
+            { kind: 'item', id: 'devtools-close', label: 'Fermer les outils de développement', danger: true }
+          ]
+        })
+      } else {
+        rows.push({ kind: 'item', id: 'inspect', label: isImage ? "Inspecter l'élément" : 'Inspecter' })
+      }
       actions.back = () => this.performGoBack(pageId, wc)
       actions.forward = () => nav.goForward()
       actions.reload = () => wc.reload()
@@ -1387,12 +1476,17 @@ export class ViewManager {
         if (isImage) {
           // `inspectElement` n'a pas d'option `mode` — ouvrir l'inspecteur
           // AVANT de lui demander de cibler l'élément.
-          this.toggleDevTools(wc)
+          this.toggleDevTools(pageId, wc)
           wc.inspectElement(params.x, params.y)
         } else {
-          this.toggleDevTools(wc)
+          this.toggleDevTools(pageId, wc)
         }
       }
+      actions['devtools-dock-right'] = () => this.setDevToolsDockSide(pageId, wc, 'right')
+      actions['devtools-dock-bottom'] = () => this.setDevToolsDockSide(pageId, wc, 'bottom')
+      actions['devtools-dock-left'] = () => this.setDevToolsDockSide(pageId, wc, 'left')
+      actions['devtools-detach'] = () => this.setDevToolsDockSide(pageId, wc, 'detach')
+      actions['devtools-close'] = () => this.toggleDevTools(pageId, wc)
 
       const viewBounds = this.bounds.get(pageId)
       const anchor = { x: (viewBounds?.x ?? 0) + params.x, y: (viewBounds?.y ?? 0) + params.y, width: 0, height: 0 }
@@ -1471,7 +1565,15 @@ export class ViewManager {
   }
 
   setBounds(id: PageId, b: Bounds): void {
-    this.bounds.set(id, b)
+    this.fullBounds.set(id, b)
+    const dockSide = this.devToolsDockSide.get(id)
+    if (dockSide) {
+      const [pageBounds, toolsBounds] = splitBoundsForDock(b, dockSide)
+      this.bounds.set(id, pageBounds)
+      this.devToolsBounds.set(id, toolsBounds)
+    } else {
+      this.bounds.set(id, b)
+    }
     // Toujours repasser par `applyLayout()` (pas un `view.setBounds()` direct) :
     // une vue qui reçoit ses PREMIÈRES bornes (ex. nouvel onglet qui vient de
     // naviguer vers une vraie URL) n'est pas encore attachée au `contentView`
@@ -1511,6 +1613,17 @@ export class ViewManager {
         view.setVisible(true)
       } else if (this.attached.has(id)) {
         view.setVisible(false)
+      }
+
+      const toolsView = this.devToolsViews.get(id)
+      const toolsBounds = this.devToolsBounds.get(id)
+      if (toolsView && toolsBounds) {
+        if (!this.devToolsAttached.has(id)) {
+          this.win.contentView.addChildView(toolsView)
+          this.devToolsAttached.add(id)
+        }
+        toolsView.setBounds(this.sanitize(toolsBounds))
+        toolsView.setVisible(shouldShow)
       }
     }
   }
@@ -1683,20 +1796,118 @@ export class ViewManager {
     }
   }
 
-  /** Ouvre/bascule les DevTools de cette page — toujours une vraie fenêtre
-   * Windows séparée (`mode: 'detach'`), entièrement gérée par Electron :
-   * cadre natif standard (donc une croix de fermeture), et le menu propre
-   * des DevTools (« ⋮ › Dock side ») redevient fonctionnel puisqu'il pilote
-   * pour de vrai une fenêtre lui appartenant — ce qui n'était PAS le cas de
-   * l'ancien ancrage maison (`WebContentsView` embarquée dans la fenêtre
-   * ÆTHER), où ce menu natif restait inopérant faute de fenêtre réelle à
-   * redimensionner. Un second appel (F12) referme, comme un vrai navigateur. */
-  private toggleDevTools(wc: WebContents): void {
+  /** Ouvre/bascule les DevTools de cette page, ancrées dans la fenêtre ÆTHER
+   * au dernier côté utilisé (`lastDevToolsDockSide`), comme F12 dans Chrome.
+   * Un second appel REFERME (bascule). Voir le sous-menu contextuel et
+   * `cycleDevToolsDock` (Ctrl+Maj+D) pour changer de côté une fois ouvertes —
+   * PAS via le menu natif "⋮" du panneau lui-même, inopérant ici (voir le
+   * commentaire du bloc `devToolsViews` plus haut). */
+  private toggleDevTools(pageId: PageId, wc: WebContents): void {
+    if (this.devToolsDockSide.has(pageId)) {
+      this.closeDockedDevTools(pageId)
+      return
+    }
     if (wc.isDevToolsOpened()) {
       wc.closeDevTools()
       return
     }
+    if (this.lastDevToolsDockSide === 'detach') {
+      wc.openDevTools({ mode: 'detach' })
+    } else {
+      this.openDockedDevTools(pageId, wc, this.lastDevToolsDockSide)
+    }
+  }
+
+  /** Change le côté d'ancrage des DevTools de cette page (ou les détache dans
+   * une vraie fenêtre séparée) — appelé depuis le sous-menu contextuel et
+   * `cycleDevToolsDock`. Sûr à appeler qu'elles soient déjà ouvertes ou non :
+   * les rouvre dans le nouveau mode si besoin. */
+  private setDevToolsDockSide(pageId: PageId, wc: WebContents, side: DevToolsDockSide | 'detach'): void {
+    this.closeDockedDevTools(pageId)
+    if (wc.isDevToolsOpened()) wc.closeDevTools()
+    this.lastDevToolsDockSide = side
+    if (side === 'detach') {
+      wc.openDevTools({ mode: 'detach' })
+    } else {
+      this.openDockedDevTools(pageId, wc, side)
+    }
+  }
+
+  /** Ctrl+Maj+D — raccourci RÉEL de Chrome pour cycler la position des
+   * DevTools déjà ouvertes (droite → bas → gauche → droite…). N'ouvre jamais
+   * les DevTools elles-mêmes (comme dans Chrome, réservé à F12). */
+  private cycleDevToolsDock(pageId: PageId, wc: WebContents): void {
+    const order: DevToolsDockSide[] = ['right', 'bottom', 'left']
+    const current = this.devToolsDockSide.get(pageId)
+    if (!current) {
+      if (!wc.isDevToolsOpened()) return
+      this.setDevToolsDockSide(pageId, wc, order[0])
+      return
+    }
+    const next = order[(order.indexOf(current) + 1) % order.length]
+    this.setDevToolsDockSide(pageId, wc, next)
+  }
+
+  /** Ouvre les DevTools de cette page EMBARQUÉES dans la fenêtre ÆTHER
+   * (`WebContents.setDevToolsWebContents`) au côté demandé — `openDevTools({mode})`
+   * seul ne suffit pas : Electron ignore ce mode pour une page qui est une
+   * `WebContentsView` attachée, elle n'a pas de fenêtre à elle pour y ancrer
+   * un panneau (confirmé par la doc Electron : le mode retombe sur `detach`
+   * par défaut pour un contenu qui n'est pas lui-même le contenu principal
+   * d'une `BrowserWindow`, ex. un `<webview>` — notre cas exact). */
+  private openDockedDevTools(pageId: PageId, wc: WebContents, side: DevToolsDockSide): void {
+    if (wc.isDevToolsOpened()) wc.closeDevTools()
+    const toolsView = new WebContentsView({
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false }
+    })
+    this.devToolsViews.set(pageId, toolsView)
+    this.devToolsDockSide.set(pageId, side)
+
+    // ORDRE CRITIQUE : attacher la vue à la fenêtre AVANT `setDevToolsWebContents`
+    // (testé et confirmé) — sans quoi Electron retombe silencieusement sur sa
+    // propre fenêtre interne détachée. Bornes réelles posées avant l'ouverture
+    // pour éviter un premier rendu à 0×0.
+    this.win.contentView.addChildView(toolsView)
+    this.devToolsAttached.add(pageId)
+    const last = this.fullBounds.get(pageId)
+    if (last) {
+      const [, toolsBounds] = splitBoundsForDock(last, side)
+      toolsView.setBounds(this.sanitize(toolsBounds))
+    }
+
+    wc.setDevToolsWebContents(toolsView.webContents)
+    // `mode: 'detach'` ICI n'ouvre PAS une fenêtre séparée : combiné à
+    // `setDevToolsWebContents`, DevTools se contente de peindre son UI dans
+    // le `WebContents` fourni — notre propre ancrage (`splitBoundsForDock` +
+    // `toolsView.setBounds`) est ce qui positionne réellement `toolsView`
+    // dans la fenêtre ÆTHER.
     wc.openDevTools({ mode: 'detach' })
+
+    // Rejoue maintenant le VRAI partage (page rétrécie + DevTools).
+    if (last) this.setBounds(pageId, last)
+  }
+
+  /** Referme les DevTools ancrées de cette page (si ouvertes) et restaure la
+   * page à sa taille pleine. Idempotent : sûr à rappeler depuis l'évènement
+   * `devtools-closed` sans provoquer de double-nettoyage. */
+  private closeDockedDevTools(pageId: PageId): void {
+    const toolsView = this.devToolsViews.get(pageId)
+    if (!toolsView) return
+    this.devToolsViews.delete(pageId)
+    this.devToolsDockSide.delete(pageId)
+    this.devToolsBounds.delete(pageId)
+    if (this.devToolsAttached.has(pageId)) {
+      if (!this.win.isDestroyed()) this.win.contentView.removeChildView(toolsView)
+      this.devToolsAttached.delete(pageId)
+    }
+    if (!toolsView.webContents.isDestroyed()) toolsView.webContents.close()
+    const wc = this.liveContents(pageId)
+    if (wc?.isDevToolsOpened()) wc.closeDevTools()
+    const full = this.fullBounds.get(pageId)
+    if (full) {
+      this.bounds.set(pageId, full)
+      this.applyLayout()
+    }
   }
 
   private teardownStoreShim(pageId: PageId, wc: WebContents): void {
@@ -1792,7 +2003,7 @@ export class ViewManager {
     const wc = this.liveContents(id)
     if (!wc) return
     this.teardownStoreShim(id, wc)
-    this.toggleDevTools(wc)
+    this.toggleDevTools(id, wc)
   }
 
   /** Réapplique le zoom par défaut à toutes les vues vivantes (réglage modifié). */
@@ -2137,6 +2348,8 @@ export class ViewManager {
   // ─── Fermeture ─────────────────────────────────────────────────────────────
 
   private destroyView(id: PageId, opts: { keepPreview: boolean }): void {
+    this.closeDockedDevTools(id)
+    this.fullBounds.delete(id)
     const view = this.views.get(id)
     if (view) {
       if (this.attached.has(id)) {

@@ -40,6 +40,7 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
   const [neverTranslateDomains, setNeverTranslateDomains] = useState<string[]>([])
   const [alwaysTranslateLanguages, setAlwaysTranslateLanguages] = useState<string[]>([])
   const cardRef = useRef<HTMLDivElement | null>(null)
+  const headerRef = useRef<HTMLDivElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   // Le menu (liste de langues) est en `position:absolute`, HORS FLUX — il
@@ -49,13 +50,20 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
   // toujours plus haut que le corps de la carte) — signalé par capture
   // utilisateur. Même patron que `boxHeight` dans AppMenuPopoverCard.tsx.
   const [boxHeight, setBoxHeight] = useState<number | null>(null)
+  // Position verticale du menu MESURÉE depuis la hauteur réelle de l'en-tête
+  // (au lieu d'un `top-9` figé) — un décalage fixe avait fini par chevaucher
+  // le bouton « ⋮ » lui-même, signalé par capture utilisateur : la ligne
+  // d'en-tête est un peu plus haute que ce que ce chiffre supposait.
+  const [menuTop, setMenuTop] = useState(0)
   useLayoutEffect(() => {
-    if (panel === 'none' || !cardRef.current || !menuRef.current) {
+    if (panel === 'none' || !cardRef.current || !menuRef.current || !headerRef.current) {
       setBoxHeight(null)
       return
     }
+    const top = headerRef.current.offsetHeight + 6
+    setMenuTop(top)
     const cardH = cardRef.current.offsetHeight
-    const menuBottom = menuRef.current.offsetTop + menuRef.current.offsetHeight
+    const menuBottom = top + menuRef.current.offsetHeight
     setBoxHeight(Math.max(cardH, menuBottom))
   }, [panel])
 
@@ -144,7 +152,7 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
             gauche, langue cible à droite — celui qui correspond à l'état
             affiché EST la page active, cliquer l'autre bascule dessus (pas un
             simple bouton « Traduire »/« Original » séparé des noms de langue). */}
-        <div className="mb-3 flex items-center gap-1">
+        <div ref={headerRef} className="mb-3 flex items-center gap-1">
           <div className="flex min-w-0 flex-1 items-center gap-0.5 rounded-lg bg-white/[0.03] p-0.5">
             <button
               type="button"
@@ -206,7 +214,11 @@ export function TranslatePopoverCard({ pageId, locale }: TranslatePopoverCardPro
         // hauteur ici forcerait un DÉFILEMENT INTERNE en plus — signalé par
         // capture utilisateur, alors que l'objectif est justement de tout
         // montrer d'un coup, jamais tronqué ni caché derrière un scroll.
-        <div ref={menuRef} className="popover-surface absolute right-3 top-9 z-10 w-56 rounded-lg p-1 shadow-xl">
+        <div
+          ref={menuRef}
+          className="popover-surface absolute right-3 z-10 w-56 rounded-lg p-1 shadow-xl"
+          style={{ top: menuTop }}
+        >
           {panel === 'menu' && (
             <>
               <button
